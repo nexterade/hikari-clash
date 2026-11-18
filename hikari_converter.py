@@ -722,6 +722,9 @@ def build_config(tpl_text, platform, provider_mode="template", secret_mode="temp
         if cfg.pop("tun", None) is not None:
             notes.append("tun dihapus dari profile (dikelola Nikki/OpenClash)")
         cfg.pop("find-process-mode", None)
+        stale = [k for k in ("geodata-mode", "experimental", "external-ui") if cfg.pop(k, None) is not None]
+        if stale:
+            notes.append(f"key khusus Box dibuang dari template ({', '.join(stale)}) — template.yaml kerjamu kemungkinan turunan v0.3")
         cfg["external-controller"] = "0.0.0.0:9090"
         if _drop_wifi(cfg):
             notes.append("rule/group/provider WIFI dibuang (SRC-IP 192.168/16 menangkap semua client LAN di OpenWrt)")
@@ -888,9 +891,6 @@ def validate_config(cfg, platform, out_dir=None):
     dns = cfg.get("dns") or {}
     if dns.get("respect-rules") and not dns.get("proxy-server-nameserver"):
         E("dns.respect-rules aktif tapi proxy-server-nameserver kosong")
-    psn = dns.get("proxy-server-nameserver") or []
-    if psn and all("://" in str(x) for x in psn):
-        W("proxy-server-nameserver DoH semua: kalau ISP me-reset DoH, domain server proxy tidak bisa di-resolve (semua node timeout)")
     if dns.get("fallback") and (dns.get("fallback-filter") or {}).get("geoip") is not False:
         W("dns.fallback tanpa fallback-filter.geoip: false — filter bawaan Mihomo (geoip CN) tidak relevan di luar China dan membuat urutan nameserver→fallback sulit diprediksi")
     plain = [x for x in (dns.get("nameserver") or []) + (dns.get("fallback") or [])
@@ -943,9 +943,16 @@ def dns_leak_audit(cfg, platform=None):
                 out.append(("LEAK", f"{key}: {x} adalah DNS ISP — akan muncul di dnsleak test"))
             elif e is None and kind not in SECURE_KINDS:
                 out.append(("WARN", f"{key}: {x} tidak terenkripsi (aman dari ISP hanya selama respect-rules aktif & lewat proxy)"))
-    direct_plain = [x for x in dns.get("direct-nameserver") or [] if "://" not in str(x)]
-    if direct_plain:
-        out.append(("INFO", f"direct-nameserver polos ({', '.join(map(str, direct_plain))}) — hanya untuk domain DIRECT, bukan domain yang lewat proxy"))
+    for key in ("direct-nameserver", "proxy-server-nameserver"):
+        plain = [str(x) for x in dns.get(key) or []
+                 if "://" not in str(x) and str(x).rsplit(":", 1)[0] not in isp_ips and str(x) not in isp_ips]
+        if plain:
+            out.append(("WARN", f"{key} polos port 53 ({', '.join(plain)}) lewat jalur DIRECT: ISP bisa membelokkannya ke resolver sensor "
+                                f"(Internet Positif). Domain yang lewat proxy aman (fake-ip); pakai menu DNS > Mode Anti-Blokir"))
+    psn = dns.get("proxy-server-nameserver") or []
+    if psn and all("://" in str(x) for x in psn):
+        out.append(("INFO", "proxy-server-nameserver DoH semua (Mode Anti-Blokir): kalau ISP me-reset DoH ke 1.1.1.1/8.8.8.8 dan node memakai "
+                            "domain, node bisa timeout → balikkan field itu ke IP polos (menu DNS > Custom manual)"))
     if platform in ISP_PLATFORMS:
         out.append(("INFO", "Nikki/OpenClash biasanya menimpa DNS dari setting LuCI-nya — pastikan di sana juga tidak memakai DNS ISP"))
     return out
@@ -1039,6 +1046,12 @@ def setup_full_config(proxies, target_name, platform, provider_mode="template", 
     try:
         os.makedirs(proxy_dir, exist_ok=True)
         cfg, notes = build_config(read_text(tpl), platform, provider_mode, secret_mode, isp)
+        masters = list_master_templates()
+        if masters and os.path.abspath(tpl) == os.path.abspath(TEMPLATE_PATH):
+            have, latest = template_version(tpl), template_version(masters[-1])
+            if latest and have != latest:
+                notes.append(f"template.yaml (salinan kerja, versi {have or 'tidak diketahui'}) lebih tua dari master v{latest} — "
+                             "default terbaru (mis. DNS) belum terpakai; ganti lewat Edit Configuration → Ganti File Template")
 
         # node: dedupe terhadap nama bawaan template (+ node lama kalau mode append)
         target_path = os.path.join(proxy_dir, target_name)
@@ -1464,7 +1477,7 @@ DNS_FIELDS = [
     ("proxy-server-nameserver", "resolve domain SERVER proxy", "IP polos disarankan (DoH sering di-reset ISP)"),
     ("default-nameserver", "bootstrap untuk host DoH/DoT/DoQ", "WAJIB berupa IP"),
     ("direct-nameserver", "DNS trafik DIRECT", "bebas"),
-    ("fallback", "DNS cadangan", "hanya muncul kalau ada di template"),
+    ("fallback", "DNS cadangan", "dibuat + fallback-filter geoip:false kalau belum ada"),
 ]
 SECURE_KINDS = {"DoH", "DoH3", "DoT", "DoQ"}
 DNS_FORMAT_HELP = [
@@ -1561,8 +1574,26 @@ def check_dns_field(field, parsed):
             out.append(("WARN", f"{field}: DNS tidak terenkripsi ({', '.join(plain)}) → bisa bocor ke ISP"))
     elif field == "proxy-server-nameserver":
         if parsed and kinds <= SECURE_KINDS:
-            out.append(("WARN", "proxy-server-nameserver terenkripsi semua: kalau ISP me-reset DoH/DoT, domain server proxy gagal resolve (semua node timeout)"))
+            out.append(("WARN", "proxy-server-nameserver terenkripsi semua (sengaja di Mode Anti-Blokir / v0.7): kalau ISP me-reset DoH/DoT, "
+                                "domain server proxy gagal resolve (semua node timeout) → balikkan ke IP polos lewat Custom manual"))
     return out
+
+
+def block_ensure_key_block(content, block, key, child_lines):
+    """Pastikan sub-blok `key:` ada di dalam blok level-atas `block`; kalau belum, tambahkan di akhir blok."""
+    lines = content.split("\n")
+    b = _block_bounds(lines, block)
+    if not b:
+        return content, False
+    s, e = b
+    if any(re.match(rf"^\s+{re.escape(key)}:", lines[i]) for i in range(s + 1, e)):
+        return content, True
+    last = e
+    while last > s + 1 and not lines[last - 1].strip():
+        last -= 1
+    ci = next((re.match(r"^(\s+)\S", l).group(1) for l in lines[s + 1:e] if l.strip() and not l.strip().startswith("#")), "  ")
+    lines[last:last] = [f"{ci}{key}:"] + [f"{ci}  {l}" for l in child_lines]
+    return "\n".join(lines), True
 
 
 def _yaml_item(x):
@@ -1595,7 +1626,7 @@ def _show_dns_state(dns):
 
 def _pick_dns_fields(dns, default):
     """Pilih field target (boleh banyak, mis. 1,3). Return list nama field / None."""
-    fields = [f for f in DNS_FIELDS if f[0] != "fallback" or "fallback" in dns]
+    fields = list(DNS_FIELDS)
     print(); section("Terapkan ke field mana?")
     for i, (key, desc, hint) in enumerate(fields, 1):
         print(f"  {C.CYAN}[{i}]{C.RESET} {key:<24} {C.DIM}{desc} · {hint}{C.RESET}")
@@ -1657,6 +1688,8 @@ def _apply_dns_changes(path, content, dns, changes):
         for lvl, msg in check_dns_field(field, parsed):
             (err if lvl == "ERR" else warn)(msg)
             blocking |= lvl == "ERR"
+        if field == "fallback" and not dns.get("fallback-filter"):
+            print(f"    {C.GREEN}+ fallback-filter: geoip: false{C.RESET}")
     if blocking:
         err("Ada kesalahan di atas — perubahan dibatalkan."); pause(); return False
     if ask(f"\n  Terapkan? (y/N) ❯ ").strip().lower() != "y":
@@ -1666,6 +1699,8 @@ def _apply_dns_changes(path, content, dns, changes):
         new_text, found = block_set_list(new_text, "dns", field, new)
         if not found:
             err("Blok dns tidak ditemukan di template."); pause(); return False
+    if "fallback" in changes and not dns.get("fallback-filter"):
+        new_text, _ = block_ensure_key_block(new_text, "dns", "fallback-filter", ["geoip: false"])
     try:
         back = (yaml.safe_load(new_text) or {}).get("dns") or {}
     except yaml.YAMLError as e:
@@ -1791,6 +1826,43 @@ def _dns_isp_flow():
     pause()
 
 
+ANTIBLOKIR_DNS = {
+    # Semua DoH berbasis IP: tidak butuh bootstrap DNS dan tidak memakai port 53 yang bisa dibelokkan ISP.
+    "nameserver":              ["https://1.1.1.1/dns-query"],
+    "fallback":                ["https://1.1.1.1/dns-query", "https://dns.google/dns-query"],
+    "proxy-server-nameserver": ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"],
+    "direct-nameserver":       ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"],
+}
+
+
+def antiblokir_changes(dns, keep_proxy_server_plain=False):
+    """Perubahan DNS untuk Mode Anti-Blokir: hanya field yang memang berbeda dari target."""
+    target = dict(ANTIBLOKIR_DNS)
+    if keep_proxy_server_plain:
+        target.pop("proxy-server-nameserver")
+    return {k: v for k, v in target.items() if [str(x) for x in dns.get(k) or []] != v}
+
+
+def _dns_antiblokir_flow(path, content, dns):
+    print(); section("Mode Anti-Blokir (Internet Positif)")
+    print(f"  {C.DIM}Semua resolver jadi DoH berbasis IP (Cloudflare/Google) — tidak ada query DNS polos port 53.")
+    print(f"  Alasan: ISP bisa membelokkan DNS polos di jalur DIRECT ke resolver sensor. Domain yang lewat proxy")
+    print(f"  sudah aman lewat fake-ip (nama domain dikirim ke node, bukan di-resolve ISP).")
+    print(f"  Tidak mengubah rule/rute, dan tidak bisa memperbaiki node yang server-nya sendiri diblokir.{C.RESET}")
+    print(f"\n  {C.CYAN}[1]{C.RESET} Semua DoH {C.DIM}(disarankan){C.RESET}")
+    print(f"  {C.CYAN}[2]{C.RESET} Semua DoH, kecuali proxy-server-nameserver tetap apa adanya {C.DIM}(pilih ini kalau node timeout){C.RESET}")
+    print(f"  {C.CYAN}[0]{C.RESET} Batal\n{sep(50)}")
+    k = ask(f"{C.YELLOW}Pilih (Enter=1) ❯{C.RESET} ").strip() or "1"
+    if k not in ("1", "2"):
+        return
+    changes = antiblokir_changes(dns, keep_proxy_server_plain=(k == "2"))
+    if not changes:
+        ok("DNS sudah mode Anti-Blokir."); time.sleep(1.2); return
+    if load_settings()["isp"] == "xl":
+        print(f"  {C.DIM}Profil XL aktif: IP XL tetap disuntik saat generate (Nikki/OpenClash), terpisah dari template.{C.RESET}")
+    _apply_dns_changes(path, content, dns, changes)
+
+
 def _dns_reset_flow(path, content, dns):
     masters = list_master_templates()
     if not masters:
@@ -1827,10 +1899,12 @@ def feature_config_dns():
         print(f"  {C.CYAN}[2]{C.RESET} Custom manual     {C.DIM}(IP, DoH, DoT, DoQ, UDP/TCP, system, dhcp — per field){C.RESET}")
         print(f"  {C.CYAN}[3]{C.RESET} Kembalikan ke master")
         print(f"  {C.CYAN}[4]{C.RESET} Profil ISP         {C.DIM}(sekarang: {ISP_PROFILES[load_settings()['isp']]['label']}; XL Axiata → +112.215.203.254){C.RESET}")
+        print(f"  {C.CYAN}[5]{C.RESET} Mode Anti-Blokir   {C.DIM}(semua resolver DoH berbasis IP — tanpa DNS polos port 53){C.RESET}")
         print(f"  {C.CYAN}[0]{C.RESET} Kembali\n{sep(50)}")
         pilih = ask(f"{C.YELLOW}Pilih ❯{C.RESET} ").strip()
         if pilih == "0":
             return
+        elif pilih == "5": _dns_antiblokir_flow(path, content, dns)
         elif pilih == "1": _dns_preset_flow(path, content, dns)
         elif pilih == "2": _dns_custom_flow(path, content, dns)
         elif pilih == "3": _dns_reset_flow(path, content, dns)

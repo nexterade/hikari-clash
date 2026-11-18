@@ -28,7 +28,9 @@ class Paths(unittest.TestCase):
         masters = [os.path.basename(p) for p in h.list_master_templates()]
         self.assertIn("config_v0.3.yaml", masters)          # versi lama tidak ditimpa
         self.assertIn("config_v0.4.yaml", masters)          # v0.4 juga tidak ditimpa
-        self.assertEqual(masters[-1], "config_v0.5.yaml")
+        self.assertIn("config_v0.5.yaml", masters)          # v0.5 juga tidak ditimpa
+        self.assertIn("config_v0.6.yaml", masters)          # v0.6 juga tidak ditimpa
+        self.assertEqual(masters[-1], "config_v0.7.yaml")
         self.assertEqual([f for f in os.listdir(ROOT) if f.startswith("config-template")], [])
 
 
@@ -261,10 +263,10 @@ class DnsLeak(unittest.TestCase):
         h.SETTINGS_PATH = self._old
         self._tmp.cleanup()
 
-    def test_v05_defaults_bebasdns_then_cloudflare_google(self):
+    def test_v07_defaults_doh_by_ip_cloudflare_google(self):
         import yaml
         dns = yaml.safe_load(self.text)["dns"]
-        self.assertEqual(dns["nameserver"], ["https://dns.bebasid.com/dns-query"])
+        self.assertEqual(dns["nameserver"], ["https://1.1.1.1/dns-query"])
         self.assertEqual(dns["fallback"], ["https://1.1.1.1/dns-query", "https://dns.google/dns-query"])
         self.assertIs(dns["fallback-filter"]["geoip"], False)
         for key in ("nameserver", "fallback", "default-nameserver", "proxy-server-nameserver", "direct-nameserver"):
@@ -319,3 +321,151 @@ class DnsLeak(unittest.TestCase):
         p = h.DNS_PRESETS["1"]
         self.assertIn("BebasDNS", p["label"])
         self.assertEqual(p["fallback_secure"]["doh"], ["https://1.1.1.1/dns-query", "https://dns.google/dns-query"])
+
+
+class AntiBlokir(unittest.TestCase):
+    def setUp(self):
+        import yaml
+        self.yaml = yaml
+        self.v06 = h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.6.yaml"))
+        self.v07 = h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.7.yaml"))
+        self._old = h.SETTINGS_PATH
+        self._tmp = tempfile.TemporaryDirectory()
+        h.SETTINGS_PATH = os.path.join(self._tmp.name, "settings.json")
+
+    def tearDown(self):
+        h.SETTINGS_PATH = self._old
+        self._tmp.cleanup()
+
+    def test_v07_has_no_plain_dns_on_direct_paths(self):
+        dns = self.yaml.safe_load(self.v07)["dns"]
+        for key in ("proxy-server-nameserver", "direct-nameserver", "nameserver", "fallback"):
+            self.assertTrue(all(str(x).startswith("https://") for x in dns[key]), key)
+        self.assertEqual(dns["default-nameserver"], ["1.1.1.1", "8.8.8.8"])      # bootstrap tetap IP
+        self.assertNotIn("dnscheck", " ".join(map(str, dns["fake-ip-filter"])))
+
+    def test_v07_only_dns_differs_from_v06(self):
+        a, b = self.yaml.safe_load(self.v06), self.yaml.safe_load(self.v07)
+        a["dns"], b["dns"] = {}, {}
+        self.assertEqual(a, b)
+
+    def test_v06_flagged_v07_clean(self):
+        c6, _ = h.build_config(self.v06, "nikki")
+        c7, _ = h.build_config(self.v07, "nikki")
+        self.assertTrue(any("Internet Positif" in m for _, m in h.dns_leak_audit(c6, "nikki")))
+        self.assertFalse([m for l, m in h.dns_leak_audit(c7, "nikki") if l in ("LEAK", "WARN")])
+
+    def test_xl_ip_in_proxy_server_nameserver_not_flagged(self):
+        cfg, _ = h.build_config(self.v07, "nikki", isp="xl")
+        self.assertIn("112.215.203.254", cfg["dns"]["proxy-server-nameserver"])
+        self.assertFalse([m for l, m in h.dns_leak_audit(cfg, "nikki") if "Internet Positif" in m])
+
+    def test_antiblokir_changes_turn_v06_into_v07_dns(self):
+        dns6 = self.yaml.safe_load(self.v06)["dns"]
+        ch = h.antiblokir_changes(dns6)
+        self.assertEqual(set(ch), {"nameserver", "proxy-server-nameserver", "direct-nameserver"})   # fallback sudah sama
+        new = self.v06
+        for k, v in ch.items():
+            new, found = h.block_set_list(new, "dns", k, v)
+            self.assertTrue(found)
+        d = self.yaml.safe_load(new)["dns"]
+        d7 = self.yaml.safe_load(self.v07)["dns"]
+        for k in ("nameserver", "fallback", "proxy-server-nameserver", "direct-nameserver", "default-nameserver"):
+            self.assertEqual(d[k], d7[k], k)
+
+    def test_antiblokir_idempotent_and_option_keep_proxy_server(self):
+        dns7 = self.yaml.safe_load(self.v07)["dns"]
+        self.assertEqual(h.antiblokir_changes(dns7), {})
+        dns6 = self.yaml.safe_load(self.v06)["dns"]
+        self.assertNotIn("proxy-server-nameserver", h.antiblokir_changes(dns6, keep_proxy_server_plain=True))
+
+    def test_all_antiblokir_entries_parse(self):
+        for k, vs in h.ANTIBLOKIR_DNS.items():
+            for v in vs:
+                self.assertIsNone(h.parse_dns_entry(v)[3], v)
+
+    def test_v07_validates_clean_all_platforms(self):
+        for plat in h.PLATFORMS:
+            cfg, _ = h.build_config(self.v07, plat)
+            self.assertEqual(h.validate_config(cfg, plat), [])
+
+
+class StaleTemplate(unittest.TestCase):
+    def test_box_only_keys_stripped_for_openwrt_even_from_old_template(self):
+        old = h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.3.yaml"))      # masih memuat blok Box
+        for plat in ("nikki", "openclash"):
+            cfg, notes = h.build_config(old, plat)
+            for k in ("tun", "find-process-mode", "geodata-mode", "experimental", "external-ui"):
+                self.assertNotIn(k, cfg, (plat, k))
+            self.assertTrue(any("khusus Box" in n for n in notes))
+        box, _ = h.build_config(old, "box")
+        self.assertEqual(box["external-ui"], "./dashboard")
+
+    def test_stale_working_copy_noted(self):
+        oldd, oldp, oldb = h.TEMPLATE_DIR, h.TEMPLATE_PATH, h.BASE_DIR
+        with tempfile.TemporaryDirectory() as d:
+            h.TEMPLATE_DIR = os.path.join(d, "template"); os.makedirs(h.TEMPLATE_DIR)
+            h.TEMPLATE_PATH = os.path.join(h.TEMPLATE_DIR, "template.yaml")
+            h.BASE_DIR = os.path.join(d, "hasil")
+            import shutil
+            shutil.copy(os.path.join(oldd, "config_v0.3.yaml"), h.TEMPLATE_PATH)
+            shutil.copy(os.path.join(oldd, "config_v0.5.yaml"), h.TEMPLATE_DIR)
+            try:
+                _, notes, _, error = h.setup_full_config([h.convert_line(VLESS)], "active.yaml", "nikki")
+                self.assertIsNone(error)
+                self.assertTrue(any("lebih tua dari master" in n for n in notes), notes)
+            finally:
+                h.TEMPLATE_DIR, h.TEMPLATE_PATH, h.BASE_DIR = oldd, oldp, oldb
+
+    def test_fallback_gets_filter_automatically(self):
+        import yaml
+        text = h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.4.yaml"))       # tanpa fallback
+        new, _ = h.block_set_list(text, "dns", "fallback", ["https://1.1.1.1/dns-query"])
+        new, ok_ = h.block_ensure_key_block(new, "dns", "fallback-filter", ["geoip: false"])
+        d = yaml.safe_load(new)["dns"]
+        self.assertTrue(ok_)
+        self.assertEqual(d["fallback"], ["https://1.1.1.1/dns-query"])
+        self.assertIs(d["fallback-filter"]["geoip"], False)
+        again, _ = h.block_ensure_key_block(new, "dns", "fallback-filter", ["geoip: false"])
+        self.assertEqual(again, new)                                               # idempoten
+
+
+class StunAndLegacy(unittest.TestCase):
+    def _route(self, ver, plat, target):
+        cfg, _ = h.build_config(h.read_text(os.path.join(h.TEMPLATE_DIR, f"config_v{ver}.yaml")), plat)
+        return routetest.route(cfg, os.path.join(ROOT, "ruleset"), target)["final"]
+
+    def test_stun_leaked_to_gaming_in_v05_but_not_v06(self):
+        self.assertIn("GAMING", self._route("0.5", "nikki", "udp://stun.l.google.com:19302")["group"])
+        for plat in h.PLATFORMS:
+            for t in ("udp://stun.l.google.com:19302", "udp://x.com:3478", "udp://x.com:19309"):
+                self.assertIn("Inject", self._route("0.6", plat, t)["group"], (plat, t))
+
+    def test_stun_rule_does_not_touch_other_traffic(self):
+        self.assertIn("GAMING", self._route("0.6", "nikki", "udp://game.com:17500")["group"])
+        self.assertIn("GAMING", self._route("0.6", "nikki", "udp://x.com:19310")["group"])
+        self.assertIn("Reject", self._route("0.6", "nikki", "udp://dnscheck.tools:443")["group"])   # QUIC tetap ditolak
+        self.assertNotIn("Inject", self._route("0.6", "nikki", "tcp://game.com:17500")["group"])    # STUN hanya UDP
+
+    def test_v06_validates_clean(self):
+        t = h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.6.yaml"))
+        for plat in h.PLATFORMS:
+            cfg, _ = h.build_config(t, plat)
+            self.assertEqual(h.validate_config(cfg, plat), [])
+
+    def test_legacy_v03_template_keeps_no_box_keys_on_nikki_openclash(self):
+        t = h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.3.yaml"))
+        for plat in ("nikki", "openclash"):
+            cfg, notes = h.build_config(t, plat)
+            for k in ("tun", "find-process-mode", "geodata-mode", "experimental", "external-ui"):
+                self.assertNotIn(k, cfg, (plat, k))
+            self.assertTrue(any("key khusus Box dibuang" in n for n in notes))
+        box, _ = h.build_config(t, "box")
+        self.assertIn("external-ui", box)
+
+    def test_routetest_inline_logic_rule(self):
+        cfg = {"rules": ["AND,((NETWORK,UDP),(DST-PORT,5000-5100)),G1", "OR,((DST-PORT,80),(DST-PORT,8080)),G2", "MATCH,G3"]}
+        r = lambda t: routetest.route(cfg, ROOT, t)["final"]["group"]
+        self.assertEqual(r("udp://a.com:5050"), "G1")
+        self.assertEqual(r("tcp://a.com:5050"), "G3")
+        self.assertEqual(r("tcp://a.com:8080"), "G2")

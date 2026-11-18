@@ -71,7 +71,7 @@ Ngatur config Mihomo di tiga platform itu ribet: port beda, path beda, fitur And
 ```mermaid
 flowchart LR
     A[Link URI<br/>vless / vmess / trojan] --> B[hikari_converter.py]
-    T[template/config_v0.5.yaml<br/>template netral] --> B
+    T[template/config_v0.7.yaml<br/>template netral] --> B
     R[ruleset/] --> B
     B --> P{Pilih platform}
     P --> X[📱 Box<br/>hasil/full_config_box/]
@@ -125,7 +125,8 @@ hikari-clash/
 ├── nodetest.py                  # Tester node proxy                  (menu 7)
 ├── routetest.py                 # Tester route domain/IP             (menu 7)
 ├── template/
-│   ├── config_v0.5.yaml         # Template master terbaru (netral platform, DNS BebasDNS)
+│   ├── config_v0.7.yaml         # Template master terbaru (netral, DNS anti-blokir DoH berbasis IP, STUN via proxy)
+│   ├── config_v0.5.yaml         # Template master lama (dibiarkan utuh)
 │   ├── config_v0.4.yaml         # Template master lama (dibiarkan utuh)
 │   ├── config_v0.3.yaml         # Template master lama (dibiarkan utuh)
 │   └── template.yaml            # (otomatis) salinan kerja, dibuat saat kamu edit lewat menu
@@ -191,6 +192,7 @@ Menu `1 → 2`: paste YAML, atau pilih file provider hasil generate. Hasil bisa 
   - **Custom manual** — pilih field target (boleh beberapa, mis. `1,3`), lalu ketik entri bebas format, satu per baris atau pisah koma. Contoh: `1.1.1.1`, `8.8.8.8:53`, `https://dns.google/dns-query`, `tls://1.1.1.1`, `quic://dns.adguard-dns.com`, `tcp://1.1.1.1`, `system`, `dhcp://wlan0`, `https://1.1.1.1/dns-query#NamaGroup`. Mode **Ganti** atau **Tambahkan**.
   - **Kembalikan ke master** — salin nilai DNS dari template master terbaru.
   - **Profil ISP** — lihat [DNS leak & provider XL Axiata](#-tips--trik).
+  - **Mode Anti-Blokir** (`2 → 3 → 5`) — mengubah `nameserver`, `fallback`, `proxy-server-nameserver`, `direct-nameserver` jadi DoH berbasis IP (Cloudflare/Google), sehingga tidak ada query DNS polos port 53 yang bisa dibelokkan ISP. Pilihan `[2]` membiarkan `proxy-server-nameserver` apa adanya (kalau node timeout). Idempoten: kalau sudah sama, tidak mengubah apa-apa.
   - Aturan per field: `default-nameserver` **harus IP** (ditolak kalau bukan); `nameserver`/`fallback` diperingatkan kalau tidak terenkripsi; `proxy-server-nameserver` diperingatkan kalau terenkripsi semua. Selalu ada preview `-`/`+` dan konfirmasi sebelum menulis, plus backup `.bak`.
 - **Emoji Node**: lihat daftar emoji, `[A]` tambah, `[H]` hapus (nomor), `[T]` nyalakan/matikan, `[R]` reset ke bawaan. Tersimpan di `emoji.json`.
 
@@ -272,12 +274,13 @@ Urutan rule = prioritas (atas ke bawah):
 | 4 | `WifiClients` | 🍪 WIFI | Client WiFi/hotspot *(Box saja)* |
 | 5 | `Blocker` | 💤 BLOCKER | Blokir iklan |
 | 6 | `Plusplus` | 💕 PLUSPLUS | Unblock konten +18 |
+| 6b | *(inline)* `AND,((NETWORK,UDP),(DST-PORT,3478-3479))` dan `…19302-19309` | 🧩 Inject | STUN/TURN (WebRTC) dipaksa lewat proxy supaya IP asli tidak bocor *(v0.6)* |
 | 7 | `Portgames` | 🪼 GAMING | Port game (default Direct) |
 | 8 | `Inject` | 🧩 Inject | Google, Bing, DuckDuckGo |
 | 9 | `SmartMode` | 🌳 SMART ROUTING | AI, game launcher, sosmed, ISP |
 | – | `MATCH` | 🧩 Inject | Sisanya |
 
-Group node: **🧩 Inject** (pusat), **🛸 AUTO MODE** (url-test), **👒 PROXY LIST** (pilih manual). Semua memakai provider `Active` + `Trial`. Nama group di tabel ini identik dengan `template/config_v0.5.yaml` — kalau kamu mengganti nama di template, ganti juga di `rules:` dan `proxies:` group yang mengacu ke nama itu.
+Group node: **🧩 Inject** (pusat), **🛸 AUTO MODE** (url-test), **👒 PROXY LIST** (pilih manual). Semua memakai provider `Active` + `Trial`. Nama group di tabel ini identik dengan `template/config_v0.7.yaml` — kalau kamu mengganti nama di template, ganti juga di `rules:` dan `proxies:` group yang mengacu ke nama itu.
 
 ---
 
@@ -318,6 +321,8 @@ source ~/.bashrc
 
 - **Default v0.5 (target: lolos dnsleak):** `nameserver` = **BebasDNS** (DoH), `fallback` = **Cloudflare + Google** (DoH), `fallback-filter.geoip: false`. Dengan `respect-rules` + `fake-ip`, query DNS keluar lewat proxy, jadi dnsleak test seharusnya hanya menampilkan resolver BebasDNS/Cloudflare/Google, bukan DNS ISP. Menu `7 → 2` memeriksa ini secara statis; verifikasi akhir tetap lewat dnsleaktest.com / bash.ws dari perangkat. (Catatan: Mihomo meng-query `fallback` bersamaan dengan `nameserver`, jadi **semua** isi keduanya harus non-ISP.)
 - `fallback-filter.geoip: false` dipasang karena filter bawaan Mihomo (geoip CN) tidak relevan di Indonesia. Perilaku persisnya belum diuji di core asli; validator memperingatkan kalau `fallback` dipakai tanpa itu.
+- **Hasil dnscheck.tools:** tabel **DNSSEC** akan tetap FAIL semua — itu normal. Mihomo tidak memvalidasi DNSSEC, `fake-ip` selalu menjawab, dan resolve asli terjadi di resolver server node. Yang menentukan lolos/tidaknya kebocoran adalah daftar "Your DNS resolvers" (tidak boleh ada resolver ISP-mu) dan "Your IP addresses" (tidak boleh ada IP ISP-mu; kalau ada, cek koneksi DIRECT di dashboard).
+- **Internet Positif / situs terblokir:** tiga lapis berbeda. (1) DNS ISP dibelokkan → diatasi fake-ip untuk domain yang lewat proxy, dan DoH berbasis IP (v0.7 / Mode Anti-Blokir) untuk sisanya. (2) Koneksi lewat proxy tapi `ERR_CONNECTION_CLOSED` dengan `DL 0 B` di dashboard dan *Remote address* berupa IP Indonesia → server node-nya sendiri yang menutup koneksi (DNS/egress server di dalam jaringan yang menyensor); tidak bisa diperbaiki dari config klien — coba node di luar negeri dan bandingkan. (3) Rule: pastikan domain-nya jatuh ke 🧩 Inject, bukan DIRECT (kolom Rule/Chains di dashboard). Tes terbaik: buka situs terblokir lalu lihat Chains-nya, bukan dnscheck.tools (DNSSEC tidak ada hubungannya dengan sensor).
 - **XL Axiata:** di jaringan XL, tunneling Nikki/OpenClash butuh DNS `112.215.203.254`. Pilih **Profil ISP → XL Axiata** (menu `2 → 3 → 4`, atau saat generate untuk Nikki/OpenClash). Script menyuntikkannya ke `default-nameserver` dan `proxy-server-nameserver` — hanya me-resolve host DoH & domain server proxy, **bukan** domain yang kamu buka, sehingga dnsleak tetap bersih. Template v0.2 dulu menaruhnya juga di `fallback`; kalau tunneling masih gagal, tambahkan `fallback` lewat menu yang sama — tapi DNS XL lalu akan terlihat di dnsleak (audit menandainya `LEAK`). Pengaturan tersimpan di `settings.json`; Box tidak diubah.
 - `nameserver` (DoH) lewat proxy → aman dari reset ISP.
 - `proxy-server-nameserver` & `direct-nameserver` sengaja **DNS polos** (`8.8.8.8`, `1.1.1.1`). Banyak ISP/modem **me-reset DoH** ke IP publik port 443; kalau itu dipakai untuk resolve domain server proxy, **semua node timeout**.
@@ -366,8 +371,14 @@ mihomo -t -d hasil/full_config_box -f hasil/full_config_box/config.yaml
 
 ## ❓ FAQ
 
-**Apa bedanya `template/template.yaml` dan `template/config_v0.5.yaml`?**
+**Apa bedanya `template/template.yaml` dan `template/config_v0.7.yaml`?**
 Yang kedua master. `template.yaml` salinan kerja yang dibuat otomatis saat kamu edit lewat menu. Kalau `template.yaml` ada, dialah yang dipakai — jadi setelah ada master baru, ganti lewat `2 → 2` (Check Status akan memberi tahu kalau salinan kerjamu tertinggal).
+
+**Apa bedanya template v0.7 dengan v0.6?**
+Hanya DNS (anti-blokir / Internet Positif): `proxy-server-nameserver` dan `direct-nameserver` dari UDP polos `8.8.8.8`/`1.1.1.1` jadi DoH berbasis IP (`https://1.1.1.1/dns-query`, `https://8.8.8.8/dns-query`), dan `nameserver` jadi Cloudflare DoH (BebasDNS tetap ada di menu Preset). DNS polos port 53 di jalur DIRECT bisa dibelokkan ISP ke resolver sensor. Domain yang lewat proxy tidak terdampak berkat fake-ip. **Batasan:** ini tidak membuka node yang server-nya sendiri diblokir atau berada di jaringan yang menyensor (lihat tips di bawah). Kalau node timeout setelah v0.7 (DoH di-reset ISP), balikkan `proxy-server-nameserver` ke IP polos lewat *Custom manual* atau pakai v0.6.
+
+**Apa bedanya template v0.6 dengan v0.5?**
+Satu hal: dua rule STUN/TURN (UDP 3478-3479 dan 19302-19309) ke 🧩 Inject, sebelum `Portgames`. Di v0.5 STUN (mis. `stun.l.google.com:19302`) kena `Portgames` (16999-20100) → 🪼 GAMING → Direct, sehingga browser yang memakai WebRTC membocorkan IP asli ISP (terlihat di dnscheck.tools sebagai IP provider di samping IP proxy). Konsekuensinya: panggilan suara/video yang memakai STUN lewat proxy butuh node yang mendukung UDP. Rule game lain tidak berubah.
 
 **Apa bedanya template v0.5 dengan v0.4?**
 Hanya DNS: `nameserver` jadi BebasDNS, `fallback` Cloudflare+Google dengan `fallback-filter.geoip: false`, supaya lolos dnsleak. Profil ISP (XL Axiata) disuntik script, bukan ditaruh di template. v0.4 tetap ada. *Catatan: `template/template.yaml` salinan kerjamu tidak ikut berubah — pakai `2 → 2` untuk pindah ke v0.5 atau `2 → 3 → 3` untuk menyalin DNS-nya saja.*

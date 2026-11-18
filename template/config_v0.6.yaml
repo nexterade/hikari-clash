@@ -1,0 +1,317 @@
+# =====================================================
+# HIKARI /.CLASH — Universal Template v0.6  (Box / Nikki / OpenClash)
+# template-version: 0.6
+# Core : Mihomo (Meta) >= 1.19
+#
+# Template ini NETRAL platform: hanya berisi key yang valid di SEMUA platform.
+# Yang khusus satu platform TIDAK ditaruh di sini, tapi disuntik otomatis oleh
+# hikari_converter.py saat generate:
+#   - Box       : port 7890/7891/7892/9797/9898, dns 1053, controller 127.0.0.1,
+#                 tun (off), find-process-mode, geodata-mode, experimental, external-ui ./dashboard
+#   - Nikki     : path absolut /etc/nikki/run/{proxy,ruleset}, controller 0.0.0.0, tanpa tun & WIFI
+#   - OpenClash : path ./proxy_provider & ./rule_provider, controller 0.0.0.0, tanpa tun & WIFI
+#
+# Perubahan dari v0.4 (fokus: lolos dnsleak):
+#   - dns.nameserver : BebasDNS (DoH) sebagai DNS utama
+#   - dns.fallback   : Cloudflare + Google (DoH), + fallback-filter geoip:false
+#     (default Mihomo geoip:true = filter khusus CN, tidak cocok untuk Indonesia)
+#   - Tidak ada DNS ISP di template. Provider XL Axiata: pilih "Profil ISP" di menu
+#     DNS atau saat generate; script menyuntik 112.215.203.254 (hanya Nikki/OpenClash).
+# Perubahan dari v0.5 (fokus: IP asli tidak bocor lewat WebRTC/STUN):
+#   - rules: UDP 3478-3479 dan 19302-19309 (STUN/TURN) dipaksa ke 🧩 Inject, SEBELUM Portgames.
+#     Sebelumnya STUN (mis. stun.l.google.com:19302) kena Portgames 16999-20100 → 🪼 GAMING,
+#     yang pilihan pertamanya 🎮 Direct, sehingga browser membocorkan IP asli ISP.
+#     Konsekuensi: panggilan suara/video (WhatsApp/Meet/Discord) memakai STUN lewat proxy;
+#     butuh node yang mendukung UDP, kalau tidak, panggilan jatuh ke relay/TCP.
+# Isi lain identik dengan v0.5.
+#
+# Catatan: Nikki/OpenClash biasanya menimpa port, dns, tun, controller &
+# secret dari setting LuCI-nya sendiri; nilai di sini cuma default.
+# Secret default 'hikari' — ganti lewat menu Edit Configuration, atau pilih "Acak" saat generate.
+# =====================================================
+
+port: 7891
+socks-port: 7892
+redir-port: 9797
+mixed-port: 7890
+tproxy-port: 9898
+ipv6: false
+mode: rule
+log-level: warning
+allow-lan: true
+bind-address: '*'
+external-controller: 127.0.0.1:9090
+secret: hikari
+unified-delay: true
+tcp-concurrent: true
+keep-alive-interval: 15
+geodata-loader: memconservative
+geo-auto-update: false
+geox-url:
+  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat
+  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat
+  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+sniffer:
+  enable: true
+  override-destination: true
+  force-dns-mapping: true
+  parse-pure-ip: true
+  skip-domain:
+    - rule-set:Skip-Sniff
+  force-domain:
+    - rule-set:Force-Sniff
+  skip-dst-address:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 127.0.0.0/8
+    - 224.0.0.0/4
+  sniff:
+    TLS:
+      ports:
+        - 443
+        - 8443
+    HTTP:
+      ports:
+        - 80
+        - 8080-8880
+      override-destination: true
+    QUIC:
+      ports:
+        - 443
+        - 8443
+
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  cache-algorithm: arc
+  prefer-h3: false
+  ipv6: false
+  use-hosts: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter-mode: blacklist
+  fake-ip-filter:
+    - rule-set:FakeIP-Filter
+  respect-rules: true
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  proxy-server-nameserver:
+    - 8.8.8.8
+    - 1.1.1.1
+  direct-nameserver:
+    - 8.8.8.8
+    - 1.1.1.1
+  nameserver:
+    - https://dns.bebasid.com/dns-query
+  fallback:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+  fallback-filter:
+    geoip: false
+
+proxies:
+  - name: 🎮 Direct
+    type: direct
+    udp: true
+  - name: ✂️ Reject
+    type: reject
+  - name: 🐬 Hijack
+    type: dns
+
+proxy-groups:
+  - name: 🧩 Inject
+    type: select
+    use:
+      - Active
+      - Trial
+    proxies:
+      - 🛸 AUTO MODE
+      - 👒 PROXY LIST
+      - 🎮 Direct
+      - ✂️ Reject
+    icon: https://raw.githubusercontent.com/nexterade/Hikari-SC/refs/heads/master/icon/12449f73.png
+  - name: 🛸 AUTO MODE
+    type: url-test
+    disable-udp: false
+    use:
+      - Active
+      - Trial
+    url: http://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+    lazy: true
+    timeout: 5000
+    expected-status: 204
+    icon: https://raw.githubusercontent.com/nexterade/Hikari-SC/refs/heads/master/icon/573055d6.png
+  - name: 👒 PROXY LIST
+    type: select
+    use:
+      - Active
+      - Trial
+    icon: https://raw.githubusercontent.com/nexterade/Hikari-SC/refs/heads/master/icon/6e5ff33e.png
+  - name: 🌳 SMART ROUTING
+    type: select
+    proxies:
+      - 🧩 Inject
+      - 🎮 Direct
+      - ✂️ Reject
+    icon: https://raw.githubusercontent.com/nexterade/Hikari-SC/refs/heads/master/icon/b980f2d2.png
+  - name: 💤 BLOCKER
+    type: select
+    proxies:
+      - ✂️ Reject
+      - 🧩 Inject
+      - 🎮 Direct
+    icon: https://raw.githubusercontent.com/nexterade/Hikari-SC/refs/heads/master/icon/c37c9728.png
+  - name: 💕 PLUSPLUS
+    type: select
+    proxies:
+      - ✂️ Reject
+      - 🧩 Inject
+      - 🎮 Direct
+    icon: https://raw.githubusercontent.com/nexterade/Hikari-SC/refs/heads/master/icon/b3197af9.png
+  - name: 🍪 WIFI
+    type: select
+    proxies:
+      - 🎮 Direct
+      - 🧩 Inject
+      - ✂️ Reject
+    icon: https://raw.githubusercontent.com/nexterade/Hikari-SC/refs/heads/master/icon/8bb3db53.png
+  - name: 🪼 GAMING
+    type: select
+    proxies:
+      - 🎮 Direct
+      - 🧩 Inject
+      - ✂️ Reject
+    icon: https://raw.githubusercontent.com/nexterade/Hikari-SC/refs/heads/master/icon/93244152.png
+
+proxy-providers:
+  Active:
+    type: file
+    path: ./proxy/active.yaml
+    health-check:
+      enable: true
+      url: http://www.gstatic.com/generate_204
+      interval: 300
+      lazy: true
+      timeout: 5000
+      expected-status: 204
+  Trial:
+    type: file
+    path: ./proxy/trial.yaml
+    health-check:
+      enable: true
+      url: http://www.gstatic.com/generate_204
+      interval: 300
+      lazy: true
+      timeout: 5000
+      expected-status: 204
+
+rules:
+  - RULE-SET,Direct,DIRECT
+  - RULE-SET,DnsHijack,🐬 Hijack
+  - RULE-SET,Reject,✂️ Reject
+  - RULE-SET,WifiClients,🍪 WIFI
+  - RULE-SET,Blocker,💤 BLOCKER
+  - RULE-SET,Plusplus,💕 PLUSPLUS
+  - AND,((NETWORK,UDP),(DST-PORT,3478-3479)),🧩 Inject
+  - AND,((NETWORK,UDP),(DST-PORT,19302-19309)),🧩 Inject
+  - RULE-SET,Portgames,🪼 GAMING
+  - RULE-SET,Inject,🧩 Inject
+  - RULE-SET,SmartMode,🌳 SMART ROUTING
+  - MATCH,🧩 Inject
+
+rule-providers:
+  Blocker:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/blocker.mrs
+    interval: 86400
+    path: ./ruleset/blocker.mrs
+    proxy: 🛸 AUTO MODE
+  Plusplus:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/plus18.mrs
+    interval: 86400
+    path: ./ruleset/plus18.mrs
+  FakeIP-Filter:
+    type: http
+    behavior: domain
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/fakeip-filter.yaml
+    interval: 86400
+    path: ./ruleset/fakeip-filter.yaml
+  DnsHijack:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/dns-hijack.yaml
+    interval: 86400
+    path: ./ruleset/dns-hijack.yaml
+  Reject:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/reject.yaml
+    interval: 86400
+    path: ./ruleset/reject.yaml
+  Direct:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/direct.yaml
+    interval: 86400
+    path: ./ruleset/direct.yaml
+  SmartMode:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/smartmode.yaml
+    interval: 86400
+    path: ./ruleset/smartmode.yaml
+  Inject:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/inject.yaml
+    interval: 86400
+    path: ./ruleset/inject.yaml
+  WifiClients:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/wifi.yaml
+    interval: 86400
+    path: ./ruleset/wifi.yaml
+  Skip-Sniff:
+    type: http
+    behavior: domain
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/skip-sniff.yaml
+    interval: 86400
+    path: ./ruleset/skip-sniff.yaml
+  Force-Sniff:
+    type: http
+    behavior: domain
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/force-sniff.yaml
+    interval: 86400
+    path: ./ruleset/force-sniff.yaml
+  Portgames:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/port-games.yaml
+    interval: 86400
+    path: ./ruleset/port-games.yaml
+    proxy: 🛸 AUTO MODE

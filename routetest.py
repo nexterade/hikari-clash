@@ -253,6 +253,21 @@ def route(cfg, ruleset_dir, target, max_shadow=5):
         if typ in UNEVALUABLE:
             skipped.append(f"{r}  (tipe tidak bisa dievaluasi)")
             continue
+        if typ in ("AND", "OR", "NOT"):
+            # rule logika inline: AND,((NETWORK,UDP),(DST-PORT,443)),GROUP — grup = sisa setelah kurung penutup
+            body = str(r).strip()[len(parts[0]) + 1:]
+            depth, end = 0, -1
+            for i, ch in enumerate(body):
+                depth += (ch == "(") - (ch == ")")
+                if depth == 0 and i > 0:
+                    end = i
+                    break
+            group = body[end + 1:].lstrip().lstrip(",").split(",")[0].strip() if end > 0 else ""
+            if group:
+                hit = _logic_match([typ, body[:end + 1]], host, port, proto, _is_ip(host))
+                if hit:
+                    matches.append((str(r), group, hit))
+            continue
         if len(parts) >= 3:
             hit = _classical_match(parts[:2], host, port, proto, _is_ip(host))
             if hit:
