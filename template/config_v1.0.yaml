@@ -218,7 +218,12 @@ proxy-groups:
       - 🧩 Inject
       - ✂️ Reject
     icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/93244152.png
-
+  - name: 🥪 Subscription
+    type: select
+    use:
+      - Subscription
+    icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/573055d6.png
+    
 proxy-providers:
   Active:
     type: file
@@ -240,7 +245,20 @@ proxy-providers:
       lazy: true
       timeout: 5000
       expected-status: 204
-
+  Subscription:
+    type: file
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/subscription.yaml
+    interval: 864000
+    proxy: 🛸 AUTO MODE
+    path: ./proxy/subs.yaml
+    health-check:
+      enable: true
+      url: http://www.gstatic.com/generate_204
+      interval: 300
+      lazy: true
+      timeout: 5000
+      expected-status: 204
+      
 rules:
   - RULE-SET,Direct,DIRECT
   - RULE-SET,DnsHijack,🐬 Hijack
