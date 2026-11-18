@@ -1,0 +1,259 @@
+port: 7890
+socks-port: 7891
+redir-port: 7892
+mixed-port: 7893
+tproxy-port: 7895
+ipv6: false
+mode: rule
+log-level: silent
+allow-lan: true
+external-controller: 0.0.0.0:9090
+secret: ''
+bind-address: '*'
+unified-delay: true
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+# =====================================================
+# SNIFFER — ENHANCED
+# =====================================================
+sniffer:
+  enable: true
+  override-destination: true     # domain hasil sniff menggantikan IP -> rule domain & group kategori kena
+  force-dns-mapping: true        # koneksi fake-ip: ambil domain dari mapping DNS
+  parse-pure-ip: true            # koneksi langsung ke IP: tetap disniff biar ketahuan domainnya
+  # Daftar ada di ruleset/skip-sniff.yaml & force-sniff.yaml
+  skip-domain:
+    - "rule-set:Skip-Sniff"
+  force-domain:
+    - "rule-set:Force-Sniff"
+  skip-dst-address:              # trafik LAN/loopback nggak perlu disniff
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 127.0.0.0/8
+    - 224.0.0.0/4
+  sniff:
+    TLS:
+      ports: [443, 8443]
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    QUIC:
+      ports: [443, 8443]
+
+# =====================================================
+# DNS — ANTI LEAK + UNCENSORED
+# =====================================================
+dns:
+  cache-algorithm: arc
+  enable: true
+  prefer-h3: false
+  ipv6: false
+  enhanced-mode: fake-ip
+  listen: 0.0.0.0:7874
+  nameserver:
+  - 8.8.8.8
+  - 1.0.0.1
+  - https://dns.google/dns-query
+  fallback:
+  - 1.1.1.1
+  - 8.8.4.4
+  - https://cloudflare-dns.com/dns-query
+  - 112.215.203.254
+  default-nameserver:
+  - 8.8.8.8
+  - 1.1.1.1
+  - 112.215.203.254
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+  - "rule-set:FakeIP-Filter"
+
+# =====================================================
+# PROXIES (BUILT-IN)
+# =====================================================
+proxies:
+- name: "🎮 Direct"
+  type: direct
+  udp: true
+- name: "✂️ Reject"
+  type: reject
+- name: "🐬 Hijack"
+  type: dns
+
+# =====================================================
+# PROXY GROUPS
+# =====================================================
+proxy-groups:
+- name: "🧩 Inject"
+  type: select
+  use: [Active, Trial]
+  proxies: ["🦈 AUTO MODE", "🍋‍🟩 PROXY LIST", "🎮 Direct", "✂️ Reject"]
+  icon: https://files.catbox.moe/xx70kg.png
+- name: "🦈 AUTO MODE"
+  type: url-test
+  disable-udp: false
+  use: [Active, Trial]
+  url: http://www.gstatic.com/generate_204
+  interval: 300
+  tolerance: 50
+  lazy: true
+  timeout: 5000
+  expected-status: 204
+  icon: https://files.catbox.moe/kw3shk.png
+- name: "🍋‍🟩 PROXY LIST"
+  type: select
+  use: [Active, Trial]
+  icon: https://files.catbox.moe/9clv83.png
+- name: "🌳 SMART ROUTING"
+  type: select
+  proxies: ["🧩 Inject", "🎮 Direct", "✂️ Reject"]
+  icon: https://files.catbox.moe/o93ies.png
+- name: "💤 BLOCKER"
+  type: select
+  proxies: ["✂️ Reject", "🧩 Inject", "🎮 Direct"]
+  icon: https://files.catbox.moe/8l0qhy.png
+- name: "💕 PLUSPLUS"
+  type: select
+  proxies: ["✂️ Reject", "🧩 Inject", "🎮 Direct"]
+  icon: https://files.catbox.moe/be6jxn.png
+- name: "🪺 WIFI"
+  type: select
+  proxies: ["🎮 Direct", "🧩 Inject", "✂️ Reject"]
+  icon: https://files.catbox.moe/xx70kg.png
+- name: "🪼 GAMING"
+  type: select
+  proxies: ["🎮 Direct", "🧩 Inject", "✂️ Reject"]
+  icon: https://files.catbox.moe/xx70kg.png
+
+# =====================================================
+# PROXY PROVIDERS — FILE LOKAL
+# =====================================================
+proxy-providers:
+  Active:
+    type: file
+    path: ./proxy/active.yaml
+    health-check:
+      enable: true
+      url: http://www.gstatic.com/generate_204
+      interval: 300
+      lazy: true
+      timeout: 5000
+      expected-status: 204
+
+  Trial:
+    type: file
+    path: ./proxy/trial.yaml
+    health-check:
+      enable: true
+      url: http://www.gstatic.com/generate_204
+      interval: 300
+      lazy: true
+      timeout: 5000
+      expected-status: 204
+
+# =====================================================
+# RULES
+# =====================================================
+rules:
+  - RULE-SET,Direct,DIRECT
+  - RULE-SET,DnsHijack,🐬 Hijack
+  - RULE-SET,Reject,✂️ Reject
+  - RULE-SET,WifiClients,🪺 WIFI
+  - RULE-SET,Blocker,💤 BLOCKER
+  - RULE-SET,Plusplus,💕 PLUSPLUS
+  - RULE-SET,Portgames,🪼 GAMING
+  - RULE-SET,Inject,🧩 Inject
+  - RULE-SET,SmartMode,🌳 SMART ROUTING
+  - MATCH,🧩 Inject
+
+# =====================================================
+# RULE PROVIDERS
+# =====================================================
+rule-providers:
+  Blocker:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/blocker.mrs
+    interval: 86400
+    path: ./ruleset/blocker.mrs
+    proxy: "🦈 AUTO MODE"
+
+  Plusplus:
+    type: http
+    behavior: domain
+    format: mrs
+    path: ./ruleset/plus18.mrs
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/plus18.mrs
+
+  FakeIP-Filter:
+    type: http
+    behavior: domain
+    format: yaml
+    path: ./ruleset/fakeip-filter.yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/fakeip-filter.yaml
+
+  DnsHijack:
+    type: http
+    behavior: classical
+    format: yaml
+    path: ./ruleset/dns-hijack.yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/dns-hijack.yaml
+
+  Reject:
+    type: http
+    behavior: classical
+    format: yaml
+    path: ./ruleset/reject.yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/reject.yaml
+
+  Direct:
+    type: http
+    behavior: classical
+    format: yaml
+    path: ./ruleset/direct.yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/direct.yaml
+
+  SmartMode:
+    type: http
+    behavior: classical
+    format: yaml
+    path: ./ruleset/smartmode.yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/smartmode.yaml
+
+  Inject:
+    type: http
+    behavior: classical
+    format: yaml
+    path: ./ruleset/inject.yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/inject.yaml
+
+  WifiClients:
+    type: http
+    behavior: classical
+    format: yaml
+    path: ./ruleset/wifi.yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/wifi.yaml
+
+  Skip-Sniff:
+    type: http
+    behavior: domain
+    format: yaml
+    path: ./ruleset/skip-sniff.yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/skip-sniff.yaml
+
+  Force-Sniff:
+    type: http
+    behavior: domain
+    format: yaml
+    path: ./ruleset/force-sniff.yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/force-sniff.yaml
+
+  Portgames:
+    type: http
+    behavior: classical
+    path: ./ruleset/port-games.yaml
+    url: https://raw.githubusercontent.com/nexterade/crispy-funicular/refs/heads/main/ruleset/port-games.yaml
+    proxy: "🦈 AUTO MODE"
