@@ -1170,15 +1170,22 @@ def feature_convert_to_clash():
 
     proxies = [{k: v for k, v in p.items() if k != "_orig_idx"} for p in valid]
     n_emoji = apply_emoji(proxies)
+    _generate_and_report(proxies, n_emoji)
 
+
+def _generate_and_report(proxies, n_emoji=0, default_plat=None, default_target=None, source_path=None, node_label="node baru"):
+    """Pilih output/target/mode → setup_full_config → laporan. Dipakai Convert (node baru) dan Regenerate (node tersimpan).
+    default_*: nilai saat Enter. source_path: file provider asal node; kalau sama dengan target, tidak ditanya timpa/tambah."""
     print(); section("Pilih Output Config")
     print(f"  {C.CYAN}[B]{C.RESET} Config for Box (Android)")
     print(f"  {C.CYAN}[N]{C.RESET} Config for Nikki (OpenWrt)")
     print(f"  {C.CYAN}[O]{C.RESET} Config for OpenClash (OpenWrt)")
     print(sep(50))
     platform = {"b": "box", "n": "nikki", "o": "openclash"}
+    plat_hint = f", Enter={default_plat[0].upper()}" if default_plat else ""
     while True:
-        plat = platform.get(ask(f"{C.YELLOW}Pilih (B/N/O) ❯{C.RESET} ").strip().lower())
+        raw = ask(f"{C.YELLOW}Pilih (B/N/O{plat_hint}) ❯{C.RESET} ").strip().lower()
+        plat = platform.get(raw) or (default_plat if not raw and default_plat else None)
         if plat:
             break
         err("Pilihan tidak valid.")
@@ -1186,14 +1193,19 @@ def feature_convert_to_clash():
     print(); section("Pilih Target Provider")
     print(f"  {C.CYAN}[1]{C.RESET} active.yaml\n  {C.CYAN}[2]{C.RESET} trial.yaml")
     print(sep(50))
+    tgt_hint = f", Enter={'1' if default_target == 'active.yaml' else '2'}" if default_target else ""
     while True:
-        c = ask(f"{C.YELLOW}Pilih (1/2) ❯{C.RESET} ").strip()
+        c = ask(f"{C.YELLOW}Pilih (1/2{tgt_hint}) ❯{C.RESET} ").strip()
+        if not c and default_target:
+            target_name = default_target; break
         if c in ("1", "2"):
             target_name = "active.yaml" if c == "1" else "trial.yaml"; break
         err("Pilihan tidak valid.")
 
     P = PLATFORMS[plat]
-    existing = load_provider_nodes(os.path.join(BASE_DIR, P["out"], P["proxy_dir"], target_name))
+    target_path = os.path.join(BASE_DIR, P["out"], P["proxy_dir"], target_name)
+    same_as_source = bool(source_path) and os.path.abspath(source_path) == os.path.abspath(target_path)
+    existing = [] if same_as_source else load_provider_nodes(target_path)
     write_mode = "replace"
     if existing:
         print()
@@ -1229,7 +1241,7 @@ def feature_convert_to_clash():
 
     ok(f"Config {P['label']} siap di:\n  {C.BOLD}{C.CYAN}{out_dir}/{C.RESET}")
     print(f"  {C.DIM}├── config.yaml{C.RESET}")
-    print(f"  {C.DIM}├── {P['proxy_dir']}/{target_name} ({len(proxies)} node baru){C.RESET}")
+    print(f"  {C.DIM}├── {P['proxy_dir']}/{target_name} ({len(proxies)} {node_label}){C.RESET}")
     print(f"  {C.DIM}└── {P['rule_dir']}/{C.RESET}\n")
     for n in notes:
         print(f"  {C.DIM}• {n}{C.RESET}")
@@ -1260,6 +1272,67 @@ def feature_convert_to_clash():
         print(f"   1. {C.BOLD}config.yaml{C.RESET} → {C.BOLD}/etc/openclash/config/{C.RESET}")
         print(f"   2. folder {C.BOLD}proxy_provider/{C.RESET} & {C.BOLD}rule_provider/{C.RESET} → {C.BOLD}/etc/openclash/{C.RESET}")
     pause("Tekan Enter untuk kembali ke menu...")
+
+
+# =====================================================================
+#  Feature: Regenerate dari node tersimpan
+# =====================================================================
+def stored_node_sources():
+    """Provider hasil generate yang berisi node → list[(label, path, pid, target_name, nodes)]."""
+    out = []
+    for label, fn in provider_files():
+        nodes = load_provider_nodes(fn)
+        if nodes:
+            pid, name = label.split("/", 1)
+            out.append((label, fn, pid, name, nodes))
+    return out
+
+
+def regenerate_all(sources):
+    """Bangun ulang config tiap platform dari node tersimpan, dengan pilihan baku
+    (rule-provider & secret ikut template, profil ISP dari settings.json). Return list[(label, notes, issues, error)]."""
+    results = []
+    for label, _, pid, name, nodes in sources:
+        _, notes, issues, error = setup_full_config(nodes, name, pid, "template", "replace", "template", None)
+        results.append((label, notes, issues, error))
+    return results
+
+
+def feature_regenerate():
+    clear_screen(); banner(); section("Regenerate dari Node Tersimpan")
+    sources = stored_node_sources()
+    if not sources:
+        warn("Belum ada node tersimpan di hasil/. Buat dulu lewat Convert → URI ➜ Clash.")
+        pause(); return
+    print(f"  {C.DIM}Membangun ulang config.yaml + ruleset dari node yang sudah ada — tanpa paste URI lagi.")
+    print(f"  Berguna setelah mengubah template, DNS, profil ISP, atau emoji/secret.{C.RESET}\n")
+    for i, (label, fn, _, _, nodes) in enumerate(sources, 1):
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(fn)))
+        print(f"  {C.CYAN}[{i}]{C.RESET} {label:<22} {len(nodes):>3} node  {C.DIM}(diubah {when}){C.RESET}")
+    print(f"  {C.CYAN}[A]{C.RESET} Semua di atas {C.DIM}(pilihan baku: rule-provider & secret ikut template, profil ISP tersimpan){C.RESET}")
+    print(f"  {C.CYAN}[0]{C.RESET} Kembali\n{sep(50)}")
+    pick = ask(f"{C.YELLOW}Pilih ❯{C.RESET} ").strip().lower()
+    if pick in ("", "0"):
+        return
+    if pick == "a":
+        print(); spinner("Membangun ulang semua config", 0.5)
+        for label, notes, issues, error in regenerate_all(sources):
+            if error:
+                err(f"{label}: {error}")
+                continue
+            ok(f"{label}")
+            for n in notes:
+                print(f"  {C.DIM}• {n}{C.RESET}")
+            print_issues(issues)
+        pause("Tekan Enter untuk kembali ke menu...")
+        return
+    if not (pick.isdigit() and 1 <= int(pick) <= len(sources)):
+        err("Pilihan tidak valid."); time.sleep(1.0); return
+    label, fn, pid, name, nodes = sources[int(pick) - 1]
+    print(f"\n  {C.DIM}{len(nodes)} node dari {label}. Enter = tetap di platform/provider yang sama; "
+          f"pilih platform lain untuk menyalin node ke sana.{C.RESET}")
+    _generate_and_report([dict(n) for n in nodes], 0, default_plat=pid, default_target=name,
+                         source_path=fn, node_label="node dipakai ulang")
 
 
 # =====================================================================
@@ -2106,7 +2179,7 @@ def feature_tools():
 
 
 # =====================================================================
-#  Feature: Miscellaneous (menu 7)
+#  Feature: Miscellaneous (menu 6)
 # =====================================================================
 RULES_OUT_DIR = os.path.join(BASE_DIR, "rules")
 RULE_EXTS = (".mrs", ".yaml", ".yml", ".txt")
@@ -2540,12 +2613,15 @@ def feature_convert_menu():
     clear_screen(); banner(); section("Menu Convert")
     print(f"  {C.CYAN}[1]{C.RESET} URI (VLESS/VMess/Trojan)  ➜  Clash (YAML)")
     print(f"  {C.CYAN}[2]{C.RESET} Clash (YAML)              ➜  URI (VLESS/VMess/Trojan)")
+    print(f"  {C.CYAN}[3]{C.RESET} Regenerate config dari node tersimpan {C.DIM}(tanpa paste URI lagi){C.RESET}")
     print(f"  {C.CYAN}[0]{C.RESET} Kembali ke Menu Utama\n{sep(50)}")
-    pilihan = ask(f"{C.YELLOW}Pilih (1/2) ❯{C.RESET} ").strip()
+    pilihan = ask(f"{C.YELLOW}Pilih (1/2/3) ❯{C.RESET} ").strip()
     if pilihan == "1":
         clear_screen(); banner(); feature_convert_to_clash()
     elif pilihan == "2":
         feature_convert_to_uri()
+    elif pilihan == "3":
+        feature_regenerate()
 
 
 def ensure_emoji_file():
@@ -2578,16 +2654,18 @@ def main():
         print(f"  {C.CYAN}[3]{C.RESET} Check Status")
         print(f"  {C.CYAN}[4]{C.RESET} Validasi / Audit Config")
         print(f"  {C.CYAN}[5]{C.RESET} Tools Ruleset")
-        print(f"  {C.CYAN}[6]{C.RESET} Exit")
-        print(f"  {C.CYAN}[7]{C.RESET} Miscellaneous {C.DIM}(converter .mrs, tester config/node/route){C.RESET}\n{sep(50)}")
-        pilihan = ask(f"{C.YELLOW}Pilih menu ❯{C.RESET} ").strip()
+        print(f"  {C.CYAN}[6]{C.RESET} Miscellaneous")
+        print(sep(50))
+        print(f"  {C.RED}[Q]{C.RESET} Exit")
+        print(sep(50))
+        pilihan = ask(f"{C.YELLOW}Pilih menu ❯{C.RESET} ").strip().lower()
         if pilihan == "1":   feature_convert_menu()
         elif pilihan == "2": feature_edit_config()
         elif pilihan == "3": feature_check_status()
         elif pilihan == "4": feature_validate()
         elif pilihan == "5": feature_tools()
-        elif pilihan == "7": feature_misc_menu()
-        elif pilihan == "6":
+        elif pilihan == "6": feature_misc_menu()
+        elif pilihan == "q":
             clear_screen(); print(f"\n  {C.GREEN}Terima kasih sudah pakai Hikari /.CLASH!{C.RESET}\n"); sys.exit(0)
         else:
             err("Pilihan tidak valid."); time.sleep(0.8)

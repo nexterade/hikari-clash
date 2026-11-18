@@ -1,6 +1,7 @@
 """Tes Hikari /.CLASH — jalankan dari root project:  python3 -m unittest discover -s tests -v"""
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -30,7 +31,8 @@ class Paths(unittest.TestCase):
         self.assertIn("config_v0.4.yaml", masters)          # v0.4 juga tidak ditimpa
         self.assertIn("config_v0.5.yaml", masters)          # v0.5 juga tidak ditimpa
         self.assertIn("config_v0.6.yaml", masters)          # v0.6 juga tidak ditimpa
-        self.assertEqual(masters[-1], "config_v0.7.yaml")
+        self.assertIn("config_v0.7.yaml", masters)          # v0.7 juga tidak ditimpa
+        self.assertEqual(masters[-1], "config_v0.8.yaml")
         self.assertEqual([f for f in os.listdir(ROOT) if f.startswith("config-template")], [])
 
 
@@ -388,6 +390,121 @@ class AntiBlokir(unittest.TestCase):
         for plat in h.PLATFORMS:
             cfg, _ = h.build_config(self.v07, plat)
             self.assertEqual(h.validate_config(cfg, plat), [])
+
+
+class RepoLinksV08(unittest.TestCase):
+    OLD = ("crispy-funicular", "Hikari-SC")
+    NEW = "github.com/nexterade/hikari-clash"
+
+    def _urls(self, cfg):
+        urls = [v["url"] for v in (cfg.get("rule-providers") or {}).values() if "url" in v]
+        urls += [g["icon"] for g in cfg.get("proxy-groups") or [] if g.get("icon")]
+        return urls
+
+    def test_v08_points_only_to_new_repo(self):
+        import yaml
+        cfg = yaml.safe_load(h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.8.yaml")))
+        urls = self._urls(cfg)
+        self.assertGreaterEqual(len(urls), 15)
+        for u in urls:
+            self.assertIn("nexterade/hikari-clash/refs/heads/main/", u)
+            self.assertFalse(any(o in u for o in self.OLD), u)
+
+    def test_v08_differs_from_v07_only_in_urls(self):
+        import yaml
+        a = yaml.safe_load(h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.7.yaml")))
+        b = yaml.safe_load(h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.8.yaml")))
+        norm = lambda s: re.sub(r"nexterade/(crispy-funicular|Hikari-SC|hikari-clash)/refs/heads/(main|master)/", "REPO/", s)
+        self.assertEqual(norm(yaml.safe_dump(a, allow_unicode=True)), norm(yaml.safe_dump(b, allow_unicode=True)))
+
+    def test_old_templates_untouched(self):
+        t = h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.7.yaml"))
+        self.assertIn("crispy-funicular", t)
+
+    def test_ruleset_files_referenced_exist_locally(self):
+        import yaml
+        cfg = yaml.safe_load(h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.8.yaml")))
+        for name, v in cfg["rule-providers"].items():
+            self.assertTrue(os.path.isfile(os.path.join(h.RULESET_SOURCE, v["url"].rsplit("/", 1)[1])), name)
+        for g in cfg["proxy-groups"]:
+            if g.get("icon"):
+                self.assertTrue(os.path.isfile(os.path.join(ROOT, "icon", g["icon"].rsplit("/", 1)[1])), g["name"])
+
+    def test_readme_clone_url_and_images(self):
+        with open(os.path.join(ROOT, "README.md"), encoding="utf-8") as f:
+            r = f.read()
+        self.assertIn("git clone https://github.com/nexterade/hikari-clash.git", r)
+        self.assertNotIn("crispy-funicular.git", r)
+        for img in re.findall(r'src="(docs/img/[^"]+)"', r):
+            self.assertTrue(os.path.isfile(os.path.join(ROOT, img)), img)
+        self.assertGreaterEqual(len(re.findall(r'src="docs/img/', r)), 5)
+
+
+class RegenerateAndMenu(unittest.TestCase):
+    def setUp(self):
+        self._saved = (h.BASE_DIR, h.SETTINGS_PATH, h.TEMPLATE_DIR, h.TEMPLATE_PATH)
+        self._tmp = tempfile.TemporaryDirectory()
+        h.BASE_DIR = os.path.join(self._tmp.name, "hasil")
+        h.SETTINGS_PATH = os.path.join(self._tmp.name, "settings.json")
+        os.makedirs(h.BASE_DIR)
+
+    def tearDown(self):
+        h.BASE_DIR, h.SETTINGS_PATH, h.TEMPLATE_DIR, h.TEMPLATE_PATH = self._saved
+        self._tmp.cleanup()
+
+    def _make(self, plat="nikki", name="active.yaml"):
+        _, _, _, error = h.setup_full_config([h.convert_line(VLESS)], name, plat)
+        self.assertIsNone(error)
+
+    def test_no_sources_when_nothing_generated(self):
+        self.assertEqual(h.stored_node_sources(), [])
+
+    def test_sources_listed_after_generate(self):
+        self._make("nikki", "active.yaml"); self._make("box", "trial.yaml")
+        labels = {s[0] for s in h.stored_node_sources()}
+        self.assertEqual(labels, {"nikki/active.yaml", "box/trial.yaml"})      # file provider kosong tidak muncul
+
+    def test_regenerate_reuses_nodes_and_picks_up_template_change(self):
+        import yaml
+        self._make("nikki", "active.yaml")
+        src = h.stored_node_sources()[0]
+        names_before = [n["name"] for n in src[4]]
+        out = os.path.join(h.BASE_DIR, h.PLATFORMS["nikki"]["out"])
+        cfg_path = os.path.join(out, "config.yaml")
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            f.write("# diubah manual\n")                                        # simulasi config usang
+        res = h.regenerate_all(h.stored_node_sources())
+        self.assertEqual([(l, e) for l, _, _, e in res], [("nikki/active.yaml", None)])
+        self.assertNotIn("diubah manual", h.read_text(cfg_path))                 # config dibangun ulang
+        after = h.stored_node_sources()[0][4]
+        self.assertEqual([n["name"] for n in after], names_before)               # node & nama identik, tidak dobel
+
+    def test_regenerate_is_idempotent_and_keeps_other_provider(self):
+        self._make("nikki", "active.yaml")
+        trial = os.path.join(h.BASE_DIR, h.PLATFORMS["nikki"]["out"], h.PLATFORMS["nikki"]["proxy_dir"], "trial.yaml")
+        h.save_proxy_yaml([{"name": "T1", "type": "direct"}], trial)
+        before = h.read_text(trial)
+        h.regenerate_all(h.stored_node_sources()); h.regenerate_all(h.stored_node_sources())
+        self.assertEqual(len(h.stored_node_sources()), 2)
+        self.assertEqual([n["name"] for s in h.stored_node_sources() if s[0].endswith("active.yaml") for n in s[4]],
+                         [n["name"] for n in h.load_provider_nodes(os.path.join(os.path.dirname(trial), "active.yaml"))])
+        self.assertIn("T1", h.read_text(trial))
+        self.assertEqual(before.count("T1"), h.read_text(trial).count("T1"))
+
+    def test_regenerate_copies_nodes_to_other_platform(self):
+        self._make("nikki", "active.yaml")
+        src = h.stored_node_sources()[0]
+        _, _, issues, error = h.setup_full_config([dict(n) for n in src[4]], "active.yaml", "openclash")
+        self.assertIsNone(error)
+        self.assertEqual({s[0] for s in h.stored_node_sources()}, {"nikki/active.yaml", "openclash/active.yaml"})
+
+    def test_main_menu_layout(self):
+        import io, contextlib
+        src = h.read_text(os.path.join(ROOT, "hikari_converter.py"))
+        self.assertIn('[6]{C.RESET} Miscellaneous', src)
+        self.assertNotIn('[7]{C.RESET} Miscellaneous', src)
+        self.assertIn('[Q]{C.RESET} Exit', src)
+        self.assertNotIn("(converter .mrs, tester config/node/route)", src)       # komentar dihapus
 
 
 class StaleTemplate(unittest.TestCase):
