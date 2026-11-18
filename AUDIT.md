@@ -165,3 +165,9 @@ Tindak lanjut temuan audit + permintaan pemilik proyek.
 - **Menu utama:** Miscellaneous jadi `[6]` (komentar dihapus), Exit pindah ke baris terpisah dengan `[Q]`; `6`/`7` lama tidak lagi berarti Exit/Misc. README dan referensi "menu 7" disesuaikan.
 - **Screenshot** di `docs/img/` (5 gambar). IP server node dan kolom Server disensor sebelum masuk repo. Keterangan hasil (ad-block 96%, DNSSEC) hanya berlaku untuk satu perangkat/jaringan.
 - Pengamatan dari screenshot: resolver yang tampil di dnscheck.tools adalah `ns3.nusa.net.id` (Indonesia), konsisten dengan dugaan bahwa jalur keluar node berada di Indonesia — **belum diverifikasi**.
+
+**Susulan (2026-11-19) — v0.9, hapus Tools Ruleset.**
+- **Template v0.9** (v0.3–v0.8 tidak ditimpa): (1) DNS persis seperti pilihan pemilik — `nameserver` BebasDNS Unfiltered DoH; `proxy-server-`/`default-nameserver` 1.1.1.1 & 8.8.8.8; `direct-nameserver` Quad9 9.9.9.10 & 149.112.112.10; `fallback` Cloudflare + Google DoH. (2) URL icon grup → branch `master` (`.../hikari-clash/refs/heads/master/icon/*.png`) karena path `main` tidak valid; URL rule-provider tetap `main` (**belum diverifikasi** terpisah — pemilik hanya melaporkan icon yang tidak valid).
+- **Konsekuensi DNS yang perlu diketahui:** v0.9 kembali memakai DNS polos port 53 di `proxy-server-nameserver` dan `direct-nameserver` (v0.7/v0.8: DoH berbasis IP). Risiko tidak berubah dari catatan v0.7 (pembelokan port 53 oleh ISP, hipotesis belum diuji). `dns_leak_audit` sekarang memberi **INFO** (bukan WARN) untuk dua field itu, karena ini pilihan sadar; **Mode Anti-Blokir** di menu DNS tetap tersedia untuk mengembalikannya ke DoH.
+- **Dihapus:** menu *Tools Ruleset* (padatkan `port-games.yaml`) beserta `compact_port_payload`; `ruleset/port-games.yaml` (sudah dipadatkan) dan `archive/port-games.full.yaml` tetap. Miscellaneous jadi menu `[5]`. Pesan validator untuk rule-provider besar tidak lagi menyebut menu itu.
+- Tes: 65 lulus.

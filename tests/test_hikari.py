@@ -32,7 +32,8 @@ class Paths(unittest.TestCase):
         self.assertIn("config_v0.5.yaml", masters)          # v0.5 juga tidak ditimpa
         self.assertIn("config_v0.6.yaml", masters)          # v0.6 juga tidak ditimpa
         self.assertIn("config_v0.7.yaml", masters)          # v0.7 juga tidak ditimpa
-        self.assertEqual(masters[-1], "config_v0.8.yaml")
+        self.assertIn("config_v0.8.yaml", masters)          # v0.8 juga tidak ditimpa
+        self.assertEqual(masters[-1], "config_v0.9.yaml")
         self.assertEqual([f for f in os.listdir(ROOT) if f.startswith("config-template")], [])
 
 
@@ -265,14 +266,15 @@ class DnsLeak(unittest.TestCase):
         h.SETTINGS_PATH = self._old
         self._tmp.cleanup()
 
-    def test_v07_defaults_doh_by_ip_cloudflare_google(self):
+    def test_v09_defaults_match_owner_choice(self):
         import yaml
         dns = yaml.safe_load(self.text)["dns"]
-        self.assertEqual(dns["nameserver"], ["https://1.1.1.1/dns-query"])
+        self.assertEqual(dns["nameserver"], ["https://unfiltered.dns.bebasid.com/dns-query"])
+        self.assertEqual(dns["proxy-server-nameserver"], ["1.1.1.1", "8.8.8.8"])
+        self.assertEqual(dns["default-nameserver"], ["1.1.1.1", "8.8.8.8"])
+        self.assertEqual(dns["direct-nameserver"], ["9.9.9.10", "149.112.112.10"])
         self.assertEqual(dns["fallback"], ["https://1.1.1.1/dns-query", "https://dns.google/dns-query"])
-        self.assertIs(dns["fallback-filter"]["geoip"], False)
-        for key in ("nameserver", "fallback", "default-nameserver", "proxy-server-nameserver", "direct-nameserver"):
-            self.assertNotIn("112.215.203.254", [str(x) for x in dns[key]])    # tidak ada DNS ISP di template
+        self.assertEqual(dns["fallback-filter"], {"geoip": False})
 
     def test_default_build_has_no_leak_or_warn(self):
         for plat in h.PLATFORMS:
@@ -501,10 +503,58 @@ class RegenerateAndMenu(unittest.TestCase):
     def test_main_menu_layout(self):
         import io, contextlib
         src = h.read_text(os.path.join(ROOT, "hikari_converter.py"))
-        self.assertIn('[6]{C.RESET} Miscellaneous', src)
-        self.assertNotIn('[7]{C.RESET} Miscellaneous', src)
+        self.assertIn('[5]{C.RESET} Miscellaneous', src)
+        self.assertNotIn('[6]{C.RESET} Miscellaneous', src)
+        self.assertNotIn('Tools Ruleset', src)                                    # fitur padatkan port-games dihapus
+        self.assertNotIn('def feature_tools', src)
+        self.assertNotIn('compact_port_payload', src)
         self.assertIn('[Q]{C.RESET} Exit', src)
         self.assertNotIn("(converter .mrs, tester config/node/route)", src)       # komentar dihapus
+
+
+class TemplateV09(unittest.TestCase):
+    def setUp(self):
+        import yaml
+        self.yaml = yaml
+        self.v08 = h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.8.yaml"))
+        self.v09 = h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.9.yaml"))
+
+    def test_icons_master_rulesets_main(self):
+        cfg = self.yaml.safe_load(self.v09)
+        icons = [g["icon"] for g in cfg["proxy-groups"] if g.get("icon")]
+        self.assertGreaterEqual(len(icons), 7)
+        for u in icons:
+            self.assertRegex(u, r"^https://raw\.githubusercontent\.com/nexterade/hikari-clash/refs/heads/master/icon/[0-9a-f]+\.png$")
+        for v in cfg["rule-providers"].values():
+            self.assertIn("nexterade/hikari-clash/refs/heads/main/ruleset/", v["url"])
+        self.assertNotIn("refs/heads/main/icon/", self.v09.split("proxy-groups:", 1)[1])
+
+    def test_v09_differs_from_v08_only_in_dns_and_icon_branch(self):
+        a, b = self.yaml.safe_load(self.v08), self.yaml.safe_load(self.v09)
+        a["dns"], b["dns"] = {}, {}
+        norm = lambda s: s.replace("refs/heads/main/icon/", "refs/heads/master/icon/")
+        self.assertEqual(norm(self.yaml.safe_dump(a, allow_unicode=True)), norm(self.yaml.safe_dump(b, allow_unicode=True)))
+
+    def test_v08_untouched(self):
+        self.assertIn("refs/heads/main/icon/", self.v08)
+
+    def test_v09_builds_clean_all_platforms(self):
+        for plat in h.PLATFORMS:
+            cfg, _ = h.build_config(self.v09, plat)
+            self.assertEqual(h.validate_config(cfg, plat), [])
+            self.assertFalse([m for l, m in h.dns_leak_audit(cfg, plat) if l in ("LEAK", "WARN")])
+
+    def test_plain_dns_only_info_and_antiblokir_still_converts(self):
+        cfg, _ = h.build_config(self.v09, "nikki")
+        info = [m for l, m in h.dns_leak_audit(cfg, "nikki") if l == "INFO" and "Internet Positif" in m]
+        self.assertEqual(len(info), 2)                                            # direct- & proxy-server-nameserver
+        ch = h.antiblokir_changes(self.yaml.safe_load(self.v09)["dns"])
+        self.assertEqual(set(ch), {"nameserver", "proxy-server-nameserver", "direct-nameserver"})
+
+    def test_port_games_compactor_removed_but_ruleset_kept(self):
+        self.assertFalse(hasattr(h, "compact_port_payload"))
+        self.assertTrue(os.path.isfile(os.path.join(ROOT, "ruleset", "port-games.yaml")))
+        self.assertTrue(os.path.isfile(os.path.join(ROOT, "archive", "port-games.full.yaml")))
 
 
 class StaleTemplate(unittest.TestCase):

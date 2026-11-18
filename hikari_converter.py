@@ -914,7 +914,7 @@ def validate_config(cfg, platform, out_dir=None):
         for fn in glob.glob(os.path.join(out_dir, P["rule_dir"], "*.yaml")):
             try:
                 if os.path.getsize(fn) > 200_000:
-                    W(f"{os.path.basename(fn)} besar ({os.path.getsize(fn)//1024} KB) — pertimbangkan menu Tools > Padatkan port")
+                    W(f"{os.path.basename(fn)} besar ({os.path.getsize(fn)//1024} KB) — rule-provider besar membebani start di perangkat kecil")
             except OSError:
                 pass
     return issues
@@ -947,8 +947,9 @@ def dns_leak_audit(cfg, platform=None):
         plain = [str(x) for x in dns.get(key) or []
                  if "://" not in str(x) and str(x).rsplit(":", 1)[0] not in isp_ips and str(x) not in isp_ips]
         if plain:
-            out.append(("WARN", f"{key} polos port 53 ({', '.join(plain)}) lewat jalur DIRECT: ISP bisa membelokkannya ke resolver sensor "
-                                f"(Internet Positif). Domain yang lewat proxy aman (fake-ip); pakai menu DNS > Mode Anti-Blokir"))
+            out.append(("INFO", f"{key} polos port 53 ({', '.join(plain)}) lewat jalur DIRECT: ISP bisa membelokkannya ke resolver sensor "
+                                f"(Internet Positif) — hipotesis, belum diuji di jaringanmu. Domain yang lewat proxy aman (fake-ip). "
+                                f"Kalau situs/node gagal resolve: menu DNS > Mode Anti-Blokir"))
     psn = dns.get("proxy-server-nameserver") or []
     if psn and all("://" in str(x) for x in psn):
         out.append(("INFO", "proxy-server-nameserver DoH semua (Mode Anti-Blokir): kalau ISP me-reset DoH ke 1.1.1.1/8.8.8.8 dan node memakai "
@@ -2124,62 +2125,7 @@ def feature_edit_config():
 
 
 # =====================================================================
-#  Feature: Tools Ruleset (padatkan DST-PORT)
-# =====================================================================
-def compact_port_payload(payload):
-    """Gabung DST-PORT tunggal/berurutan jadi range. Return (payload_baru, jumlah_port_asal)."""
-    ports, rest, n_in = set(), [], 0
-    for item in payload:
-        m = re.fullmatch(r"DST-PORT,\s*(\d+)(?:-(\d+))?", str(item).strip())
-        if not m:
-            rest.append(item); continue
-        a, b = int(m.group(1)), int(m.group(2) or m.group(1))
-        ports.update(range(a, b + 1)); n_in += 1
-    ranges, start = [], None
-    for p in sorted(ports):
-        if start is None:
-            start = prev = p
-        elif p == prev + 1:
-            prev = p
-        else:
-            ranges.append((start, prev)); start = prev = p
-    if start is not None:
-        ranges.append((start, prev))
-    out = [f"DST-PORT,{a}" if a == b else f"DST-PORT,{a}-{b}" for a, b in ranges]
-    return rest + out, n_in
-
-
-def feature_tools():
-    clear_screen(); banner(); section("Tools Ruleset")
-    print(f"  {C.CYAN}[1]{C.RESET} Padatkan port-games.yaml {C.DIM}(gabung DST-PORT jadi range){C.RESET}")
-    print(f"  {C.CYAN}[0]{C.RESET} Kembali\n{sep(50)}")
-    if ask(f"{C.YELLOW}Pilih ❯{C.RESET} ").strip() != "1":
-        return
-    fp = os.path.join(RULESET_SOURCE, "port-games.yaml")
-    if not os.path.isfile(fp):
-        err("ruleset/port-games.yaml tidak ada."); pause(); return
-    try:
-        data = yaml.safe_load(read_text(fp))
-        payload = data["payload"]
-    except Exception as e:
-        err(f"Gagal baca: {e}"); pause(); return
-    new, n_in = compact_port_payload(payload)
-    print(f"  {len(payload)} baris → {len(new)} baris (perilaku routing identik)")
-    if ask("  Terapkan? Backup disimpan sebagai port-games.yaml.bak (y/N) ❯ ").strip().lower() != "y":
-        return
-    backup_file(fp)
-    with open(fp, "w", encoding="utf-8") as f:
-        f.write("# Port game — dipadatkan oleh hikari_converter (range = perilaku sama dengan DST-PORT satuan)\n"
-                "# Sintaks range: https://wiki.metacubex.one/en/handbook/syntax (Port Ranges)\npayload:\n")
-        for x in new:
-            f.write(f"  - {x}\n")
-    ok("port-games.yaml dipadatkan.")
-    print(f"  {C.DIM}Jangan lupa upload versi baru ini ke repo kalau rule-provider-nya type http.{C.RESET}")
-    pause()
-
-
-# =====================================================================
-#  Feature: Miscellaneous (menu 6)
+#  Feature: Miscellaneous (menu 5)
 # =====================================================================
 RULES_OUT_DIR = os.path.join(BASE_DIR, "rules")
 RULE_EXTS = (".mrs", ".yaml", ".yml", ".txt")
@@ -2653,8 +2599,7 @@ def main():
         print(f"  {C.CYAN}[2]{C.RESET} Edit Configuration")
         print(f"  {C.CYAN}[3]{C.RESET} Check Status")
         print(f"  {C.CYAN}[4]{C.RESET} Validasi / Audit Config")
-        print(f"  {C.CYAN}[5]{C.RESET} Tools Ruleset")
-        print(f"  {C.CYAN}[6]{C.RESET} Miscellaneous")
+        print(f"  {C.CYAN}[5]{C.RESET} Miscellaneous")
         print(sep(50))
         print(f"  {C.RED}[Q]{C.RESET} Exit")
         print(sep(50))
@@ -2663,8 +2608,7 @@ def main():
         elif pilihan == "2": feature_edit_config()
         elif pilihan == "3": feature_check_status()
         elif pilihan == "4": feature_validate()
-        elif pilihan == "5": feature_tools()
-        elif pilihan == "6": feature_misc_menu()
+        elif pilihan == "5": feature_misc_menu()
         elif pilihan == "q":
             clear_screen(); print(f"\n  {C.GREEN}Terima kasih sudah pakai Hikari /.CLASH!{C.RESET}\n"); sys.exit(0)
         else:
