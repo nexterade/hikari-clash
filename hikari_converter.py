@@ -14,6 +14,7 @@ import random
 import re
 import secrets
 import shutil
+import subprocess
 import sys
 import time
 import unicodedata
@@ -36,6 +37,9 @@ BASE_DIR = os.path.join(SCRIPT_DIR, "hasil")
 RULESET_SOURCE = os.path.join(SCRIPT_DIR, "ruleset")
 SUBSCRIPTION_SOURCE = os.path.join(SCRIPT_DIR, "subscription.yaml")   # node gratis (v1.0): dipakai sebagai cache awal subs.yaml
 SEED_FILES = {"subs.yaml": SUBSCRIPTION_SOURCE}                      # file provider yang disemai dari repo saat generate
+FREE_NODE_FILE = "free.yaml"                                         # provider "📖 Free node" (group 🛹 Free node) — diisi sub2yaml
+SUB2YAML_SCRIPT = os.path.join(SCRIPT_DIR, "sub2yaml.py")            # opsional; kalau ada, bisa dijalankan dari menu
+SUB2YAML_ARGS = ["--output", "{out}"]                                # TODO: sesuaikan dengan CLI sub2yaml.py yang sebenarnya
 USER_NODE_FILES = ("active.yaml", "trial.yaml")                      # file node milik pengguna; free.yaml/subs.yaml bukan sumber regenerate
 TEMPLATE_DIR = os.path.join(SCRIPT_DIR, "template")
 TEMPLATE_PATH = os.path.join(TEMPLATE_DIR, "template.yaml")  # working copy (boleh diedit lewat menu)
@@ -2588,19 +2592,149 @@ def feature_misc_menu():
 # =====================================================================
 #  Menu
 # =====================================================================
+# =====================================================================
+#  Free node (sub2yaml → proxy/free.yaml, group 🛹 Free node)
+# =====================================================================
+# Kontrak dengan sub2yaml: keluarannya YAML Clash `proxies: [...]` (sama dengan subscription.yaml).
+# Hikari hanya memvalidasi lalu menulis ke <platform>/<proxy_dir>/free.yaml; config.yaml tidak perlu di-generate ulang
+# karena provider "📖 Free node" sudah menunjuk ke file itu (core membaca ulang saat restart / update provider).
+FREE_REQUIRED_KEYS = ("name", "type", "server", "port")
+
+
+def free_node_path(platform, base_dir=None):
+    P = PLATFORMS[platform]
+    return os.path.join(base_dir or BASE_DIR, P["out"], P["proxy_dir"], FREE_NODE_FILE)
+
+
+def load_sub2yaml_output(path):
+    """Baca keluaran sub2yaml. Return (nodes, error). Menerima `proxies: [...]` atau list polos."""
+    try:
+        data = yaml.safe_load(read_text(path))
+    except (OSError, yaml.YAMLError) as e:
+        return [], f"tidak bisa membaca {path}: {e}"
+    items = data.get("proxies") if isinstance(data, dict) else data
+    if not isinstance(items, list):
+        return [], "format tidak dikenal: butuh `proxies: [...]` (YAML Clash)"
+    return [x for x in items if isinstance(x, dict)], None
+
+
+def clean_free_nodes(nodes, taken=()):
+    """Buang node tak lengkap, nama bentrok dengan group/proxy template → dedupe. Return (nodes, notes)."""
+    notes, good = [], []
+    for n in nodes:
+        miss = [k for k in FREE_REQUIRED_KEYS if n.get(k) in (None, "")]
+        if miss:
+            notes.append(f"dibuang: '{n.get('name', '?')}' tanpa {', '.join(miss)}")
+            continue
+        good.append(dict(n, name=str(n["name"])))
+    before = [n["name"] for n in good]
+    dedupe_names(good, set(taken) | reserved_names())
+    renamed = sum(1 for a, n in zip(before, good) if a != n["name"])
+    if renamed:
+        notes.append(f"{renamed} nama node diubah agar unik")
+    return good, notes
+
+
+def import_free_nodes(source_path, platforms=None, write_mode="replace", base_dir=None):
+    """Tulis node dari sub2yaml ke free.yaml tiap platform. write_mode: 'replace' | 'append'.
+    Return list[(platform, jumlah_node, notes, error)]."""
+    nodes, error = load_sub2yaml_output(source_path)
+    if error:
+        return [(None, 0, [], error)]
+    if not nodes:
+        return [(None, 0, [], "tidak ada node di file sumber")]
+    results = []
+    for plat in platforms or list(PLATFORMS):
+        dest = free_node_path(plat, base_dir)
+        try:
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            taken = set()
+            # nama node di Active/Trial juga dihindari supaya tidak dobel di group yang memakai banyak provider
+            for fn in USER_NODE_FILES:
+                taken |= {x.get("name") for x in load_provider_nodes(os.path.join(os.path.dirname(dest), fn))}
+            existing = load_provider_nodes(dest) if write_mode == "append" else []
+            taken |= {x.get("name") for x in existing}
+            cleaned, notes = clean_free_nodes(nodes, taken)
+            if not cleaned:
+                results.append((plat, 0, notes, "semua node tidak valid"))
+                continue
+            if write_mode == "replace" and os.path.exists(dest):
+                backup_file(dest)
+            save_proxy_yaml(existing + cleaned, dest)
+            results.append((plat, len(cleaned), notes, None))
+        except OSError as e:
+            results.append((plat, 0, [], f"{type(e).__name__}: {e}"))
+    return results
+
+
+def run_sub2yaml(out_path, script=None, timeout=300):
+    """Jalankan sub2yaml.py (kalau ada) supaya menulis ke out_path. Return (ok, pesan)."""
+    script = script or SUB2YAML_SCRIPT
+    if not os.path.isfile(script):
+        return False, f"sub2yaml.py tidak ditemukan di {script}"
+    cmd = [sys.executable, script] + [a.format(out=out_path) for a in SUB2YAML_ARGS]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return False, f"gagal menjalankan sub2yaml: {e}"
+    if r.returncode != 0:
+        return False, (r.stderr or r.stdout or f"kode keluar {r.returncode}").strip()[-300:]
+    if not os.path.isfile(out_path):
+        return False, "sub2yaml selesai tetapi file keluaran tidak dibuat (cek SUB2YAML_ARGS)"
+    return True, "ok"
+
+
+def feature_import_free_nodes():
+    clear_screen(); banner(); section("Free Node ➜ 🛹 Free node (sub2yaml)")
+    print(f"  {C.DIM}Isi proxy/free.yaml dari keluaran sub2yaml (YAML Clash `proxies:`). Node divalidasi dan dijaga unik.{C.RESET}\n")
+    src = None
+    if os.path.isfile(SUB2YAML_SCRIPT):
+        print(f"  {C.CYAN}[1]{C.RESET} Jalankan sub2yaml.py sekarang\n  {C.CYAN}[2]{C.RESET} Pilih / ketik path file YAML")
+        if ask(f"{C.YELLOW}Pilih (1/2) ❯{C.RESET} ").strip() == "1":
+            tmp = os.path.join(BASE_DIR, "sub2yaml_out.yaml")
+            os.makedirs(BASE_DIR, exist_ok=True)
+            spinner("Menjalankan sub2yaml", 0.5)
+            good, msg = run_sub2yaml(tmp)
+            if not good:
+                err(msg); pause(); return
+            src = tmp
+    if src is None:
+        cands = [("subscription.yaml (repo)", SUBSCRIPTION_SOURCE)] if os.path.isfile(SUBSCRIPTION_SOURCE) else []
+        cands += [(os.path.relpath(f, SCRIPT_DIR), f) for f in sorted(glob.glob(os.path.join(BASE_DIR, "*.y*ml")))]
+        src = _pick_file(cands, "Pilih nomor, atau ketik path file")
+        if not src:
+            return
+    print(f"\n  {C.CYAN}[B]{C.RESET} Box  {C.CYAN}[N]{C.RESET} Nikki  {C.CYAN}[O]{C.RESET} OpenClash  {C.CYAN}[A]{C.RESET} Semua")
+    pl = ask(f"{C.YELLOW}Platform (B/N/O/A, Enter=A) ❯{C.RESET} ").strip().lower() or "a"
+    plats = {"b": ["box"], "n": ["nikki"], "o": ["openclash"], "a": list(PLATFORMS)}.get(pl)
+    if not plats:
+        err("Pilihan tidak valid."); time.sleep(1.0); return
+    mode = ask(f"{C.YELLOW}Mode: [1] Ganti isi free.yaml  [2] Tambahkan (Enter=1) ❯{C.RESET} ").strip()
+    for plat, n, notes, error in import_free_nodes(src, plats, "append" if mode == "2" else "replace"):
+        if error:
+            err(f"{plat or 'sumber'}: {error}"); continue
+        ok(f"{PLATFORMS[plat]['label']}: {n} node → {os.path.relpath(free_node_path(plat), SCRIPT_DIR)}")
+        for note in notes:
+            print(f"  {C.DIM}• {note}{C.RESET}")
+    pause("Tekan Enter untuk kembali ke menu...")
+
+
 def feature_convert_menu():
     clear_screen(); banner(); section("Menu Convert")
     print(f"  {C.CYAN}[1]{C.RESET} URI (VLESS/VMess/Trojan)  ➜  Clash (YAML)")
     print(f"  {C.CYAN}[2]{C.RESET} Clash (YAML)              ➜  URI (VLESS/VMess/Trojan)")
     print(f"  {C.CYAN}[3]{C.RESET} Regenerate config dari node tersimpan {C.DIM}(tanpa paste URI lagi){C.RESET}")
+    print(f"  {C.CYAN}[4]{C.RESET} Free node (sub2yaml)  ➜  🛹 Free node {C.DIM}(proxy/free.yaml){C.RESET}")
     print(f"  {C.CYAN}[0]{C.RESET} Kembali ke Menu Utama\n{sep(50)}")
-    pilihan = ask(f"{C.YELLOW}Pilih (1/2/3) ❯{C.RESET} ").strip()
+    pilihan = ask(f"{C.YELLOW}Pilih (1/2/3/4) ❯{C.RESET} ").strip()
     if pilihan == "1":
         clear_screen(); banner(); feature_convert_to_clash()
     elif pilihan == "2":
         feature_convert_to_uri()
     elif pilihan == "3":
         feature_regenerate()
+    elif pilihan == "4":
+        feature_import_free_nodes()
 
 
 def ensure_emoji_file():

@@ -147,6 +147,7 @@ hikari-clash/
 ├── hikari_converter.py          # Script utama (menu & generator)
 ├── banner.py                    # Banner Hikari /.CLASH
 ├── mrs_codec.py                 # Codec rule-set .mrs ⇄ .yaml/.txt   (menu 5)
+├── sub2yaml.py                  # (opsional, akan ditambahkan) subscription ➜ YAML Clash; hasilnya diimpor ke 🛹 Free node (menu 1 → 4)
 ├── nodetest.py                  # Tester node proxy                  (menu 5)
 ├── routetest.py                 # Tester route domain/IP             (menu 5)
 ├── template/
@@ -190,7 +191,7 @@ python hikari_converter.py
 ### Menu utama
 
 ```text
-[1] Convert                 ← link ⇄ Clash YAML, regenerate dari node tersimpan
+[1] Convert                 ← link ⇄ Clash YAML, regenerate dari node tersimpan, impor free node (sub2yaml)
 [2] Edit Configuration      ← port & secret, ganti template, DNS, emoji node
 [3] Check Status            ← template, provider, config yang sudah jadi
 [4] Validasi / Audit Config ← cek template untuk ketiga platform
@@ -217,6 +218,18 @@ Menu `1 → 3`. Kamu mengubah template, DNS, profil ISP, emoji, atau secret dan 
 - **`[1]…[n]`** — pilih satu sumber (mis. `nikki/active.yaml`, lengkap dengan jumlah node & waktu ubah). Enter = tetap di platform/provider yang sama, jadi file node-nya **tidak** ditanya timpa/tambah. Pilih platform lain untuk menyalin node ke sana (format node sama di semua platform).
 - **`[A]`** — bangun ulang semua sumber sekaligus dengan pilihan baku: rule-provider & secret ikut template, profil ISP dari `settings.json`.
 - Nama node dipakai apa adanya (emoji tidak ditambah lagi), dan node di provider lain tidak disentuh.
+
+### Free node dari sub2yaml (🛹 Free node)
+
+Menu `1 → 4`. Mengisi `proxy/free.yaml` — provider `📖 Free node` yang dipakai group **🛹 Free node** — dari keluaran `sub2yaml`.
+
+1. **Sumber**: jalankan `sub2yaml.py` langsung (muncul kalau file itu ada di samping `hikari_converter.py`), atau pilih/ketik path file YAML hasilnya. `subscription.yaml` repo juga bisa dipilih sebagai contoh.
+2. **Platform**: `B` Box · `N` Nikki · `O` OpenClash · `A` semua (default). Nama folder mengikuti platform: `proxy/` untuk Box & Nikki, `proxy_provider/` untuk OpenClash.
+3. **Mode**: **Ganti** isi `free.yaml` (yang lama dibackup `.bak`) atau **Tambahkan**.
+4. Node divalidasi: wajib punya `name`, `type`, `server`, `port` (yang tidak lengkap dibuang dan dilaporkan); nama yang bentrok dengan group template atau node di `active.yaml`/`trial.yaml` otomatis jadi `Nama (2)`. Emoji acak **tidak** ditambahkan (nama dari sub2yaml dipakai apa adanya).
+5. `config.yaml` tidak perlu di-generate ulang. Restart core (atau update provider dari dashboard) supaya node baru terbaca. Generate/Regenerate berikutnya tidak menimpa `free.yaml`.
+
+**Kontrak dengan sub2yaml:** keluarannya YAML Clash `proxies: [...]` (format sama dengan `subscription.yaml`). Kalau CLI `sub2yaml.py` butuh argumen lain, ubah `SUB2YAML_ARGS` di `hikari_converter.py` (default: `--output <file>`).
 
 ### Convert Clash ➜ URI
 
@@ -324,7 +337,7 @@ Group node: **🧩 Inject** (pusat), **🛸 AUTO MODE** (url-test), **👒 PROXY
 | Group | Provider | Isi |
 |---|---|---|
 | **🥪 Subscription** | `🍞 Subscription` (`http`, `proxy/subs.yaml`) | Node gratis dari `subscription.yaml` repo, di-update otomatis lewat group 🛸 AUTO MODE |
-| **🛹 Free node** | `📖 Free node` (`file`, `proxy/free.yaml`) | Node gratis yang kamu isi sendiri (file kosong `proxies: []` dibuat otomatis, tidak pernah ditimpa) |
+| **🛹 Free node** | `📖 Free node` (`file`, `proxy/free.yaml`) | Khusus keluaran **sub2yaml**: diisi lewat `1 → 4` (file kosong `proxies: []` dibuat otomatis saat generate, tidak pernah ditimpa) |
 
 Nama group di tabel ini identik dengan `template/config_v1.0.yaml` — kalau kamu mengganti nama di template, ganti juga di `rules:` dan `proxies:` group yang mengacu ke nama itu.
 
@@ -359,7 +372,7 @@ source ~/.bashrc
 
 **📦 Active vs Trial** — `active.yaml` untuk node harian, `trial.yaml` untuk node yang lagi dicoba. Keduanya otomatis masuk **AUTO MODE** dan **PROXY LIST**.
 
-**🥪 Subscription & 🛹 Free node (v1.0)** — saat generate, script menaruh `proxy/subs.yaml` (salinan `subscription.yaml` sebagai cache awal) dan `proxy/free.yaml` (kosong) di samping `active.yaml`/`trial.yaml`. Di Mode Offline, provider `🍞 Subscription` ikut jadi `file` (tidak auto-update). Regenerate (`1 → 3`) hanya membaca `active.yaml`/`trial.yaml`; `subs.yaml` dan `free.yaml` tidak dianggap sumber node. ⚠️ Node gratis publik dikelola pihak lain: jangan dipakai untuk login/transaksi sensitif, karena operator node bisa melihat trafik yang tidak terenkripsi end-to-end.
+**🥪 Subscription & 🛹 Free node (v1.0)** — saat generate, script menaruh `proxy/subs.yaml` (salinan `subscription.yaml` sebagai cache awal) dan `proxy/free.yaml` (kosong, untuk hasil sub2yaml) di samping `active.yaml`/`trial.yaml`. Di Mode Offline, provider `🍞 Subscription` ikut jadi `file` (tidak auto-update). Regenerate (`1 → 3`) hanya membaca `active.yaml`/`trial.yaml`; `subs.yaml` dan `free.yaml` tidak dianggap sumber node. Isi `free.yaml` dari sub2yaml lewat `1 → 4`. ⚠️ Node gratis publik dikelola pihak lain: jangan dipakai untuk login/transaksi sensitif, karena operator node bisa melihat trafik yang tidak terenkripsi end-to-end.
 
 **🦊 Emoji nama node** — tiap link yang di-convert dapat emoji acak (tidak berulang dalam satu batch selama daftarnya cukup). Edit lewat `2 → 4`, atau ubah langsung `emoji.json`. Nama yang sudah berawalan emoji (apa pun, mis. `🪟 Rekayasa` atau `🇸🇬 Singapore`) dibiarkan apa adanya, tidak jadi dobel, jadi aman dipakai bareng Append. Tambah emoji dengan spasi/koma sebagai pemisah, mis. `🦊 🐼 🐯`.
 
@@ -412,6 +425,7 @@ mihomo -t -d hasil/full_config_box -f hasil/full_config_box/config.yaml
 | Rule-provider gagal download | GitHub raw lambat/terblokir | Mode Offline, atau pakai `proxy:` pada provider |
 | `transport 'xhttp' belum didukung` | Transport belum ada di parser | Pakai node dengan ws/grpc/tcp, atau tambahkan manual di YAML |
 | Provider kosong bikin error di core tertentu | `trial.yaml` / `free.yaml` berisi `proxies: []` | Isi minimal 1 node |
+| `🛹 Free node` kosong | `free.yaml` belum diisi sub2yaml (default `proxies: []`) | `1 → 4`, lalu restart core |
 | `🥪 Subscription` kosong / provider gagal download | `subs.yaml` di-download lewat 🛸 AUTO MODE (butuh node di Active/Trial yang hidup) atau GitHub raw terblokir | Pakai cache awal dari `subscription.yaml`, atau Mode Offline |
 
 ---

@@ -747,3 +747,95 @@ class TemplateV10(unittest.TestCase):
         for p in proxies:
             self.assertTrue(p.get("server") and p.get("port") and p.get("type"))
 
+
+class FreeNodeSub2yaml(unittest.TestCase):
+    """Integrasi sub2yaml → proxy/free.yaml (group 🛹 Free node)."""
+
+    def setUp(self):
+        import yaml
+        self.yaml = yaml
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = self.tmp.name
+        self.src = os.path.join(self.d, "out.yaml")
+        self.base = os.path.join(self.d, "hasil")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _write(self, proxies):
+        open(self.src, "w", encoding="utf-8").write(self.yaml.safe_dump({"proxies": proxies}, allow_unicode=True))
+
+    def _node(self, name, port=443):
+        return {"name": name, "type": "trojan", "server": "1.2.3.4", "port": port, "password": "x"}
+
+    def test_writes_all_platforms_to_right_dir(self):
+        self._write([self._node("A"), self._node("B")])
+        res = h.import_free_nodes(self.src, base_dir=self.base)
+        self.assertEqual([(p, n, e) for p, n, _, e in res], [(p, 2, None) for p in h.PLATFORMS])
+        for plat, P in h.PLATFORMS.items():
+            fn = os.path.join(self.base, P["out"], P["proxy_dir"], "free.yaml")
+            self.assertEqual([x["name"] for x in h.load_provider_nodes(fn)], ["A", "B"])
+
+    def test_invalid_nodes_dropped_and_names_deduped(self):
+        bad = {"name": "tanpa-server", "type": "ss", "port": 1}
+        self._write([self._node("A"), self._node("A"), bad, self._node("🧩 Inject")])    # nama bentrok dengan group template
+        (plat, n, notes, error), = h.import_free_nodes(self.src, ["box"], base_dir=self.base)
+        self.assertIsNone(error)
+        names = [x["name"] for x in h.load_provider_nodes(h.free_node_path("box", self.base))]
+        self.assertEqual(n, 3)
+        self.assertEqual(len(names), len(set(names)))
+        self.assertNotIn("🧩 Inject", names)
+        self.assertTrue(any("tanpa-server" in x for x in notes))
+
+    def test_avoids_names_used_in_active(self):
+        pdir = os.path.dirname(h.free_node_path("box", self.base))
+        os.makedirs(pdir)
+        h.save_proxy_yaml([self._node("A")], os.path.join(pdir, "active.yaml"))
+        self._write([self._node("A")])
+        h.import_free_nodes(self.src, ["box"], base_dir=self.base)
+        self.assertEqual([x["name"] for x in h.load_provider_nodes(h.free_node_path("box", self.base))], ["A (2)"])
+
+    def test_append_and_replace(self):
+        self._write([self._node("A")])
+        h.import_free_nodes(self.src, ["box"], base_dir=self.base)
+        self._write([self._node("B")])
+        h.import_free_nodes(self.src, ["box"], "append", base_dir=self.base)
+        fn = h.free_node_path("box", self.base)
+        self.assertEqual([x["name"] for x in h.load_provider_nodes(fn)], ["A", "B"])
+        h.import_free_nodes(self.src, ["box"], "replace", base_dir=self.base)
+        self.assertEqual([x["name"] for x in h.load_provider_nodes(fn)], ["B"])
+        self.assertTrue(os.path.exists(fn + ".bak"))
+
+    def test_bad_source(self):
+        open(self.src, "w").write("bukan: yaml-proxies\n")
+        (_, n, _, error), = h.import_free_nodes(self.src, base_dir=self.base)
+        self.assertEqual(n, 0); self.assertTrue(error)
+        (_, _, _, error), = h.import_free_nodes(os.path.join(self.d, "nope.yaml"), base_dir=self.base)
+        self.assertTrue(error)
+
+    def test_generated_config_stays_valid_after_import(self):
+        old = h.BASE_DIR
+        h.BASE_DIR = self.base
+        try:
+            node = h.convert_line(VLESS)
+            self._write([self._node("F1")])
+            for plat in h.PLATFORMS:
+                h.setup_full_config([dict(node)], "active.yaml", plat)
+            h.import_free_nodes(self.src, base_dir=self.base)
+            for plat in h.PLATFORMS:                    # regenerate tidak menimpa free.yaml hasil import
+                _, _, issues, error = h.setup_full_config([dict(node)], "active.yaml", plat)
+                self.assertIsNone(error); self.assertEqual(issues, [])
+                self.assertEqual([x["name"] for x in h.load_provider_nodes(h.free_node_path(plat, self.base))], ["F1"])
+        finally:
+            h.BASE_DIR = old
+
+    def test_run_sub2yaml(self):
+        script = os.path.join(self.d, "sub2yaml.py")
+        open(script, "w").write("import sys\nopen(sys.argv[sys.argv.index('--output')+1],'w').write('proxies: []\\n')\n")
+        ok_, msg = h.run_sub2yaml(self.src, script=script)
+        self.assertTrue(ok_, msg); self.assertTrue(os.path.isfile(self.src))
+        ok_, msg = h.run_sub2yaml(self.src, script=os.path.join(self.d, "hilang.py"))
+        self.assertFalse(ok_)
+        open(script, "w").write("import sys; sys.exit(3)\n")
+        self.assertFalse(h.run_sub2yaml(self.src, script=script)[0])
+
