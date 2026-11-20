@@ -35,9 +35,9 @@ if SCRIPT_DIR not in sys.path:          # supaya banner.py / mrs_codec.py / node
 
 BASE_DIR = os.path.join(SCRIPT_DIR, "hasil")
 RULESET_SOURCE = os.path.join(SCRIPT_DIR, "ruleset")
-SUBSCRIPTION_SOURCE = os.path.join(SCRIPT_DIR, "subscription.yaml")   # node gratis (v1.0): dipakai sebagai cache awal subs.yaml
+SUBSCRIPTION_SOURCE = os.path.join(SCRIPT_DIR, "subscription.yaml")   # node gratis (template v1.0+): dipakai sebagai cache awal subs.yaml
 SEED_FILES = {"subs.yaml": SUBSCRIPTION_SOURCE}                      # file provider yang disemai dari repo saat generate
-FREE_NODE_FILE = "free.yaml"                                         # provider "📖 Free node" (group 🛹 Free node) — diisi sub2yaml
+FREE_NODE_FILE = "free.yaml"                                         # provider "📄 Free" (group 🐦 Free) — diisi sub2yaml
 SUB2YAML_SCRIPT = os.path.join(SCRIPT_DIR, "sub2yaml.py")            # dijalankan interaktif dari menu 1 → 4
 SUB2YAML_OUT_DIR = os.path.join(BASE_DIR, "proxy")                   # keluaran sub2yaml: hasil/proxy/free.yaml (+ custom-*.yaml, report.txt)
 USER_NODE_FILES = ("active.yaml", "trial.yaml")                      # file node milik pengguna; free.yaml/subs.yaml bukan sumber regenerate
@@ -54,8 +54,7 @@ DEFAULT_SKIP_CERT_VERIFY = True
 
 EMOJI_PATH = os.path.join(SCRIPT_DIR, "emoji.json")        # daftar emoji nama node (bisa diedit lewat menu)
 # Daftar bawaan = isi emoji.json bawaan repo (dipakai kalau file hilang / rusak / di-Reset lewat menu).
-# Sengaja tanpa emoji yang dipakai nama group di template (🧩 🛸 👒 🌳 💤 💕 🍪 🪼 🥪 🛹 🎮 ✂️ 🐬).
-# (🍞 tetap ada: di v1.0 hanya dipakai nama proxy-provider, bukan nama group/proxy, jadi tidak bentrok.)
+# Sengaja tanpa emoji yang dipakai nama group di template (🧩 💫 📚 🌳 💤 💕 🍪 👾 🗺️ 🐦 🛠️ 🎮 ✂️ 🐬).
 DEFAULT_EMOJIS = ["🦊", "🎿", "💟", "🩻", "💭", "🔮", "🐠", "🍂", "🐣", "🧢", "🪭",
                   "🍞", "☕", "🧊", "🍕", "🍟", "🛋️", "🏙️", "🌃", "🌠", "🌌", "⛱️"]
 
@@ -819,6 +818,7 @@ def render_config(cfg, platform, version_hint=""):
 #  Validator (audit otomatis)
 # =====================================================================
 BUILTIN_TARGETS = {"DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE", "GLOBAL"}
+GROUP_PROXY_TYPES = {"select", "url-test", "fallback", "load-balance", "relay"}   # tipe proxy-group Mihomo
 
 
 def _port_of(addr):
@@ -842,12 +842,21 @@ def validate_config(cfg, platform, out_dir=None):
     pproviders = cfg.get("proxy-providers") or {}
     rproviders = cfg.get("rule-providers") or {}
 
+    # tipe grup tidak boleh ada di blok proxies: (itu daftar node), mis. url-test yang salah tempat
+    for x in cfg.get("proxies") or []:
+        if isinstance(x, dict) and x.get("type") in GROUP_PROXY_TYPES:
+            E(f"'{x.get('name')}' bertipe grup ({x['type']}) tapi ada di blok proxies: — pindahkan ke proxy-groups")
+
     for g in cfg.get("proxy-groups") or []:
         for x in g.get("proxies") or []:
-            if x not in valid_targets:
+            if x in pproviders:
+                E(f"group '{g['name']}' menaruh proxy-provider '{x}' di proxies: — provider hanya boleh di use:")
+            elif x not in valid_targets:
                 E(f"group '{g['name']}' mengacu ke '{x}' yang tidak ada")
         for u in g.get("use") or []:
-            if u not in pproviders:
+            if u in groups:
+                E(f"group '{g['name']}' memakai proxy-group '{u}' di use: — grup hanya boleh di proxies:")
+            elif u not in pproviders:
                 E(f"group '{g['name']}' memakai proxy-provider '{u}' yang tidak ada")
         if not g.get("proxies") and not g.get("use"):
             E(f"group '{g['name']}' kosong (tanpa proxies/use)")
@@ -874,6 +883,12 @@ def validate_config(cfg, platform, out_dir=None):
     check_rs((cfg.get("sniffer") or {}).get("skip-domain"), "sniffer.skip-domain")
     check_rs((cfg.get("sniffer") or {}).get("force-domain"), "sniffer.force-domain")
     check_rs((cfg.get("dns") or {}).get("fake-ip-filter"), "dns.fake-ip-filter")
+
+    for sect, d in (("proxy-provider", pproviders), ("rule-provider", rproviders)):
+        for name, pv in d.items():
+            tgt = pv.get("proxy") if isinstance(pv, dict) else None
+            if tgt and tgt not in valid_targets:
+                E(f"{sect} '{name}' memakai proxy '{tgt}' yang tidak ada")
 
     for name, pv in rproviders.items():
         t = pv.get("type")
@@ -1085,7 +1100,7 @@ def setup_full_config(proxies, target_name, platform, provider_mode="template", 
             with open(other, "w", encoding="utf-8") as f:
                 f.write("proxies: []\n")
 
-        # provider bawaan template v1.0: free.yaml (type file, diisi manual) wajib ada supaya core tidak gagal start;
+        # provider bawaan template (v1.0+): free.yaml (type file, diisi manual) wajib ada supaya core tidak gagal start;
         # subs.yaml (type http) disemai dari subscription.yaml repo sebagai cache awal. File yang sudah ada tidak ditimpa.
         for pv in (cfg.get("proxy-providers") or {}).values():
             if not isinstance(pv, dict) or not isinstance(pv.get("path"), str):
@@ -2767,11 +2782,11 @@ def feature_misc_menu():
 #  Menu
 # =====================================================================
 # =====================================================================
-#  Free node (sub2yaml → proxy/free.yaml, group 🛹 Free node)
+#  Free node (sub2yaml → proxy/free.yaml, group 🐦 Free)
 # =====================================================================
 # Kontrak dengan sub2yaml: keluarannya YAML Clash `proxies: [...]` (sama dengan subscription.yaml).
 # Hikari hanya memvalidasi lalu menulis ke <platform>/<proxy_dir>/free.yaml; config.yaml tidak perlu di-generate ulang
-# karena provider "📖 Free node" sudah menunjuk ke file itu (core membaca ulang saat restart / update provider).
+# karena provider "📄 Free" sudah menunjuk ke file itu (core membaca ulang saat restart / update provider).
 FREE_REQUIRED_KEYS = ("name", "type", "server", "port")
 
 
@@ -2872,7 +2887,7 @@ def run_sub2yaml(script=None, out_dir=None):
 
 
 def feature_import_free_nodes():
-    clear_screen(); banner(); section("Free Node ➜ 🛹 Free node (sub2yaml)")
+    clear_screen(); banner(); section("Free Node ➜ 🐦 Free (sub2yaml)")
     print(f"  {C.DIM}Isi proxy/free.yaml dari keluaran sub2yaml (YAML Clash `proxies:`). Node divalidasi dan dijaga unik.{C.RESET}\n")
     src = None
     if os.path.isfile(SUB2YAML_SCRIPT):
@@ -2912,7 +2927,7 @@ def feature_convert_menu():
     print(f"  {C.CYAN}[1]{C.RESET} URI (VLESS/VMess/Trojan)  ➜  Clash (YAML)")
     print(f"  {C.CYAN}[2]{C.RESET} Clash (YAML)              ➜  URI (VLESS/VMess/Trojan)")
     print(f"  {C.CYAN}[3]{C.RESET} Regenerate config dari node tersimpan {C.DIM}(tanpa paste URI lagi){C.RESET}")
-    print(f"  {C.CYAN}[4]{C.RESET} Free node (sub2yaml)  ➜  🛹 Free node {C.DIM}(proxy/free.yaml){C.RESET}")
+    print(f"  {C.CYAN}[4]{C.RESET} Free node (sub2yaml)  ➜  🐦 Free {C.DIM}(proxy/free.yaml){C.RESET}")
     print(f"  {C.CYAN}[0]{C.RESET} Kembali ke Menu Utama\n{sep(50)}")
     pilihan = ask(f"{C.YELLOW}Pilih (1/2/3/4) ❯{C.RESET} ").strip()
     if pilihan == "1":

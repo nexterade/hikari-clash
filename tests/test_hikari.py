@@ -34,7 +34,8 @@ class Paths(unittest.TestCase):
         self.assertIn("config_v0.7.yaml", masters)          # v0.7 juga tidak ditimpa
         self.assertIn("config_v0.8.yaml", masters)          # v0.8 juga tidak ditimpa
         self.assertIn("config_v0.9.yaml", masters)          # v0.9 juga tidak ditimpa
-        self.assertEqual(masters[-1], "config_v1.0.yaml")
+        self.assertIn("config_v1.0.yaml", masters)          # v1.0 tetap utuh
+        self.assertEqual(masters[-1], "config_v1.1.yaml")
         self.assertEqual([f for f in os.listdir(ROOT) if f.startswith("config-template")], [])
 
 
@@ -181,7 +182,7 @@ class Tools(unittest.TestCase):
         cfg, _ = h.build_config(h.read_text(h.find_template()), "box")
         res = routetest.route(cfg, os.path.join(ROOT, "ruleset"), "chatgpt.com")
         self.assertTrue(res["final"])
-        self.assertIn("SMART", res["final"]["group"])
+        self.assertIn("🌳 Smart", res["final"]["group"])
 
     def test_node_tester_offline_local(self):
         import socket
@@ -639,32 +640,71 @@ class StunAndLegacy(unittest.TestCase):
         self.assertEqual(r("tcp://a.com:8080"), "G2")
 
 
-class TemplateV10(unittest.TestCase):
-    """Template v1.0: group baru (Subscription, Free node), provider baru, nama group/provider berubah."""
+class TemplateV11(unittest.TestCase):
+    """Template v1.1: 🗺️ Public jadi grup (bukan node), provider 📄 Free & 📑 Keyring, nama 🐦 Free dibetulkan."""
 
     def setUp(self):
         import yaml
         self.yaml = yaml
-        self.text = h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v1.0.yaml"))
+        self.path = os.path.join(h.TEMPLATE_DIR, "config_v1.1.yaml")
+        self.text = h.read_text(self.path)
         self.cfg = yaml.safe_load(self.text)
         self.v09 = yaml.safe_load(h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.9.yaml")))
 
+    def _group(self, name):
+        return next(g for g in self.cfg["proxy-groups"] if g["name"] == name)
+
     def test_version_marker(self):
-        self.assertEqual(h.template_version(os.path.join(h.TEMPLATE_DIR, "config_v1.0.yaml")), "1.0")
+        self.assertEqual(h.template_version(self.path), "1.1")
 
-    def test_new_groups_and_providers(self):
-        names = [g["name"] for g in self.cfg["proxy-groups"]]
-        for n in ("🥪 Subscription", "🛹 Free node"):
-            self.assertIn(n, names)
-        self.assertEqual(set(self.cfg["proxy-providers"]),
-                         {"🗳️ Active", "📅 Trial", "📖 Free node", "🍞 Subscription"})
-        self.assertEqual(self.cfg["proxy-providers"]["🍞 Subscription"]["type"], "http")
-        self.assertEqual(self.cfg["proxy-providers"]["📖 Free node"]["type"], "file")
+    def test_providers(self):
+        self.assertEqual(set(self.cfg["proxy-providers"]), {"🗳️ Active", "📅 Trial", "📄 Free", "📑 Keyring"})
+        self.assertEqual(self.cfg["proxy-providers"]["📑 Keyring"]["type"], "http")
+        self.assertEqual(self.cfg["proxy-providers"]["📄 Free"]["type"], "file")
+        self.assertEqual(self.cfg["proxy-providers"]["📄 Free"]["path"], "./proxy/free.yaml")
+        self.assertEqual(self.cfg["proxy-providers"]["📑 Keyring"]["path"], "./proxy/subs.yaml")
 
-    def test_inject_exposes_new_groups(self):
-        inject = next(g for g in self.cfg["proxy-groups"] if g["name"] == "🧩 Inject")
-        self.assertIn("🥪 Subscription", inject["proxies"])
-        self.assertIn("🛹 Free node", inject["proxies"])
+    def test_public_is_group_not_node(self):
+        self.assertEqual({p["name"] for p in self.cfg["proxies"]}, {"🎮 Direct", "✂️ Reject", "🐬 Hijack"})
+        self.assertEqual(self._group("🗺️ Public")["type"], "url-test")
+
+    def test_public_hidden_and_best_ping_over_free_and_subs(self):
+        pub = self._group("🗺️ Public")
+        self.assertTrue(pub.get("hidden"))
+        self.assertEqual(pub["use"], ["📄 Free", "📑 Keyring"])
+        self.assertNotIn("proxies", pub)
+
+    def test_public_only_selectable_from_keyring_and_free(self):
+        users = {g["name"] for g in self.cfg["proxy-groups"] if "🗺️ Public" in (g.get("proxies") or [])}
+        self.assertEqual(users, {"🛠️ Keyring", "🐦 Free"})
+
+    def test_free_and_keyring_use_providers_and_public_as_proxy(self):
+        for n in ("🐦 Free", "🛠️ Keyring"):
+            g = self._group(n)
+            self.assertEqual(g["proxies"], ["🗺️ Public"], n)
+            self.assertEqual(g["use"], ["📄 Free", "📑 Keyring"], n)
+
+    def test_inject_exposes_free_and_keyring(self):
+        inject = self._group("🧩 Inject")
+        self.assertIn("🐦 Free", inject["proxies"])
+        self.assertIn("🛠️ Keyring", inject["proxies"])
+
+    def test_no_name_starts_with_invisible_selector(self):
+        names = [g["name"] for g in self.cfg["proxy-groups"]] + list(self.cfg["proxy-providers"])
+        for n in names:
+            self.assertFalse(n.startswith("\ufe0f"), repr(n))
+
+    def test_no_stale_names(self):
+        names = {g["name"] for g in self.cfg["proxy-groups"]} | set(self.cfg["proxy-providers"])
+        for old in ("🛸 AUTO MODE", "👒 PROXY LIST", "🌳 SMART ROUTING", "🪼 Gaming", "🥪 Subscription",
+                    "🛹 Free node", "📖 Free node", "🍞 Subscription"):
+            self.assertNotIn(old, names)
+        for p in self.cfg["proxy-providers"].values():
+            self.assertNotIn(p.get("proxy"), ("🛸 AUTO MODE",))
+
+    def test_inject_and_rules_resolve(self):
+        cfg_issues = h.validate_config(h.build_config(self.text, "box")[0], "box")
+        self.assertEqual([i for i in cfg_issues if i[0] == "ERR"], [])
 
     def test_dns_and_rules_order_same_as_v09(self):
         self.assertEqual(self.cfg["dns"], self.v09["dns"])
@@ -676,7 +716,8 @@ class TemplateV10(unittest.TestCase):
             self.assertNotIn(k, self.cfg)
 
     def test_v09_untouched(self):
-        self.assertEqual({g["name"] for g in self.v09["proxy-groups"]} & {"🥪 Subscription", "🛹 Free node"}, set())
+        v09_names = {g["name"] for g in self.v09["proxy-groups"]}
+        self.assertEqual(v09_names & {"🐦 Free", "🛠️ Keyring", "🗺️ Public"}, set())
 
     def test_builds_clean_all_platforms(self):
         for plat in h.PLATFORMS:
@@ -843,4 +884,63 @@ class FreeNodeSub2yaml(unittest.TestCase):
         self.assertFalse(h.run_sub2yaml(script=script, out_dir=out)[0])
         open(script, "w").write("pass\n")                                     # selesai tapi free.yaml tidak diperbarui
         self.assertFalse(h.run_sub2yaml(script=script, out_dir=out)[0])
+
+
+
+class ValidatorReferences(unittest.TestCase):
+    """Regresi bug v1.1 asli: grup di blok proxies:, provider di proxies:/grup di use:, proxy provider yang sudah tidak ada."""
+
+    def setUp(self):
+        import yaml
+        self.yaml = yaml
+        self.base = yaml.safe_load(h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v1.1.yaml")))
+
+    def _errs(self, cfg):
+        return [m for l, m in h.validate_config(cfg, "box") if l == "ERR"]
+
+    def _copy(self):
+        return self.yaml.safe_load(self.yaml.safe_dump(self.base, allow_unicode=True))
+
+    def test_base_is_clean(self):
+        self.assertEqual(self._errs(self._copy()), [])
+
+    def test_group_type_in_proxies_flagged(self):
+        cfg = self._copy()
+        cfg["proxies"].append({"name": "🗺️ Public", "type": "url-test", "use": ["📄 Free"], "url": "http://x"})
+        self.assertTrue(any("bertipe grup" in m for m in self._errs(cfg)))
+
+    def test_provider_in_group_proxies_flagged(self):
+        cfg = self._copy()
+        g = next(g for g in cfg["proxy-groups"] if g["name"] == "🛠️ Keyring")
+        g["proxies"] = ["📄 Free"]
+        self.assertTrue(any("menaruh proxy-provider '📄 Free' di proxies:" in m for m in self._errs(cfg)))
+
+    def test_group_in_use_flagged(self):
+        cfg = self._copy()
+        g = next(g for g in cfg["proxy-groups"] if g["name"] == "🐦 Free")
+        g["use"] = ["🗺️ Public"]
+        self.assertTrue(any("memakai proxy-group '🗺️ Public' di use:" in m for m in self._errs(cfg)))
+
+    def test_provider_proxy_to_missing_group_flagged(self):
+        cfg = self._copy()
+        cfg["proxy-providers"]["📑 Keyring"]["proxy"] = "🛸 AUTO MODE"
+        self.assertTrue(any("'📑 Keyring' memakai proxy '🛸 AUTO MODE'" in m for m in self._errs(cfg)))
+
+    def test_stray_selector_name_flagged(self):
+        cfg = self._copy()
+        g = next(g for g in cfg["proxy-groups"] if g["name"] == "🐦 Free")
+        g["name"] = "\ufe0f🐦 Free"
+        self.assertTrue(any("'🐦 Free' yang tidak ada" in m for m in self._errs(cfg)))
+
+
+class MasterTemplatesClean(unittest.TestCase):
+    """Semua template master (v0.3 s/d v1.1) harus lolos validator tanpa ERR untuk ketiga platform."""
+
+    def test_all_masters_no_errors(self):
+        for path in h.list_master_templates():
+            text = h.read_text(path)
+            for plat in h.PLATFORMS:
+                cfg, _ = h.build_config(text, plat, isp="none")
+                errs = [m for l, m in h.validate_config(cfg, plat) if l == "ERR"]
+                self.assertEqual(errs, [], (os.path.basename(path), plat))
 

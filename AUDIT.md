@@ -189,3 +189,29 @@ Tindak lanjut temuan audit + permintaan pemilik proyek.
 - **Penyebab:** `report.txt` menunjukkan `Metode tes: TCP (binary mihomo tidak ditemukan)`. Script jatuh diam-diam ke tes TCP (port terbuka) dan menandainya "berhasil". Di HP dengan Box/Nikki/VPN aktif semua koneksi TCP dijawab proxy lokal (ping 1–3 ms bahkan ke node Belarus/Kosta Rika), jadi hampir semua node mati ikut lolos.
 - **Perbaikan:** URL-test mihomo wajib (tanpa core → berhenti, bukan fallback TCP; `--tcp-only` hanya jika sengaja). Node lolos hanya bila delay > 0 di dua URL berbeda dan rata-rata ≤ `--max-ping` (3000 ms). Tes per batch, berhenti saat `--top N` tercapai (jumlah bebas). Deteksi ping TCP palsu → tahap TCP dilewati. Core diunduh otomatis (resume, varian cadangan, folder cadangan `~/.hikari-clash/bin` untuk `/sdcard` yang noexec) dan divalidasi dengan `-v` sebelum dipakai. Laporan memisahkan gagal / tidak stabil / terlalu lambat.
 - **Belum diverifikasi:** unduhan & eksekusi core asli di Android/Termux (diuji dengan core palsu dan server unduhan tiruan); throughput `--workers 50` di HP. Core Box (`/data/adb/box/bin/xclash/mihomo`) sengaja tidak dipakai karena butuh root.
+
+---
+
+## 7. Template v1.1 — koreksi & validator (2026-11-20)
+
+**Input:** `config_v1_1.yaml` buatan pemilik (rename grup/provider + grup 🗺️ Public, 🛠️ Keyring, 🐦 Free). Diuji dengan validator repo sebelum dipakai: **9 ERR** di ketiga platform.
+
+| # | Temuan di v1.1 asli | Dampak | Perbaikan |
+|---|---|---|---|
+| V1 | `🗺️ Public` (url-test) ditaruh di blok `proxies:` (daftar node) | Core menolak tipe grup di `proxies:` | Dipindah ke `proxy-groups:` |
+| V2 | `🛠️ Keyring` & `🐦 Free`: nama provider (`📄 Free`, `📑 Keyring`) di `proxies:`, dan grup `🗺️ Public` di `use:` | Referensi tidak ada; `use:` hanya menerima provider | `proxies: [🗺️ Public]`, `use: [📄 Free, 📑 Keyring]` |
+| V3 | Nama `🐦 Free` di definisi diawali U+FE0F (karakter tak terlihat), referensi di 🧩 Inject tidak | Grup tidak ditemukan | Nama dibetulkan |
+| V4 | Provider `📑 Keyring` memakai `proxy: 🛸 AUTO MODE` (grup sudah tidak ada) | Download provider melalui proxy yang tidak ada | `proxy: 💫 Auto` |
+| V5 | Typo `expexted-status` | Key tidak dikenali (validasi status diam-diam tidak jalan) | `expected-status` |
+
+**Validator (`validate_config`) ditambah** agar kelas bug ini tertangkap otomatis: tipe grup di `proxies:`, provider di `proxies:` grup, grup di `use:`, dan `proxy:` pada provider yang menunjuk ke grup yang tidak ada. Sebelumnya V1 dan V4 lolos validator.
+
+**Hasil:** `config_v1.1.yaml` (sudah dikoreksi) lolos bersih di Box/Nikki/OpenClash; semua template master v0.3–v1.1 tetap tanpa ERR. Tes: 141 lulus, termasuk regresi untuk tiap bug di atas.
+
+**Keputusan desain yang dipertahankan dari pemilik:** grup `🥪 Subscription` dihapus (node gratis sekarang lewat 🛠️ Keyring dan 🐦 Free); grup 🗺️ Public dipakai sebagai pilihan otomatis di kedua grup itu.
+
+**Belum diverifikasi:**
+- Core asli (`mihomo -t`) belum dijalankan di sandbox ini. Terutama: `🗺️ Public` (url-test) memakai provider `📄 Free` yang awalnya kosong (`proxies: []`), dan `📄 Free` memakai `health-check` aktif. Jika core menolak provider kosong di grup url-test, jalankan `mihomo -t` setelah generate, atau isi `free.yaml` minimal satu node.
+- Screenshot di `docs/img/` masih menampilkan nama grup v1.0.
+
+**Susulan (2026-11-20) — 🗺️ Public.** `hidden: true` (tidak tampil di daftar group dashboard, tetap bisa dipakai sebagai anggota group lain). Dihapus dari 👾 Gaming & 💕 Plusplus; sekarang hanya dipilih lewat 🛠️ Keyring & 🐦 Free. Tipe group mihomo: `select`, `url-test`, `fallback`, `load-balance` (`relay` sudah dihapus).
