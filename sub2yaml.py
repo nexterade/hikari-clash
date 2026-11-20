@@ -2,8 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 sub2yaml.py  -  bagian dari Hikari /.CLASH
-Subscription (base64 / plain) -> `proxies:` Clash Mihomo. Node dites, yang berhasil
-disimpan ke folder ./hasil/proxy (diurutkan per negara) + laporan lengkap (report.txt).
+Subscription (base64 / plain) -> `proxies:` Clash Mihomo. Tiap node DITES LEWAT MIHOMO (URL-test sungguhan:
+connect lewat node -> gstatic generate_204, lalu dikonfirmasi sekali lagi ke URL berbeda). Hanya node yang
+benar-benar "muncul ping" yang disimpan ke ./hasil/proxy (diurutkan per negara) + laporan (report.txt).
+Jumlah node bebas (--top N): tes berhenti begitu N node lolos. Core mihomo diunduh otomatis ke ./bin bila belum ada.
 
 Source (src/):
   Saat pertama kali dijalankan, sumber diambil dari file .txt di folder ./src
@@ -11,7 +13,7 @@ Source (src/):
   atau `--update-source`. File .txt lain yang kamu taruh di src/ ikut terbaca.
 
 Output (./hasil/proxy/):
-  free.yaml            node terbaik tanpa custom config (default 100 node, --top untuk ubah)
+  free.yaml            node yang LOLOS tes tanpa custom config (default 100 node, --top untuk ubah)
   custom-sni.yaml      HANYA node yang berhasil dengan SNI custom
   custom-host.yaml     HANYA node yang berhasil dengan Host custom
   custom-address.yaml  HANYA node yang berhasil dengan Address (server) custom
@@ -24,13 +26,15 @@ Format YAML = block style seperti active.yaml (tanpa `{}` / `[]` inline), nilai 
 
 Tiap field custom dites TERPISAH, tapi semua profil dites dalam satu kali URL-test mihomo.
 
-PENTING: SNI/Host/path custom hanya bisa divalidasi lewat URL-test mihomo
-(--mihomo atau binary `mihomo` di PATH). Tes TCP cuma mengecek port terbuka.
+PENTING: tes TCP hanya mengecek port terbuka - TIDAK berarti node bisa dipakai (di HP dengan Box/Nikki/VPN
+aktif, semua koneksi TCP dijawab proxy lokal sehingga SEMUA node tampak "hidup" dengan ping 1-3ms).
+Karena itu mihomo wajib; --tcp-only hanya untuk keadaan terpaksa. Matikan Box/VPN saat menjalankan tes.
 SNI custom biasanya juga butuh --insecure (sertifikat server tidak cocok dengan SNI).
 
 Contoh:
   python3 sub2yaml.py                                  # menu interaktif
   python3 sub2yaml.py --update-source                  # unduh ulang src/*.txt lalu keluar
+  python3 sub2yaml.py --top 30 --no-menu               # 30 node yang lolos tes (core diunduh otomatis)
   python3 sub2yaml.py --mihomo ./mihomo                # hanya free.yaml
   python3 sub2yaml.py --sni instagram.com --insecure --mihomo ./mihomo
   python3 sub2yaml.py --sni a.com --host b.com --server 1.2.3.4 --insecure --mihomo ./mihomo
@@ -42,8 +46,12 @@ import asyncio
 import atexit
 import base64
 import glob
+import gzip
+import io
 import json
 import os
+import platform
+import random
 import re
 import shutil
 import socket
@@ -56,6 +64,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 
 # ---------- PATH CONFIG (relatif ke lokasi script, bukan cwd) ----------
@@ -64,6 +74,7 @@ if SCRIPT_DIR not in sys.path:  # supaya banner.py ketemu walau dijalankan dari 
     sys.path.insert(0, SCRIPT_DIR)
 SRC_DIR = os.path.join(SCRIPT_DIR, "src")
 DEFAULT_OUTDIR = os.path.join(SCRIPT_DIR, "hasil", "proxy")
+CORE_DIR = os.path.join(SCRIPT_DIR, "bin")   # tempat core mihomo hasil unduh otomatis
 
 # (nama file di src/, label, URL) - dipakai pertama kali jalan & menu [8] Update source
 SOURCES = [
@@ -73,6 +84,7 @@ SOURCES = [
      "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/verified/configs_base64.txt"),
 ]
 TEST_URL = "https://www.gstatic.com/generate_204"
+VERIFY_URL = "https://cp.cloudflare.com/generate_204"   # URL kedua untuk konfirmasi node yang lolos
 
 SS_CIPHERS = {
     "aes-128-gcm", "aes-192-gcm", "aes-256-gcm",
@@ -741,12 +753,181 @@ async def tcp_stage(items, timeout, concurrency, live=None):
 # --------------------------------------------------------------------------
 # Tahap 2: URL-test sungguhan lewat binary mihomo
 # --------------------------------------------------------------------------
-def find_core():
-    for name in ("mihomo", "clash-meta", "clash.meta"):
-        path = shutil.which(name)
-        if path:
-            return path
+def _core_ok(path):
+    """True kalau `path` benar-benar core Mihomo (Meta) yang bisa dijalankan (bukan Clash lama / file rusak)."""
+    try:
+        r = subprocess.run([path, "-v"], capture_output=True, text=True, timeout=15)
+    except Exception:
+        return False
+    out = ((r.stdout or "") + (r.stderr or "")).lower()
+    return r.returncode == 0 and ("mihomo" in out or "meta" in out)
+
+
+def core_version(path):
+    try:
+        r = subprocess.run([path, "-v"], capture_output=True, text=True, timeout=15)
+        return ((r.stdout or r.stderr or "").strip().splitlines() or ["?"])[0][:60]
+    except Exception:
+        return "?"
+
+
+def find_core(extra=None):
+    """Cari core Mihomo: --mihomo, env HIKARI_MIHOMO, ./bin, folder script, PATH, lokasi umum Box/Termux/OpenClash."""
+    cands = [extra, os.environ.get("HIKARI_MIHOMO")]
+    for d in (CORE_DIR, SCRIPT_DIR):
+        cands += [os.path.join(d, "mihomo"), os.path.join(d, "mihomo.exe")]
+    for name in ("mihomo", "clash-meta", "clash.meta", "clash_meta"):
+        cands.append(shutil.which(name))
+    prefix = os.environ.get("PREFIX")
+    if prefix:
+        cands.append(os.path.join(prefix, "bin", "mihomo"))
+    cands += ["/data/adb/box/bin/mihomo", "/data/adb/box/bin/clash", "/usr/local/bin/mihomo",
+              "/usr/bin/mihomo", "/etc/openclash/core/clash_meta"]
+    seen = set()
+    for c in cands:
+        if c and c not in seen and os.path.isfile(c) and os.access(c, os.X_OK):
+            seen.add(c)
+            if _core_ok(c):
+                return c
     return None
+
+
+# Nama aset rilis MetaCubeX/mihomo per platform ({v} = tag versi, mis. v1.19.2). Urutan = prioritas.
+def core_asset_templates():
+    arch = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64",
+            "armv8l": "armv7", "armv7l": "armv7", "i386": "386", "i686": "386"}.get(platform.machine().lower())
+    if not arch:
+        return []
+    android = bool(os.environ.get("TERMUX_VERSION") or os.environ.get("ANDROID_ROOT")
+                   or os.path.exists("/system/build.prop"))
+    if sys.platform.startswith("win"):
+        osn, ext = "windows", "zip"
+    elif sys.platform == "darwin":
+        osn, ext = "darwin", "gz"
+    else:
+        osn, ext = "linux", "gz"
+    t = []
+    if android and arch == "arm64":
+        t.append("mihomo-android-arm64-v8-{v}.gz")
+    if arch == "amd64":
+        t += [f"mihomo-{osn}-amd64-compatible-{{v}}.{ext}", f"mihomo-{osn}-amd64-{{v}}.{ext}"]
+    else:
+        t.append(f"mihomo-{osn}-{arch}-{{v}}.{ext}")
+    return t
+
+
+def pick_asset(names, templates):
+    """Pilih nama aset pertama yang cocok dengan salah satu template (urut prioritas)."""
+    for t in templates:
+        rx = re.compile(r"v\d+(?:\.\d+)+".join(re.escape(x) for x in t.split("{v}")))
+        for n in names:
+            if rx.fullmatch(n):
+                return n
+    return None
+
+
+def _http_get(url, timeout=60, live=None):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 sub2yaml"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        total = int(r.headers.get("Content-Length") or 0)
+        buf, label = bytearray(), (live.msg if live else "")
+        while True:
+            chunk = r.read(65536)
+            if not chunk:
+                break
+            buf += chunk
+            if live:
+                live.set(msg=f"{label}  {human_size(len(buf))}" + (f" / {human_size(total)}" if total else ""))
+        return bytes(buf), r.geturl()
+
+
+def download_core(dest_dir=None):
+    """Unduh core Mihomo terbaru dari GitHub (MetaCubeX/mihomo) ke ./bin/. Return path atau None."""
+    dest_dir = dest_dir or CORE_DIR
+    temps = core_asset_templates()
+    if not temps:
+        warn(f"Platform {sys.platform}/{platform.machine()} belum dikenali - unduh mihomo manual "
+             "lalu pakai --mihomo /path/mihomo")
+        return None
+    repo = "https://github.com/MetaCubeX/mihomo/releases"
+    with Live("Unduh core mihomo") as lv:
+        urls, name = [], None
+        try:  # jalur utama: API GitHub (daftar aset resmi)
+            data, _ = _http_get("https://api.github.com/repos/MetaCubeX/mihomo/releases/latest", 30)
+            assets = {a["name"]: a["browser_download_url"] for a in json.loads(data).get("assets", [])}
+            name = pick_asset(list(assets), temps)
+            if name:
+                urls.append(assets[name])
+        except Exception:
+            pass
+        if not urls:  # cadangan: tag dari redirect /releases/latest, nama aset ditebak dari template
+            try:
+                _, final = _http_get(repo + "/latest", 30)
+                tag = final.rstrip("/").rsplit("/", 1)[-1]
+                for t in temps:
+                    nm = t.replace("{v}", tag)
+                    urls.append(f"{repo}/download/{tag}/{nm}")
+                    name = name or nm
+            except Exception as e:
+                lv.fail(f"GitHub tidak terjangkau: {str(e)[:80]}")
+                return None
+        raw = None
+        for u in urls:
+            try:
+                raw, _ = _http_get(u, 300, lv)
+                name = u.rsplit("/", 1)[-1]
+                break
+            except Exception:
+                continue
+        if raw is None:
+            lv.fail("unduhan gagal")
+            return None
+        try:
+            if name.endswith(".zip"):
+                with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                    member = next(n for n in z.namelist() if n.lower().endswith(".exe"))
+                    raw = z.read(member)
+            else:
+                raw = gzip.decompress(raw)
+            os.makedirs(dest_dir, exist_ok=True)
+            path = os.path.join(dest_dir, "mihomo.exe" if os.name == "nt" else "mihomo")
+            with open(path + ".tmp", "wb") as f:
+                f.write(raw)
+            os.chmod(path + ".tmp", 0o755)
+            os.replace(path + ".tmp", path)
+        except Exception as e:
+            lv.fail(f"gagal memasang: {str(e)[:80]}")
+            return None
+        if not _core_ok(path):
+            lv.fail("file terunduh tidak bisa dijalankan di perangkat ini")
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            return None
+        lv.done(f"{name} -> {rel(path)}")
+        return path
+
+
+def resolve_core(args):
+    """Core untuk URL-test: --mihomo / yang sudah ada / unduh otomatis (kecuali --no-download)."""
+    if args.mihomo:
+        p = os.path.expanduser(args.mihomo)
+        if os.path.isfile(p) and os.access(p, os.X_OK) and _core_ok(p):
+            return p
+        err(f"--mihomo '{args.mihomo}' bukan binary Mihomo yang bisa dijalankan.")
+        return None
+    core = find_core()
+    if core or args.no_download:
+        return core
+    warn("Binary mihomo belum ada -> mengunduh otomatis dari GitHub (MetaCubeX/mihomo)")
+    return download_core()
+
+
+def tcp_intercepted(ms_values):
+    """Ping TCP yang nyaris semuanya <=3ms = koneksi dijawab proxy/VPN lokal (Box, Nikki, TUN),
+    bukan server aslinya -> tes TCP tidak berarti apa-apa."""
+    return len(ms_values) >= 20 and sum(1 for m in ms_values if m <= 3) / len(ms_values) > 0.5
 
 
 def free_port():
@@ -755,9 +936,13 @@ def free_port():
         return s.getsockname()[1]
 
 
-def mihomo_delays(core, proxies, test_url, timeout_ms, workers, base=None, live=None):
-    """proxies: {id: dict}. base: {id: index node asal} (penolakan satu node ikut menolak semua
-    varian-nya). Return (ok {id: ms}, gagal {id: pesan}, ditolak {id: pesan})."""
+def mihomo_delays(core, proxies, test_url, timeout_ms, workers, base=None, live=None,
+                  verify_url=None, max_ping=0, tick=None):
+    """Satu batch URL-test lewat mihomo. proxies: {id: dict}. base: {id: index node asal} (penolakan satu
+    node ikut menolak semua varian-nya). Node lolos hanya kalau delay > 0 di test_url DAN (bila verify_url)
+    di URL kedua juga, dengan rata-rata <= max_ping (0 = tanpa batas).
+    Return (ok {id: ms}, gagal {id: (jenis, pesan)}, ditolak {id: pesan});
+    jenis: urltest | unstable | slow. tick(ok: bool) dipanggil tiap node selesai."""
     work = tempfile.mkdtemp(prefix="sub2yaml_")
     proc = None
     try:
@@ -772,14 +957,14 @@ def mihomo_delays(core, proxies, test_url, timeout_ms, workers, base=None, live=
                 q = dict(proxies[i])
                 q["name"] = f"p{i}"
                 plist.append(q)
-            return to_yaml({"log-level": "error", "allow-lan": False,
+            return to_yaml({"log-level": "error", "allow-lan": False, "unified-delay": True,
                             "external-controller": f"127.0.0.1:{port}",
                             "proxies": plist})
 
         # Satu proxy invalid bikin mihomo menolak seluruh config -> buang satu-satu.
-        if live:
-            live.set(msg="Validasi config di mihomo", done=0, total=None)
         for _ in range(500):
+            if not order:
+                return {}, {}, rejected
             with open(cfg_path, "w", encoding="utf-8") as f:
                 f.write(build())
             r = subprocess.run([core, "-t", "-d", work, "-f", cfg_path],
@@ -798,56 +983,62 @@ def mihomo_delays(core, proxies, test_url, timeout_ms, workers, base=None, live=
                     rejected[g] = msg
         else:
             raise RuntimeError("terlalu banyak node yang ditolak mihomo")
-        if live:
-            live.set(msg="URL test lewat mihomo", done=0, total=len(order))
+        if not order:
+            return {}, {}, rejected
 
         proc = subprocess.Popen([core, "-d", work, "-f", cfg_path],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        base = f"http://127.0.0.1:{port}"
+        api = f"http://127.0.0.1:{port}"
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # abaikan env proxy
         for _ in range(80):
             if proc.poll() is not None:
                 raise RuntimeError("mihomo berhenti sendiri")
             try:
-                opener.open(base + "/version", timeout=1).read()
+                opener.open(api + "/version", timeout=1).read()
                 break
             except Exception:
                 time.sleep(0.25)
         else:
             raise RuntimeError("API mihomo tidak merespon")
 
-        done = 0
-
-        def one(i):
-            nonlocal done
-            url = f"{base}/proxies/p{i}/delay?" + urllib.parse.urlencode(
-                {"url": test_url, "timeout": timeout_ms})
-            ms = err = None
+        def probe(i, url):
+            q = f"{api}/proxies/p{i}/delay?" + urllib.parse.urlencode({"url": url, "timeout": timeout_ms})
             try:
-                with opener.open(url, timeout=timeout_ms / 1000 + 5) as r:
+                with opener.open(q, timeout=timeout_ms / 1000 + 5) as r:
                     d = json.load(r).get("delay")
-                    ms = int(d) if d else None
-                    if ms is None:
-                        err = "delay 0"
+                    return (int(d), None) if d else (None, "delay 0")
             except urllib.error.HTTPError as e:
                 try:
-                    err = str(json.load(e).get("message", f"HTTP {e.code}"))[:100]
+                    return None, str(json.load(e).get("message", f"HTTP {e.code}"))[:100]
                 except Exception:
-                    err = f"HTTP {e.code}"
+                    return None, f"HTTP {e.code}"
             except Exception as e:
-                err = str(e)[:100]
-            done += 1
-            if live:
-                live.update(done)
-            return i, ms, err
+                return None, str(e)[:100]
+
+        def one(i):
+            ms, e = probe(i, test_url)
+            res = (i, ms, None)
+            if not ms:
+                res = (i, None, ("urltest", e or "gagal"))
+            elif verify_url:  # konfirmasi di URL kedua: buang node yang cuma "kebetulan" lolos sekali
+                ms2, e2 = probe(i, verify_url)
+                if not ms2:
+                    res = (i, None, ("unstable", f"lolos tes 1 tapi gagal verifikasi ulang: {e2}"))
+                else:
+                    res = (i, (ms + ms2) // 2, None)
+            if res[1] and max_ping and res[1] > max_ping:
+                res = (i, None, ("slow", f"{res[1]}ms > batas {max_ping}ms"))
+            if tick:
+                tick(bool(res[1]))
+            return res
 
         ok, fails = {}, {}
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            for i, ms, err in ex.map(one, order):
+            for i, ms, bad in ex.map(one, order):
                 if ms:
-                    ok[i] = ms
+                    ok[i] = max(1, ms)
                 else:
-                    fails[i] = err or "gagal"
+                    fails[i] = bad
         return ok, fails, rejected
     finally:
         if proc and proc.poll() is None:
@@ -1412,6 +1603,9 @@ def config_menu(ov):
             err("Pilihan tidak valid."); time.sleep(0.8)
 
 
+_CORE_MEMO = {}
+
+
 def menu(args, sources, ov):
     while True:
         clear_screen(); banner(); section("MENU UTAMA")
@@ -1421,17 +1615,27 @@ def menu(args, sources, ov):
         print(f"  {C.DIM}Node{C.RESET}     : {C.WHITE}{top}{C.RESET} {C.DIM}(free.yaml){C.RESET}   "
               f"{C.DIM}Urut{C.RESET}: {C.WHITE}{args.sort}{C.RESET}")
         print(f"  {C.DIM}Output{C.RESET}   : {C.WHITE}{rel(args.outdir)}/{C.RESET}")
+        if args.tcp_only:
+            print(f"  {C.DIM}Tes{C.RESET}      : {C.YELLOW}TCP saja (tidak menjamin node bisa dipakai){C.RESET}")
+        else:
+            if "core" not in _CORE_MEMO:
+                _CORE_MEMO["core"] = (os.path.expanduser(args.mihomo) if args.mihomo else find_core())
+            c_ = _CORE_MEMO["core"]
+            print(f"  {C.DIM}Tes{C.RESET}      : {C.WHITE}URL-test mihomo{C.RESET} "
+                  + (f"{C.DIM}({rel(c_)}){C.RESET}" if c_ else
+                     f"{C.YELLOW}(core belum ada - diunduh otomatis saat Mulai, atau pilih [9]){C.RESET}"))
         print(f"  {C.DIM}Custom{C.RESET}   : {C.WHITE}{ov_describe(ov)}{C.RESET}")
         print(f"  {C.DIM}File{C.RESET}     : {C.WHITE}" + ", ".join(p["file"] for p in make_profiles(ov)) + C.RESET)
         print(sep(50))
         print(f"  {C.CYAN}[1]{C.RESET} Pilih source (file)")
         print(f"  {C.CYAN}[2]{C.RESET} URL custom (base64)")
         print(f"  {C.CYAN}[3]{C.RESET} Tambah URL (gabungkan beberapa sumber)")
-        print(f"  {C.CYAN}[4]{C.RESET} Ubah jumlah node free.yaml {C.DIM}(0 = semua yang berhasil){C.RESET}")
+        print(f"  {C.CYAN}[4]{C.RESET} Ubah jumlah node free.yaml {C.DIM}(bebas; hanya node yang lolos URL-test, 0 = semua){C.RESET}")
         print(f"  {C.CYAN}[5]{C.RESET} Ubah folder output")
         print(f"  {C.CYAN}[6]{C.RESET} Ganti urutan {C.DIM}(negara / ping){C.RESET}")
         print(f"  {C.CYAN}[7]{C.RESET} Edit config {C.DIM}(SNI / Host / Address / dll){C.RESET}")
         print(f"  {C.CYAN}[8]{C.RESET} Update source")
+        print(f"  {C.CYAN}[9]{C.RESET} Unduh / perbarui core mihomo {C.DIM}(untuk tes URL-test){C.RESET}")
         print(sep(50))
         print(f"  {C.GREEN}[Enter]{C.RESET} Mulai    {C.RED}[0]{C.RESET} Keluar")
         print(sep(50))
@@ -1457,7 +1661,7 @@ def menu(args, sources, ov):
             if x and x not in sources:
                 sources = sources + [x]
         elif c == "4":
-            v = ask(f"{C.YELLOW}Jumlah node (0 = semua, maks 5000) ❯{C.RESET} ").strip()
+            v = ask(f"{C.YELLOW}Jumlah node yang diinginkan (0 = semua yang lolos, maks 5000) ❯{C.RESET} ").strip()
             if v.isdigit() and 0 <= int(v) <= 5000:
                 args.top = int(v)
             else:
@@ -1473,6 +1677,10 @@ def menu(args, sources, ov):
         elif c == "8":
             if update_menu() and not sources:
                 sources = src_files()
+        elif c == "9":
+            clear_screen(); banner(); section("Core mihomo")
+            _CORE_MEMO["core"] = download_core() or _CORE_MEMO.get("core")
+            pause()
         else:
             err("Pilihan tidak valid."); time.sleep(0.8)
 
@@ -1502,9 +1710,11 @@ def collect_links(sources):
 # --------------------------------------------------------------------------
 FAIL_REASONS = [
     ("tcp_dead", "TCP gagal (timeout / port tertutup / DNS gagal)"),
-    ("urltest", "URL-test gagal lewat mihomo (tidak bisa konek dengan config ini)"),
+    ("urltest", "URL-test gagal lewat mihomo (tidak bisa konek / tidak ada respon)"),
+    ("unstable", "Lolos tes pertama tapi GAGAL verifikasi ulang (tidak stabil)"),
+    ("slow", "Terlalu lambat (di atas --max-ping)"),
     ("rejected", "Ditolak mihomo (config tidak valid)"),
-    ("not_tested", "Tidak dites (di luar batas --prefilter)"),
+    ("not_tested", "Tidak dites (target jumlah node sudah tercapai / di luar --prefilter)"),
 ]
 SKIP_REASONS = [
     ("filtered", "Di luar filter --only (tidak diubah, tidak dites)"),
@@ -1640,7 +1850,8 @@ def main():
     ap.add_argument("--update-source", action="store_true",
                     help="unduh ulang file di src/ dari URL aslinya, lalu keluar")
     ap.add_argument("--top", type=int, default=None,
-                    help="jumlah node terbaik di free.yaml (default 100; 0 = semua yang berhasil)")
+                    help="jumlah node di free.yaml - hanya node yang LOLOS URL-test mihomo (default 100; "
+                         "0 = semua yang lolos). Tes berhenti begitu jumlah ini tercapai")
     ap.add_argument("--custom-top", type=int, default=0,
                     help="batas node per file custom-*.yaml (default 0 = semua yang berhasil)")
     ap.add_argument("--sort", choices=("country", "ping"), default="country",
@@ -1648,15 +1859,26 @@ def main():
     ap.add_argument("--no-menu", action="store_true", help="jangan tampilkan menu interaktif")
     ap.add_argument("--timeout", type=float, default=3.0, help="timeout tes TCP, detik")
     ap.add_argument("--concurrency", type=int, default=200, help="koneksi TCP paralel")
-    ap.add_argument("--prefilter", type=int, default=400,
-                    help="free: jumlah node tercepat (TCP) yang lanjut ke URL-test; 0 = semua")
+    ap.add_argument("--prefilter", type=int, default=0,
+                    help="free: batasi jumlah kandidat yang di-URL-test; 0 = semua (default; tes berhenti "
+                         "sendiri saat target --top tercapai)")
     ap.add_argument("--custom-prefilter", type=int, default=0,
                     help="profil custom: jumlah node tercepat yang di-URL-test; 0 = semua (default)")
-    ap.add_argument("--mihomo", help="path binary mihomo (default: cari di PATH)")
-    ap.add_argument("--tcp-only", action="store_true", help="skip URL-test mihomo")
+    ap.add_argument("--mihomo", help="path binary mihomo (default: cari ./bin, PATH, lokasi Box; kalau tidak ada "
+                    "diunduh otomatis ke ./bin)")
+    ap.add_argument("--no-download", action="store_true", help="jangan unduh mihomo otomatis")
+    ap.add_argument("--tcp-only", action="store_true",
+                    help="HANYA tes port TCP (tanpa mihomo). Tidak menjamin node bisa dipakai - jangan dipakai "
+                         "kecuali terpaksa")
     ap.add_argument("--test-url", default=TEST_URL)
+    ap.add_argument("--verify-url", default=VERIFY_URL,
+                    help="URL kedua untuk konfirmasi node yang lolos (default: cp.cloudflare.com)")
+    ap.add_argument("--no-verify", action="store_true", help="lewati konfirmasi ke-2 (lebih cepat, kurang ketat)")
+    ap.add_argument("--max-ping", type=int, default=3000,
+                    help="buang node yang rata-rata delay-nya di atas ini, ms (default 3000; 0 = tanpa batas)")
     ap.add_argument("--test-timeout", type=int, default=5000, help="timeout URL-test, ms")
     ap.add_argument("--workers", type=int, default=50, help="URL-test paralel")
+    ap.add_argument("--batch", type=int, default=200, help="jumlah node per batch URL-test (default 200)")
     g = ap.add_argument_group("custom config (tiap field yang diisi dites TERPISAH -> custom-<field>.yaml)")
     g.add_argument("--sni", help="ganti SNI (servername / sni trojan) - hanya node ber-TLS -> custom-sni.yaml")
     g.add_argument("--host", help="ganti Host header (ws/h2/http/plugin) -> custom-host.yaml")
@@ -1753,6 +1975,20 @@ def main():
     if not any(r["status"] is None for prof in profs for r in prof["recs"]):
         err("Tidak ada node yang terkena custom config (cek --only / jenis node)."); sys.exit(1)
 
+    # --- siapkan core mihomo. TANPA URL-test, "berhasil" cuma berarti port terbuka (bukan berarti bisa dipakai),
+    #     jadi core wajib kecuali --tcp-only dipilih sengaja.
+    core = None
+    if args.tcp_only:
+        warn("--tcp-only: hanya cek port terbuka. Node di hasil BELUM tentu bisa dipakai (SNI/Host/path tidak dites).")
+    else:
+        core = resolve_core(args)
+        if not core:
+            err("Binary mihomo tidak ditemukan dan tidak bisa diunduh otomatis -> tes dihentikan.")
+            log("Solusi: taruh binary di ./bin/mihomo, atau jalankan dengan --mihomo /path/mihomo, atau set HIKARI_MIHOMO.")
+            log("Tes TCP saja (--tcp-only) tidak menjamin node bisa dipakai, jadi tidak dijalankan otomatis.")
+            sys.exit(2)
+        ok(f"Core: {rel(core)}  {C.DIM}({core_version(core)}){C.RESET}")
+
     # --- tahap 1: TCP (target unik: server+port), dipakai bersama oleh semua profil
     targets = {}
     for prof in profs:
@@ -1766,7 +2002,15 @@ def main():
             lv.fail("semua target timeout - cek koneksi internet kamu")
             sys.exit(1)
         lv.done(f"{len(tcp)}/{len(targets)} merespon")
-    jobs, jmap, base = {}, {}, {}
+    method, note = "TCP", ""
+    tcp_fake = bool(core) and tcp_intercepted(list(tcp.values()))
+    if tcp_fake:
+        note = "ping TCP dicegat proxy/VPN lokal -> tahap TCP dilewati, semua node langsung di-URL-test"
+        warn("Hampir semua ping TCP <=3ms: koneksi dicegat proxy/VPN lokal (Box / Nikki / VPN aktif?). "
+             "Hasil TCP diabaikan; sebaiknya matikan Box/VPN saat menjalankan sub2yaml agar tes mihomo akurat.")
+
+    rnd = random.Random()
+    queues, jobs, jmap, base = {}, {}, {}, {}
     for prof in profs:
         pf = args.prefilter if prof["key"] == "free" else args.custom_prefilter
         alive = []
@@ -1774,55 +2018,88 @@ def main():
             if r["status"] is not None:
                 continue
             ms = tcp.get((r["proxy"]["server"], r["proxy"]["port"]))
-            if ms is None:
+            if ms is None and not tcp_fake:
                 r.update(status="fail", reason="tcp_dead")
-            else:
-                r["tcp"] = ms
-                alive.append(i)
-        alive.sort(key=lambda i: prof["recs"][i]["tcp"])
+                continue
+            r["tcp"] = ms
+            alive.append(i)
+        if tcp_fake:
+            rnd.shuffle(alive)  # urutan TCP palsu tidak berarti; acak supaya batch tidak bias
+        else:
+            alive.sort(key=lambda i: prof["recs"][i]["tcp"])
         cand = alive[:pf] if pf else alive
         for i in alive[len(cand):]:
-            prof["recs"][i].update(status="fail", reason="not_tested", detail=f"TCP {prof['recs'][i]['tcp']}ms")
+            prof["recs"][i].update(status="fail", reason="not_tested", detail="di luar batas --prefilter")
+        q = deque()
         for i in cand:
             gid = len(jobs)
             jobs[gid], jmap[gid], base[gid] = prof["recs"][i]["proxy"], (prof, i), i
+            q.append(gid)
+        queues[prof["key"]] = q
 
-    # --- tahap 2: satu kali URL-test mihomo untuk semua profil sekaligus
-    method, note, done_real = "TCP", "", False
-    core = None if args.tcp_only else (args.mihomo or find_core())
-    if core and jobs:
-        with Live(f"URL test {len(jobs)} kombinasi node/profil lewat mihomo") as lv:
-            try:
-                ok_, fails, rej = mihomo_delays(core, jobs, args.test_url, args.test_timeout,
-                                                args.workers, base, lv)
-                done_real = True
-                lv.done(f"{len(ok_)} lolos" + (f", {len(rej)} ditolak mihomo" if rej else ""))
-            except Exception as e:
-                note = f"URL-test mihomo gagal: {e}"
-                lv.fail(f"{str(e)[:100]}  -> pakai hasil TCP saja")
-    elif not core:
-        note = "binary mihomo tidak ditemukan / --tcp-only"
-        warn("Binary mihomo tidak ditemukan -> hanya ping TCP. Untuk hasil yang lebih akurat "
-             "pakai --mihomo /path/mihomo")
-    if done_real:
-        method = "URL-test"
-        if not ok_:
-            warn("Tidak ada satu pun node lolos URL-test (cek koneksi / --test-url).")
-        for gid, (prof, i) in jmap.items():
-            r = prof["recs"][i]
-            if gid in ok_:
-                r.update(status="ok", ms=ok_[gid])
-            elif gid in rej:
-                r.update(status="fail", reason="rejected", detail=rej[gid])
-            else:
-                r.update(status="fail", reason="urltest", detail=fails.get(gid, ""))
+    # --- tahap 2: URL-test mihomo per batch. Berhenti begitu tiap profil punya cukup node yang LOLOS
+    #     (free = --top, custom = --custom-top; 0 = uji semuanya).
+    done_real = False
+    if core:
+        method = "URL-test mihomo" + ("" if args.no_verify else " (2 kali, URL berbeda)")
+        verify_url = None if args.no_verify else args.verify_url
+        want = {p["key"]: ((top if p["key"] == "free" else args.custom_top) or None) for p in profs}
+        okc = {p["key"]: 0 for p in profs}
+        total, cnt = len(jobs), [0, 0]  # [selesai diuji, lolos]
+
+        def tick(good):
+            cnt[0] += 1
+            cnt[1] += 1 if good else 0
+            lv.set(msg=f"URL test mihomo  {cnt[1]} lolos", done=cnt[0])
+
+        with Live("URL test mihomo", total=total) as lv:
+            while True:
+                chunk, ck = {}, {}
+                for prof in profs:
+                    k, q = prof["key"], queues[prof["key"]]
+                    if q and (want[k] is None or okc[k] < want[k]):
+                        for _ in range(min(args.batch, len(q))):
+                            gid = q.popleft()
+                            chunk[gid], ck[gid] = jobs[gid], base[gid]
+                if not chunk:
+                    break
+                try:
+                    ok_, fails, rej = mihomo_delays(core, chunk, args.test_url, args.test_timeout, args.workers,
+                                                    ck, None, verify_url, args.max_ping, tick)
+                except Exception as e:
+                    if not cnt[1]:
+                        lv.fail(str(e)[:120])
+                        err("URL-test mihomo gagal -> tes dihentikan (tidak jatuh ke TCP-only karena hasilnya menyesatkan).")
+                        sys.exit(2)
+                    note = (note + "; " if note else "") + f"URL-test berhenti di tengah jalan: {str(e)[:80]}"
+                    break
+                cnt[0] += len(rej)  # node yang ditolak validator mihomo tidak melewati tick()
+                for gid in chunk:
+                    prof, i = jmap[gid]
+                    r = prof["recs"][i]
+                    if gid in ok_:
+                        r.update(status="ok", ms=ok_[gid])
+                        okc[prof["key"]] += 1
+                    elif gid in rej:
+                        r.update(status="fail", reason="rejected", detail=rej[gid])
+                    else:
+                        kind, msg = fails.get(gid, ("urltest", ""))
+                        r.update(status="fail", reason=kind, detail=msg)
+            lv.set(msg="URL test mihomo")
+            lv.done(f"{cnt[1]} lolos dari {cnt[0]} node yang diuji")
+        done_real = True
+        for prof in profs:  # sisa antrean = target jumlah sudah tercapai
+            for gid in queues[prof["key"]]:
+                p2, i = jmap[gid]
+                p2["recs"][i].update(status="fail", reason="not_tested",
+                                     detail=f"target {want[prof['key']]} node sudah tercapai")
+        if not cnt[1]:
+            warn("Tidak ada satu pun node lolos URL-test. Cek internet; matikan Box/VPN/proxy lain yang aktif; "
+                 "atau naikkan --test-timeout.")
     else:
         for gid, (prof, i) in jmap.items():
             prof["recs"][i].update(status="ok", ms=prof["recs"][i]["tcp"])
-        if len(profs) > 1 and any(ov[k] for k in ("sni", "host", "path", "alpn", "fp")):
-            note = (note + "; " if note else "") + \
-                "TCP tidak memvalidasi SNI/Host/path - 'berhasil' hanya berarti port terbuka"
-            warn(note)
+        note = (note + "; " if note else "") + "TCP-only: 'berhasil' hanya berarti port terbuka, BUKAN jaminan node bisa dipakai"
 
     # --- pilih, urutkan, tulis file per profil
     outdir = args.outdir
@@ -1846,7 +2123,7 @@ def main():
                 summary = ", ".join(f"{flag(cc)}{cc if cc != 'XX' else '?'} {n}"
                                     for cc, n in sorted(counts.items(), key=lambda t: (t[0] == "XX", t[0])))
                 header = (f"# Dibuat oleh sub2yaml.py - {stamp}\n"
-                          f"# Profil: {prof['title']} | {len(out)} node berhasil (tes: {method}, urut: {args.sort})\n"
+                          f"# Profil: {prof['title']} | {len(out)} node lolos (tes: {method}, urut: {args.sort})\n"
                           f"# Custom config: {ov_describe(prof['ov']) if prof['ov'] else '(tidak ada)'}\n"
                           f"# Negara: {summary}\n")
                 path = os.path.join(outdir, prof["file"])
@@ -1885,8 +2162,9 @@ def main():
     if report_path:
         info(f"Laporan lengkap (semua node, semua profil) ➜ {rel(report_path)}")
     free = profs[0]
-    if free["written"] and len(free["chosen"]) < 50 and top:
-        warn("Node free yang lolos kurang dari 50; coba jalankan lagi nanti / naikkan --timeout.")
+    if free["written"] and top and len(free["chosen"]) < top:
+        warn(f"Hanya {len(free['chosen'])} node yang lolos dari target {top}. Sumber sudah habis diuji; "
+             "tambah sumber (menu [3]), update source (menu [8]), atau coba lagi nanti.")
     if free["written"] and not os.environ.get("HIKARI_PARENT"):  # dari Hikari, langkah impornya muncul otomatis
         info("Pasang ke Hikari /.CLASH: menu 1 ➜ 4 (Free node), atau salin free.yaml ke folder proxy platform.")
     print()
