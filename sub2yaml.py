@@ -2115,7 +2115,7 @@ def main():
         verify_url = None if args.no_verify else args.verify_url
         want = {p["key"]: ((top if p["key"] == "free" else args.custom_top) or None) for p in profs}
         okc = {p["key"]: 0 for p in profs}
-        total, cnt = len(jobs), [0, 0]  # [selesai diuji, lolos]
+        total, cnt, bad_chunks = len(jobs), [0, 0], 0  # cnt = [selesai diuji, lolos]
 
         def tick(good):
             cnt[0] += 1
@@ -2133,16 +2133,23 @@ def main():
                             chunk[gid], ck[gid] = jobs[gid], base[gid]
                 if not chunk:
                     break
-                try:
-                    ok_, fails, rej = mihomo_delays(core, chunk, args.test_url, args.test_timeout, args.workers,
-                                                    ck, None, verify_url, args.max_ping, tick)
-                except Exception as e:
-                    if not cnt[1]:
-                        lv.fail(str(e)[:120])
-                        err("URL-test mihomo gagal -> tes dihentikan (tidak jatuh ke TCP-only karena hasilnya menyesatkan).")
+                ok_, fails, rej, last_err = None, {}, {}, None
+                for _try in range(2):  # satu batch gagal (mihomo mati/timeout) -> ulangi sekali, jangan hentikan semua
+                    try:
+                        ok_, fails, rej = mihomo_delays(core, chunk, args.test_url, args.test_timeout, args.workers,
+                                                        ck, None, verify_url, args.max_ping, tick)
+                        break
+                    except Exception as e:
+                        last_err = e
+                if ok_ is None:
+                    bad_chunks += 1
+                    if not cnt[1] and bad_chunks >= 3:
+                        lv.fail(str(last_err)[:120])
+                        err("URL-test mihomo gagal berulang -> tes dihentikan (tidak jatuh ke TCP-only karena hasilnya menyesatkan).")
                         sys.exit(2)
-                    note = (note + "; " if note else "") + f"URL-test berhenti di tengah jalan: {str(e)[:80]}"
-                    break
+                    note = (note + "; " if note else "") + f"1 batch dilewati karena mihomo error: {str(last_err)[:80]}"
+                    ok_, fails, rej = {}, {g: ("urltest", f"mihomo error: {str(last_err)[:60]}") for g in chunk}, {}
+                    cnt[0] += len(chunk)
                 cnt[0] += len(rej)  # node yang ditolak validator mihomo tidak melewati tick()
                 for gid in chunk:
                     prof, i = jmap[gid]
@@ -2161,8 +2168,9 @@ def main():
         for prof in profs:  # sisa antrean = target jumlah sudah tercapai
             for gid in queues[prof["key"]]:
                 p2, i = jmap[gid]
-                p2["recs"][i].update(status="fail", reason="not_tested",
-                                     detail=f"target {want[prof['key']]} node sudah tercapai")
+                p2["recs"][i].update(status="fail", reason="not_tested", detail=(
+                    f"target {want[prof['key']]} node sudah tercapai" if want[prof["key"]] and okc[prof["key"]] >= want[prof["key"]]
+                    else "tes terhenti sebelum sempat diuji"))
         if not cnt[1]:
             warn("Tidak ada satu pun node lolos URL-test. Cek internet; matikan Box/VPN/proxy lain yang aktif; "
                  "atau naikkan --test-timeout.")
@@ -2233,8 +2241,11 @@ def main():
         info(f"Laporan lengkap (semua node, semua profil) ➜ {rel(report_path)}")
     free = profs[0]
     if free["written"] and top and len(free["chosen"]) < top:
-        warn(f"Hanya {len(free['chosen'])} node yang lolos dari target {top}. Sumber sudah habis diuji; "
-             "tambah sumber (menu [3]), update source (menu [8]), atau coba lagi nanti.")
+        left = sum(1 for r in free["recs"] if r["reason"] == "not_tested")
+        warn(f"Hanya {len(free['chosen'])} node yang lolos dari target {top}. "
+             + (f"{left} node belum sempat diuji (lihat 'Metode tes' di report.txt untuk alasannya); jalankan ulang. "
+                if left else "Sumber sudah habis diuji; ")
+             + "Tambah sumber (menu [3]), update source (menu [8]), atau coba lagi nanti.")
     if free["written"] and not os.environ.get("HIKARI_PARENT"):  # dari Hikari, langkah impornya muncul otomatis
         info("Pasang ke Hikari /.CLASH: menu 1 ➜ 4 (Free node), atau salin free.yaml ke folder proxy platform.")
     print()
