@@ -46,6 +46,20 @@ class Parsing(unittest.TestCase):
         for text in (raw, b64(raw)):
             self.assertEqual(len(s.extract_links(text)), 1)
 
+    def test_extract_links_openproxylist_format(self):
+        raw = ("V2Ray Proxy list updated at 2026-11-20 16:00:01 GMT+7\nWebsite=https://openproxylist.com\n"
+               "https://buymeacoffee.com/roosterkid\n\nFromat: CountryFlag CONFIG ResponseTime CountryCode [ISP]\n"
+               f"🇩🇪 vless://{UUID}@88.216.74.37:443?security=tls&amp;sni=a.com#X 85ms DE [ISP]\n"
+               "🇫🇷 ss://" + b64("aes-128-gcm:pw") + "@1.2.3.4:8388#Y\n"
+               "vmess://abc#plain-line with spaces\n")
+        links = s.extract_links(raw)
+        self.assertEqual(len(links), 3)
+        self.assertIn("&sni=a.com", links[0])
+        nodes, st, _ = s.parse_all(links[:2])
+        self.assertEqual(len(nodes), 2)
+        self.assertEqual([s.detect_country(n["name"], n["server"]) for n in nodes], ["DE", "FR"])
+        self.assertEqual(links[2], "vmess://abc#plain-line with spaces")   # format lama tetap utuh (spasi di remark)
+
     def test_validate_rejects_bad_uuid_and_reality(self):
         good = {"name": "a", "type": "vless", "server": "1.2.3.4", "port": 443, "uuid": UUID}
         self.assertIsNone(s.validate_proxy(good))

@@ -84,6 +84,8 @@ SOURCES = [
      "https://raw.githubusercontent.com/barry-far/V2ray-config/main/All_Configs_base64_Sub.txt"),
     ("0xRadikal.txt", "0xRadikal/Free-v2ray-Configs (verified)",
      "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/verified/configs_base64.txt"),
+    ("roosterkid.txt", "roosterkid/openproxylist (V2RAY, teks biasa)",
+     "https://raw.githubusercontent.com/roosterkid/openproxylist/refs/heads/main/V2RAY.txt"),
 ]
 TEST_URL = "https://www.gstatic.com/generate_204"
 VERIFY_URL = "https://cp.cloudflare.com/generate_204"   # URL kedua untuk konfirmasi node yang lolos
@@ -334,6 +336,11 @@ def b64decode_loose(s):
     return base64.b64decode(s, validate=True)
 
 
+_LINK_START = re.compile(r"[A-Za-z][A-Za-z0-9+.\-]*://")
+_LINK_ANY = re.compile(r"(?<![A-Za-z0-9])(?!https?://)[A-Za-z][A-Za-z0-9+.\-]*://\S+")
+_FLAG_PREFIX = re.compile("[\U0001F1E6-\U0001F1FF]{2}")
+
+
 def extract_links(text):
     t = text.strip()
     if "://" not in t:  # base64 tidak pernah mengandung "://"
@@ -343,9 +350,22 @@ def extract_links(text):
             pass
     out = []
     for ln in t.splitlines():
-        ln = ln.strip()
-        if "://" in ln and not ln.startswith("#"):  # baris "#support-url: https://..." = metadata, bukan node
-            out.append(ln)
+        ln = ln.strip().replace("&amp;", "&")  # sebagian sumber menulis query dengan entitas HTML
+        if "://" not in ln or ln.startswith("#"):  # "#support-url: https://..." = metadata, bukan node
+            continue
+        if _LINK_START.match(ln):
+            if not ln.lower().startswith(("http://", "https://")):  # URL biasa (donasi, website) bukan node
+                out.append(ln)
+            continue
+        # Format "🇩🇪 vless://... 85ms DE [ISP]" (mis. openproxylist): bendera di depan, keterangan di belakang.
+        m = _LINK_ANY.search(ln)
+        if not m:
+            continue  # "Website=https://..." dan sejenisnya
+        link = m.group()
+        flag_ = _FLAG_PREFIX.search(ln[:m.start()])
+        if flag_ and not _FLAG_PREFIX.search(link.partition("#")[2]):
+            link = link.partition("#")[0] + "#" + flag_.group() + " " + link.partition("#")[2]  # bendera -> remark
+        out.append(link)
     return out
 
 

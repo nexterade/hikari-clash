@@ -149,7 +149,7 @@ hikari-clash/
 ├── banner.py                    # Banner Hikari /.CLASH
 ├── mrs_codec.py                 # Codec rule-set .mrs ⇄ .yaml/.txt   (menu 5)
 ├── sub2yaml.py                  # Subscription (base64) ➜ YAML Clash, dites & diurut; hasilnya diimpor ke 🛹 Free node (menu 1 → 4)
-├── src/                         # Sumber subscription untuk sub2yaml: barry-far.txt, 0xRadikal.txt (update lewat menu [8] sub2yaml)
+├── src/                         # Sumber subscription untuk sub2yaml: barry-far.txt, 0xRadikal.txt, roosterkid.txt (update lewat menu [8] sub2yaml)
 ├── bin/                         # (otomatis, tidak di-commit) core mihomo hasil unduh sub2yaml; di /sdcard dipasang di ~/.hikari-clash/bin
 ├── nodetest.py                  # Tester node proxy                  (menu 5)
 ├── routetest.py                 # Tester route domain/IP             (menu 5)
@@ -250,7 +250,7 @@ Bisa juga dijalankan sendiri: `python3 sub2yaml.py` (menu interaktif) atau lewat
 [Enter] Mulai    [0] Keluar
 ```
 
-- **Source**: pertama kali jalan, node diambil dari file `.txt` di `src/` (`barry-far.txt`, `0xRadikal.txt`; kalau `src/` kosong akan diunduh otomatis). Perbarui kapan saja lewat menu `[8]` atau `python3 sub2yaml.py --update-source`. File lama baru diganti kalau unduhan valid. File `.txt` lain yang kamu taruh di `src/` ikut muncul di menu `[1]`.
+- **Source**: pertama kali jalan, node diambil dari file `.txt` di `src/` (`barry-far.txt`, `0xRadikal.txt`, `roosterkid.txt`; kalau `src/` kosong akan diunduh otomatis). Perbarui kapan saja lewat menu `[8]` atau `python3 sub2yaml.py --update-source`. File lama baru diganti kalau unduhan valid. Format yang dikenali: base64, daftar link polos, dan teks berhiasan seperti openproxylist (`🇩🇪 vless://… 85ms DE [ISP]` — bendera di depan dipakai untuk deteksi negara, keterangan di belakang dan baris website/donasi diabaikan, `&amp;` dinormalkan). File `.txt` lain yang kamu taruh di `src/` ikut muncul di menu `[1]`.
 - **Output**: `hasil/proxy/` (`free.yaml`, `custom-*.yaml` bila Edit config diisi, `report.txt`). Path relatif selalu relatif ke folder script, bukan folder tempat kamu menjalankan.
 - **Format YAML**: block style persis seperti `active.yaml` (tanpa `{}`/`[]` inline); nilai berisiko (angka-like, `true`/`null`, karakter khusus) otomatis diberi tanda kutip, dan keluaran dicek round-trip lewat PyYAML.
 - **Validasi offline**: node yang pasti ditolak mihomo dibuang sebelum dites dan dicatat di `report.txt` (UUID bukan format UUID, reality `public-key`/`short-id` rusak, reality di network selain tcp/grpc/h2, `flow` di luar tcp, SNI/server mengandung spasi atau karakter terlarang). Ini berlaku juga di mode TCP-only.
