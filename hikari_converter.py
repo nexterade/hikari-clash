@@ -38,8 +38,8 @@ RULESET_SOURCE = os.path.join(SCRIPT_DIR, "ruleset")
 SUBSCRIPTION_SOURCE = os.path.join(SCRIPT_DIR, "subscription.yaml")   # node gratis (v1.0): dipakai sebagai cache awal subs.yaml
 SEED_FILES = {"subs.yaml": SUBSCRIPTION_SOURCE}                      # file provider yang disemai dari repo saat generate
 FREE_NODE_FILE = "free.yaml"                                         # provider "📖 Free node" (group 🛹 Free node) — diisi sub2yaml
-SUB2YAML_SCRIPT = os.path.join(SCRIPT_DIR, "sub2yaml.py")            # opsional; kalau ada, bisa dijalankan dari menu
-SUB2YAML_ARGS = ["--output", "{out}"]                                # TODO: sesuaikan dengan CLI sub2yaml.py yang sebenarnya
+SUB2YAML_SCRIPT = os.path.join(SCRIPT_DIR, "sub2yaml.py")            # dijalankan interaktif dari menu 1 → 4
+SUB2YAML_OUT_DIR = os.path.join(BASE_DIR, "proxy")                   # keluaran sub2yaml: hasil/proxy/free.yaml (+ custom-*.yaml, report.txt)
 USER_NODE_FILES = ("active.yaml", "trial.yaml")                      # file node milik pengguna; free.yaml/subs.yaml bukan sumber regenerate
 TEMPLATE_DIR = os.path.join(SCRIPT_DIR, "template")
 TEMPLATE_PATH = os.path.join(TEMPLATE_DIR, "template.yaml")  # working copy (boleh diedit lewat menu)
@@ -2667,20 +2667,33 @@ def import_free_nodes(source_path, platforms=None, write_mode="replace", base_di
     return results
 
 
-def run_sub2yaml(out_path, script=None, timeout=300):
-    """Jalankan sub2yaml.py (kalau ada) supaya menulis ke out_path. Return (ok, pesan)."""
+def sub2yaml_free_path(out_dir=None):
+    return os.path.join(out_dir or SUB2YAML_OUT_DIR, FREE_NODE_FILE)
+
+
+def run_sub2yaml(script=None, out_dir=None):
+    """Jalankan sub2yaml.py secara interaktif (menu & spinner-nya tampil langsung di terminal ini).
+    Return (ok, pesan). ok=True hanya kalau <out_dir>/free.yaml baru dibuat/diperbarui oleh proses tadi."""
     script = script or SUB2YAML_SCRIPT
+    out_dir = out_dir or SUB2YAML_OUT_DIR
     if not os.path.isfile(script):
         return False, f"sub2yaml.py tidak ditemukan di {script}"
-    cmd = [sys.executable, script] + [a.format(out=out_path) for a in SUB2YAML_ARGS]
+    target = sub2yaml_free_path(out_dir)
+    before = os.path.getmtime(target) if os.path.isfile(target) else None
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    except (OSError, subprocess.TimeoutExpired) as e:
+        proc = subprocess.Popen([sys.executable, script, "-o", out_dir], env=dict(os.environ, HIKARI_PARENT="1"))
+    except OSError as e:
         return False, f"gagal menjalankan sub2yaml: {e}"
-    if r.returncode != 0:
-        return False, (r.stderr or r.stdout or f"kode keluar {r.returncode}").strip()[-300:]
-    if not os.path.isfile(out_path):
-        return False, "sub2yaml selesai tetapi file keluaran tidak dibuat (cek SUB2YAML_ARGS)"
+    while True:                      # Ctrl+C ditangani sub2yaml sendiri; Hikari tidak ikut berhenti
+        try:
+            code = proc.wait()
+            break
+        except KeyboardInterrupt:
+            continue
+    if code != 0:
+        return False, f"sub2yaml berhenti dengan kode {code} (tidak ada node yang berhasil?)"
+    if not os.path.isfile(target) or (before is not None and os.path.getmtime(target) <= before):
+        return False, "free.yaml tidak dibuat/diperbarui (sub2yaml dibatalkan, atau folder output diubah di menu [5])"
     return True, "ok"
 
 
@@ -2689,17 +2702,18 @@ def feature_import_free_nodes():
     print(f"  {C.DIM}Isi proxy/free.yaml dari keluaran sub2yaml (YAML Clash `proxies:`). Node divalidasi dan dijaga unik.{C.RESET}\n")
     src = None
     if os.path.isfile(SUB2YAML_SCRIPT):
-        print(f"  {C.CYAN}[1]{C.RESET} Jalankan sub2yaml.py sekarang\n  {C.CYAN}[2]{C.RESET} Pilih / ketik path file YAML")
+        print(f"  {C.CYAN}[1]{C.RESET} Jalankan sub2yaml.py sekarang {C.DIM}(ambil node dari src/*.txt, tes, simpan ke hasil/proxy/free.yaml){C.RESET}")
+        print(f"  {C.CYAN}[2]{C.RESET} Pilih / ketik path file YAML {C.DIM}(mis. hasil/proxy/free.yaml dari proses sebelumnya){C.RESET}")
         if ask(f"{C.YELLOW}Pilih (1/2) ❯{C.RESET} ").strip() == "1":
-            tmp = os.path.join(BASE_DIR, "sub2yaml_out.yaml")
-            os.makedirs(BASE_DIR, exist_ok=True)
-            spinner("Menjalankan sub2yaml", 0.5)
-            good, msg = run_sub2yaml(tmp)
+            good, msg = run_sub2yaml()
+            print()
             if not good:
                 err(msg); pause(); return
-            src = tmp
+            src = sub2yaml_free_path()
+            ok(f"Keluaran sub2yaml: {os.path.relpath(src, SCRIPT_DIR)}")
     if src is None:
         cands = [("subscription.yaml (repo)", SUBSCRIPTION_SOURCE)] if os.path.isfile(SUBSCRIPTION_SOURCE) else []
+        cands += [(os.path.relpath(f, SCRIPT_DIR), f) for f in sorted(glob.glob(os.path.join(SUB2YAML_OUT_DIR, "*.y*ml")))]
         cands += [(os.path.relpath(f, SCRIPT_DIR), f) for f in sorted(glob.glob(os.path.join(BASE_DIR, "*.y*ml")))]
         src = _pick_file(cands, "Pilih nomor, atau ketik path file")
         if not src:

@@ -147,7 +147,8 @@ hikari-clash/
 ├── hikari_converter.py          # Script utama (menu & generator)
 ├── banner.py                    # Banner Hikari /.CLASH
 ├── mrs_codec.py                 # Codec rule-set .mrs ⇄ .yaml/.txt   (menu 5)
-├── sub2yaml.py                  # (opsional, akan ditambahkan) subscription ➜ YAML Clash; hasilnya diimpor ke 🛹 Free node (menu 1 → 4)
+├── sub2yaml.py                  # Subscription (base64) ➜ YAML Clash, dites & diurut; hasilnya diimpor ke 🛹 Free node (menu 1 → 4)
+├── src/                         # Sumber subscription untuk sub2yaml: barry-far.txt, 0xRadikal.txt (update lewat menu [8] sub2yaml)
 ├── nodetest.py                  # Tester node proxy                  (menu 5)
 ├── routetest.py                 # Tester route domain/IP             (menu 5)
 ├── template/
@@ -223,13 +224,33 @@ Menu `1 → 3`. Kamu mengubah template, DNS, profil ISP, emoji, atau secret dan 
 
 Menu `1 → 4`. Mengisi `proxy/free.yaml` — provider `📖 Free node` yang dipakai group **🛹 Free node** — dari keluaran `sub2yaml`.
 
-1. **Sumber**: jalankan `sub2yaml.py` langsung (muncul kalau file itu ada di samping `hikari_converter.py`), atau pilih/ketik path file YAML hasilnya. `subscription.yaml` repo juga bisa dipilih sebagai contoh.
+1. **Sumber**: pilih `[1]` untuk menjalankan `sub2yaml.py` langsung (menu & tampilannya sama dengan Hikari), atau `[2]` untuk memilih/mengetik path file YAML hasilnya (mis. `hasil/proxy/free.yaml`). `subscription.yaml` repo juga bisa dipilih sebagai contoh.
 2. **Platform**: `B` Box · `N` Nikki · `O` OpenClash · `A` semua (default). Nama folder mengikuti platform: `proxy/` untuk Box & Nikki, `proxy_provider/` untuk OpenClash.
 3. **Mode**: **Ganti** isi `free.yaml` (yang lama dibackup `.bak`) atau **Tambahkan**.
 4. Node divalidasi: wajib punya `name`, `type`, `server`, `port` (yang tidak lengkap dibuang dan dilaporkan); nama yang bentrok dengan group template atau node di `active.yaml`/`trial.yaml` otomatis jadi `Nama (2)`. Emoji acak **tidak** ditambahkan (nama dari sub2yaml dipakai apa adanya).
 5. `config.yaml` tidak perlu di-generate ulang. Restart core (atau update provider dari dashboard) supaya node baru terbaca. Generate/Regenerate berikutnya tidak menimpa `free.yaml`.
 
-**Kontrak dengan sub2yaml:** keluarannya YAML Clash `proxies: [...]` (format sama dengan `subscription.yaml`). Kalau CLI `sub2yaml.py` butuh argumen lain, ubah `SUB2YAML_ARGS` di `hikari_converter.py` (default: `--output <file>`).
+#### sub2yaml.py
+
+Bisa juga dijalankan sendiri: `python3 sub2yaml.py` (menu interaktif) atau lewat argumen (lihat `--help`).
+
+```text
+[1] Pilih source (file)                  ← pilih file di src/ (boleh gabungan)
+[2] URL custom (base64)
+[3] Tambah URL (gabungkan beberapa sumber)
+[4] Ubah jumlah node free.yaml (0 = semua yang berhasil)
+[5] Ubah folder output
+[6] Ganti urutan (negara / ping)
+[7] Edit config (SNI / Host / Address / dll)
+[8] Update source                        ← unduh ulang src/*.txt dari URL aslinya
+[Enter] Mulai    [0] Keluar
+```
+
+- **Source**: pertama kali jalan, node diambil dari file `.txt` di `src/` (`barry-far.txt`, `0xRadikal.txt`; kalau `src/` kosong akan diunduh otomatis). Perbarui kapan saja lewat menu `[8]` atau `python3 sub2yaml.py --update-source`. File lama baru diganti kalau unduhan valid. File `.txt` lain yang kamu taruh di `src/` ikut muncul di menu `[1]`.
+- **Output**: `hasil/proxy/` (`free.yaml`, `custom-*.yaml` bila Edit config diisi, `report.txt`). Path relatif selalu relatif ke folder script, bukan folder tempat kamu menjalankan.
+- **Format YAML**: block style persis seperti `active.yaml` (tanpa `{}`/`[]` inline); nilai berisiko (angka-like, `true`/`null`, karakter khusus) otomatis diberi tanda kutip, dan keluaran dicek round-trip lewat PyYAML.
+- **Validasi offline**: node yang pasti ditolak mihomo dibuang sebelum dites dan dicatat di `report.txt` (UUID bukan format UUID, reality `public-key`/`short-id` rusak, reality di network selain tcp/grpc/h2, `flow` di luar tcp, SNI/server mengandung spasi atau karakter terlarang). Ini berlaku juga di mode TCP-only.
+- **Tes**: tanpa binary `mihomo` hanya tes TCP (port terbuka). Dengan `--mihomo /path/mihomo` (atau `mihomo` ada di `PATH`) dilakukan URL-test sungguhan — lebih akurat, dan wajib untuk menilai SNI/Host custom.
 
 ### Convert Clash ➜ URI
 
@@ -426,6 +447,8 @@ mihomo -t -d hasil/full_config_box -f hasil/full_config_box/config.yaml
 | `transport 'xhttp' belum didukung` | Transport belum ada di parser | Pakai node dengan ws/grpc/tcp, atau tambahkan manual di YAML |
 | Provider kosong bikin error di core tertentu | `trial.yaml` / `free.yaml` berisi `proxies: []` | Isi minimal 1 node |
 | `🛹 Free node` kosong | `free.yaml` belum diisi sub2yaml (default `proxies: []`) | `1 → 4`, lalu restart core |
+| `free.yaml` dari sub2yaml ditolak core (field/karakter tidak dikenali) | Versi lama memakai `{}` inline dan tidak membuang node dengan UUID/reality rusak saat TCP-only | Pakai `sub2yaml.py` versi ini (block style + validasi offline), jalankan ulang lalu impor `1 → 4` |
+| `src/` kosong / source basi | File `.txt` belum diunduh atau sudah lama | Menu `[8]` di sub2yaml, atau `python3 sub2yaml.py --update-source` (butuh internet) |
 | `🥪 Subscription` kosong / provider gagal download | `subs.yaml` di-download lewat 🛸 AUTO MODE (butuh node di Active/Trial yang hidup) atau GitHub raw terblokir | Pakai cache awal dari `subscription.yaml`, atau Mode Offline |
 
 ---

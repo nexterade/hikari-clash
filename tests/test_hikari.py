@@ -831,11 +831,16 @@ class FreeNodeSub2yaml(unittest.TestCase):
 
     def test_run_sub2yaml(self):
         script = os.path.join(self.d, "sub2yaml.py")
-        open(script, "w").write("import sys\nopen(sys.argv[sys.argv.index('--output')+1],'w').write('proxies: []\\n')\n")
-        ok_, msg = h.run_sub2yaml(self.src, script=script)
-        self.assertTrue(ok_, msg); self.assertTrue(os.path.isfile(self.src))
-        ok_, msg = h.run_sub2yaml(self.src, script=os.path.join(self.d, "hilang.py"))
+        out = os.path.join(self.d, "hasil", "proxy")
+        write = ("import sys, os\nd = sys.argv[sys.argv.index('-o')+1]\nos.makedirs(d, exist_ok=True)\n"
+                 "open(os.path.join(d, 'free.yaml'), 'w').write('proxies: []\\n')\n")
+        open(script, "w").write(write)
+        ok_, msg = h.run_sub2yaml(script=script, out_dir=out)
+        self.assertTrue(ok_, msg); self.assertTrue(os.path.isfile(h.sub2yaml_free_path(out)))
+        ok_, msg = h.run_sub2yaml(script=os.path.join(self.d, "hilang.py"), out_dir=out)
         self.assertFalse(ok_)
-        open(script, "w").write("import sys; sys.exit(3)\n")
-        self.assertFalse(h.run_sub2yaml(self.src, script=script)[0])
+        open(script, "w").write("import sys; sys.exit(3)\n")                  # gagal (kode keluar != 0)
+        self.assertFalse(h.run_sub2yaml(script=script, out_dir=out)[0])
+        open(script, "w").write("pass\n")                                     # selesai tapi free.yaml tidak diperbarui
+        self.assertFalse(h.run_sub2yaml(script=script, out_dir=out)[0])
 
