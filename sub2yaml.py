@@ -5,7 +5,9 @@ sub2yaml.py  -  bagian dari Hikari /.CLASH
 Subscription (base64 / plain) -> `proxies:` Clash Mihomo. Tiap node DITES LEWAT MIHOMO (URL-test sungguhan:
 connect lewat node -> gstatic generate_204, lalu dikonfirmasi sekali lagi ke URL berbeda). Hanya node yang
 benar-benar "muncul ping" yang disimpan ke ./hasil/proxy (diurutkan per negara) + laporan (report.txt).
-Jumlah node bebas (--top N): tes berhenti begitu N node lolos. Core mihomo diunduh otomatis ke ./bin bila belum ada.
+Jumlah node bebas (--top N): tes berhenti begitu N node lolos. Core mihomo diunduh otomatis bila belum ada:
+ke ./bin, atau ke ~/.hikari-clash/bin kalau folder script ada di /sdcard (penyimpanan bersama Android tidak
+boleh menjalankan file).
 
 Source (src/):
   Saat pertama kali dijalankan, sumber diambil dari file .txt di folder ./src
@@ -753,14 +755,28 @@ async def tcp_stage(items, timeout, concurrency, live=None):
 # --------------------------------------------------------------------------
 # Tahap 2: URL-test sungguhan lewat binary mihomo
 # --------------------------------------------------------------------------
-def _core_ok(path):
-    """True kalau `path` benar-benar core Mihomo (Meta) yang bisa dijalankan (bukan Clash lama / file rusak)."""
+def _core_check(path):
+    """(True, "") kalau `path` core Mihomo (Meta) yang bisa dijalankan; selain itu (False, alasan sebenarnya)."""
     try:
-        r = subprocess.run([path, "-v"], capture_output=True, text=True, timeout=15)
-    except Exception:
-        return False
-    out = ((r.stdout or "") + (r.stderr or "")).lower()
-    return r.returncode == 0 and ("mihomo" in out or "meta" in out)
+        r = subprocess.run([path, "-v"], capture_output=True, text=True, timeout=30)
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"[:160]
+    out = ((r.stdout or "") + (r.stderr or "")).strip()
+    if r.returncode == 0 and ("mihomo" in out.lower() or "meta" in out.lower()):
+        return True, ""
+    return False, f"kode {r.returncode}: {out[:120] or '(tanpa output)'}"
+
+
+def _core_ok(path):
+    return _core_check(path)[0]
+
+
+# Folder tujuan core hasil unduh, urut prioritas. Folder script bisa di penyimpanan bersama (/sdcard) yang
+# TIDAK boleh mengeksekusi file ("Permission denied"), jadi ada cadangan di home Termux/Linux.
+def core_dirs():
+    home = os.path.join(os.path.expanduser("~"), ".hikari-clash", "bin")
+    shared = SCRIPT_DIR.startswith(("/storage/", "/sdcard", "/mnt/sdcard"))  # penyimpanan bersama Android = noexec
+    return [home, CORE_DIR] if shared else [CORE_DIR, home]
 
 
 def core_version(path):
@@ -774,7 +790,7 @@ def core_version(path):
 def find_core(extra=None):
     """Cari core Mihomo: --mihomo, env HIKARI_MIHOMO, ./bin, folder script, PATH, lokasi umum Box/Termux/OpenClash."""
     cands = [extra, os.environ.get("HIKARI_MIHOMO")]
-    for d in (CORE_DIR, SCRIPT_DIR):
+    for d in core_dirs() + [SCRIPT_DIR]:
         cands += [os.path.join(d, "mihomo"), os.path.join(d, "mihomo.exe")]
     for name in ("mihomo", "clash-meta", "clash.meta", "clash_meta"):
         cands.append(shutil.which(name))
@@ -881,80 +897,86 @@ def _download(url, part, live=None, tries=8):
 
 
 def download_core(dest_dir=None):
-    """Unduh core Mihomo terbaru dari GitHub (MetaCubeX/mihomo) ke ./bin/. Return path atau None."""
-    dest_dir = dest_dir or CORE_DIR
+    """Unduh core Mihomo terbaru dari GitHub (MetaCubeX/mihomo). Coba tiap varian yang cocok dengan perangkat
+    (mis. android-arm64 lalu linux-arm64) dan tiap folder tujuan sampai ada yang BENAR-BENAR bisa dijalankan.
+    Return path atau None; alasan kegagalan ditampilkan apa adanya."""
+    dirs = [dest_dir] if dest_dir else core_dirs()
     temps = core_asset_templates()
     if not temps:
         warn(f"Platform {sys.platform}/{platform.machine()} belum dikenali - unduh mihomo manual "
              "lalu pakai --mihomo /path/mihomo")
         return None
     repo = "https://github.com/MetaCubeX/mihomo/releases"
+    reasons = []
     with Live("Unduh core mihomo") as lv:
-        urls, name = [], None
+        cands = []  # [(url, nama)]
         try:  # jalur utama: API GitHub (daftar aset resmi)
             data, _ = _http_get("https://api.github.com/repos/MetaCubeX/mihomo/releases/latest", 30)
             assets = {a["name"]: a["browser_download_url"] for a in json.loads(data).get("assets", [])}
-            name = pick_asset(list(assets), temps)
-            if name:
-                urls.append(assets[name])
+            for t_ in temps:
+                nm = pick_asset(list(assets), [t_])
+                if nm:
+                    cands.append((assets[nm], nm))
         except Exception:
             pass
-        if not urls:  # cadangan: tag dari redirect /releases/latest, nama aset ditebak dari template
+        if not cands:  # cadangan: tag dari redirect /releases/latest, nama aset ditebak dari template
             try:
                 _, final = _http_get(repo + "/latest", 30)
                 tag = final.rstrip("/").rsplit("/", 1)[-1]
-                for t in temps:
-                    nm = t.replace("{v}", tag)
-                    urls.append(f"{repo}/download/{tag}/{nm}")
-                    name = name or nm
+                cands = [(f"{repo}/download/{tag}/{t_.replace('{v}', tag)}", t_.replace("{v}", tag)) for t_ in temps]
             except Exception as e:
                 lv.fail(f"GitHub tidak terjangkau: {str(e)[:80]}")
                 return None
-        part, got = None, False
-        for u in urls:
-            name = u.rsplit("/", 1)[-1]
-            part = os.path.join(dest_dir, name + ".part")
-            if _download(u, part, lv):
-                got = True
-                break
-        if not got:
-            lv.fail("unduhan gagal setelah beberapa kali mencoba (file sebagian disimpan; jalankan lagi untuk melanjutkan)")
-            return None
-        try:
-            with open(part, "rb") as f:
-                raw = f.read()
-            if name.endswith(".zip"):
-                with zipfile.ZipFile(io.BytesIO(raw)) as z:
-                    member = next(n for n in z.namelist() if n.lower().endswith(".exe"))
-                    raw = z.read(member)
-            else:
-                raw = gzip.decompress(raw)
-            os.makedirs(dest_dir, exist_ok=True)
-            path = os.path.join(dest_dir, "mihomo.exe" if os.name == "nt" else "mihomo")
-            with open(path + ".tmp", "wb") as f:
-                f.write(raw)
-            os.chmod(path + ".tmp", 0o755)
-            os.replace(path + ".tmp", path)
-        except Exception as e:
+        for url, name in cands:
+            part = os.path.join(dirs[0], name + ".part")
+            lv.set(msg=f"Unduh {name}")
+            if not _download(url, part, lv):
+                reasons.append(f"{name}: unduhan gagal (file sebagian disimpan; jalankan lagi untuk melanjutkan)")
+                continue
             try:
-                os.remove(part)  # file korup: buang supaya percobaan berikutnya mengunduh bersih
-            except OSError:
-                pass
-            lv.fail(f"gagal memasang: {str(e)[:80]}  (file dibuang, coba lagi)")
-            return None
-        try:
-            os.remove(part)
-        except OSError:
-            pass
-        if not _core_ok(path):
-            lv.fail("file terunduh tidak bisa dijalankan di perangkat ini")
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-            return None
-        lv.done(f"{name} -> {rel(path)}")
-        return path
+                with open(part, "rb") as f:
+                    raw = f.read()
+                if name.endswith(".zip"):
+                    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                        raw = z.read(next(n for n in z.namelist() if n.lower().endswith(".exe")))
+                else:
+                    raw = gzip.decompress(raw)
+            except Exception as e:
+                try:
+                    os.remove(part)  # korup: buang supaya percobaan berikutnya mengunduh bersih
+                except OSError:
+                    pass
+                reasons.append(f"{name}: file korup ({str(e)[:60]}), dibuang - coba lagi")
+                continue
+            for d in dirs:
+                path = os.path.join(d, "mihomo.exe" if os.name == "nt" else "mihomo")
+                try:
+                    os.makedirs(d, exist_ok=True)
+                    with open(path + ".tmp", "wb") as f:
+                        f.write(raw)
+                    os.chmod(path + ".tmp", 0o755)
+                    os.replace(path + ".tmp", path)
+                except OSError as e:
+                    reasons.append(f"{name} -> {rel(d)}: tidak bisa menulis ({e.strerror or e})")
+                    continue
+                good, why = _core_check(path)
+                if good:
+                    try:
+                        os.remove(part)
+                    except OSError:
+                        pass
+                    lv.set(msg="Unduh core mihomo")
+                    lv.done(f"{name} -> {rel(path)}")
+                    return path
+                reasons.append(f"{name} di {rel(d)}: tidak bisa dijalankan ({why})")
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+        lv.fail("tidak ada varian core yang bisa dijalankan di perangkat ini")
+    for r in reasons:
+        log(r)
+    return None
 
 
 def resolve_core(args):
