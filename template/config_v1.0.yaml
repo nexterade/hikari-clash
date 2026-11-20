@@ -160,21 +160,21 @@ proxy-groups:
   - name: 🧩 Inject
     type: select
     use:
-      - Active
-      - Trial
+      - 🗳️ Active
+      - 📅 Trial
     proxies:
       - 🛸 AUTO MODE
       - 👒 PROXY LIST
       - 🥪 Subscription
+      - 🛹 Free node
       - 🎮 Direct
-      - ✂️ Reject
     icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/12449f73.png
   - name: 🛸 AUTO MODE
     type: url-test
     disable-udp: false
     use:
-      - Active
-      - Trial
+      - 🗳️ Active
+      - 📅 Trial
     url: http://www.gstatic.com/generate_204
     interval: 300
     tolerance: 50
@@ -185,38 +185,38 @@ proxy-groups:
   - name: 👒 PROXY LIST
     type: select
     use:
-      - Active
-      - Trial
+      - 🗳️ Active
+      - 📅 Trial
     icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/6e5ff33e.png
   - name: 🌳 SMART ROUTING
     type: select
     proxies:
       - 🧩 Inject
+      - 🛸 AUTO MODE
       - 🎮 Direct
       - ✂️ Reject
     icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/b980f2d2.png
-  - name: 💤 BLOCKER
+  - name: 💤 AdBlock
     type: select
     proxies:
       - ✂️ Reject
       - 🧩 Inject
       - 🎮 Direct
     icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/c37c9728.png
-  - name: 💕 PLUSPLUS
+  - name: 💕 Plusplus
     type: select
     proxies:
       - ✂️ Reject
       - 🧩 Inject
       - 🎮 Direct
     icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/b3197af9.png
-  - name: 🍪 WIFI
+  - name: 🍪 Wifi
     type: select
     proxies:
       - 🎮 Direct
       - 🧩 Inject
-      - ✂️ Reject
     icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/8bb3db53.png
-  - name: 🪼 GAMING
+  - name: 🪼 Gaming
     type: select
     proxies:
       - 🎮 Direct
@@ -226,11 +226,16 @@ proxy-groups:
   - name: 🥪 Subscription
     type: select
     use:
-      - Subscription
+      - 🍞 Subscription
     icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/573055d6.png
-    
+  - name: 🛹 Free node
+    type: select
+    use:
+      - 📖 Free node
+    icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/573055d6.png
+        
 proxy-providers:
-  Active:
+  🗳️ Active:
     type: file
     path: ./proxy/active.yaml
     health-check:
@@ -240,7 +245,7 @@ proxy-providers:
       lazy: true
       timeout: 5000
       expected-status: 204
-  Trial:
+  📅 Trial:
     type: file
     path: ./proxy/trial.yaml
     health-check:
@@ -250,10 +255,19 @@ proxy-providers:
       lazy: true
       timeout: 5000
       expected-status: 204
-  Subscription:
+  📖 Free node:
+    type: file
+    path: ./proxy/free.yaml
+    health-check:
+      enable: false
+      url: http://www.gstatic.com/generate_204
+      interval: 300
+      lazy: true
+      timeout: 5000
+      expected-status: 204    
+  🍞 Subscription:
     type: http
     url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/subscription.yaml
-    interval: 864000
     proxy: 🛸 AUTO MODE
     path: ./proxy/subs.yaml
     health-check:
@@ -268,12 +282,12 @@ rules:
   - RULE-SET,Direct,DIRECT
   - RULE-SET,DnsHijack,🐬 Hijack
   - RULE-SET,Reject,✂️ Reject
-  - RULE-SET,WifiClients,🍪 WIFI
-  - RULE-SET,Blocker,💤 BLOCKER
-  - RULE-SET,Plusplus,💕 PLUSPLUS
+  - RULE-SET,WifiClients,🍪 Wifi
+  - RULE-SET,Blocker,💤 AdBlock
+  - RULE-SET,Plusplus,💕 Plusplus
   - AND,((NETWORK,UDP),(DST-PORT,3478-3479)),🧩 Inject
   - AND,((NETWORK,UDP),(DST-PORT,19302-19309)),🧩 Inject
-  - RULE-SET,Portgames,🪼 GAMING
+  - RULE-SET,Portgames,🪼 Gaming
   - RULE-SET,Inject,🧩 Inject
   - RULE-SET,SmartMode,🌳 SMART ROUTING
   - MATCH,🧩 Inject
@@ -284,7 +298,7 @@ rule-providers:
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/blocker.mrs
-    interval: 86400
+    interval: 864000
     path: ./ruleset/blocker.mrs
     proxy: 🛸 AUTO MODE
   Plusplus:
@@ -292,7 +306,7 @@ rule-providers:
     behavior: domain
     format: mrs
     url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/plus18.mrs
-    interval: 86400
+    interval: 864000
     path: ./ruleset/plus18.mrs
     proxy: 🛸 AUTO MODE
   FakeIP-Filter:
@@ -300,7 +314,7 @@ rule-providers:
     behavior: domain
     format: yaml
     url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/fakeip-filter.yaml
-    interval: 86400
+    interval: 864000
     path: ./ruleset/fakeip-filter.yaml
     proxy: 🛸 AUTO MODE
   DnsHijack:
@@ -308,7 +322,7 @@ rule-providers:
     behavior: classical
     format: yaml
     url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/dns-hijack.yaml
-    interval: 86400
+    interval: 864000
     path: ./ruleset/dns-hijack.yaml
     proxy: 🛸 AUTO MODE
   Reject:
@@ -316,7 +330,7 @@ rule-providers:
     behavior: classical
     format: yaml
     url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/reject.yaml
-    interval: 86400
+    interval: 864000
     path: ./ruleset/reject.yaml
     proxy: 🛸 AUTO MODE
   Direct:
@@ -324,7 +338,7 @@ rule-providers:
     behavior: classical
     format: yaml
     url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/direct.yaml
-    interval: 86400
+    interval: 864000
     path: ./ruleset/direct.yaml
     proxy: 🛸 AUTO MODE
   SmartMode:
@@ -332,7 +346,7 @@ rule-providers:
     behavior: classical
     format: yaml
     url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/smartmode.yaml
-    interval: 86400
+    interval: 864000
     path: ./ruleset/smartmode.yaml
     proxy: 🛸 AUTO MODE
   Inject:
@@ -340,7 +354,7 @@ rule-providers:
     behavior: classical
     format: yaml
     url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/inject.yaml
-    interval: 86400
+    interval: 864000
     path: ./ruleset/inject.yaml
     proxy: 🛸 AUTO MODE
   WifiClients:
@@ -348,7 +362,7 @@ rule-providers:
     behavior: classical
     format: yaml
     url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/wifi.yaml
-    interval: 86400
+    interval: 864000
     path: ./ruleset/wifi.yaml
     proxy: 🛸 AUTO MODE
   Skip-Sniff:
@@ -356,7 +370,7 @@ rule-providers:
     behavior: domain
     format: yaml
     url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/skip-sniff.yaml
-    interval: 86400
+    interval: 864000
     path: ./ruleset/skip-sniff.yaml
     proxy: 🛸 AUTO MODE
   Force-Sniff:
@@ -364,7 +378,7 @@ rule-providers:
     behavior: domain
     format: yaml
     url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/force-sniff.yaml
-    interval: 86400
+    interval: 864000
     path: ./ruleset/force-sniff.yaml
     proxy: 🛸 AUTO MODE
   Portgames:
@@ -372,6 +386,6 @@ rule-providers:
     behavior: classical
     format: yaml
     url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/port-games.yaml
-    interval: 86400
+    interval: 864000
     path: ./ruleset/port-games.yaml
     proxy: 🛸 AUTO MODE
