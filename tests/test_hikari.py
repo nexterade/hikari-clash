@@ -35,7 +35,8 @@ class Paths(unittest.TestCase):
         self.assertIn("config_v0.8.yaml", masters)          # v0.8 juga tidak ditimpa
         self.assertIn("config_v0.9.yaml", masters)          # v0.9 juga tidak ditimpa
         self.assertIn("config_v1.0.yaml", masters)          # v1.0 tetap utuh
-        self.assertEqual(masters[-1], "config_v1.1.yaml")
+        self.assertIn("config_v1.1.yaml", masters)          # v1.1 tetap utuh
+        self.assertEqual(masters[-1], "config_v1.2.yaml")
         self.assertEqual([f for f in os.listdir(ROOT) if f.startswith("config-template")], [])
 
 
@@ -44,7 +45,8 @@ class Emoji(unittest.TestCase):
         with open(os.path.join(ROOT, "emoji.json"), encoding="utf-8") as f:
             data = json.load(f)                              # harus valid (dulu trailing comma)
         self.assertEqual(data["emojis"], h.DEFAULT_EMOJIS)
-        self.assertEqual(len(h.DEFAULT_EMOJIS), 22)
+        self.assertEqual(len(h.DEFAULT_EMOJIS), 21)
+        self.assertNotIn("🧊", h.DEFAULT_EMOJIS)             # dipakai nama group 🧊 KEYRING (v1.2)
 
     def test_loaded_from_file_without_warning(self):
         cfg = h.load_emoji_cfg()
@@ -182,7 +184,7 @@ class Tools(unittest.TestCase):
         cfg, _ = h.build_config(h.read_text(h.find_template()), "box")
         res = routetest.route(cfg, os.path.join(ROOT, "ruleset"), "chatgpt.com")
         self.assertTrue(res["final"])
-        self.assertIn("🌳 Smart", res["final"]["group"])
+        self.assertIn("🌳 SMART MODE", res["final"]["group"])
 
     def test_node_tester_offline_local(self):
         import socket
@@ -640,6 +642,79 @@ class StunAndLegacy(unittest.TestCase):
         self.assertEqual(r("tcp://a.com:8080"), "G2")
 
 
+class TemplateV12(unittest.TestCase):
+    """Template v1.2: nama group kapital, 📄 FREE NODE & 📑 KEYRING (url-test hidden), ☘️ FREE NODE & 🧊 KEYRING (select)."""
+
+    def setUp(self):
+        import yaml
+        self.path = os.path.join(h.TEMPLATE_DIR, "config_v1.2.yaml")
+        self.text = h.read_text(self.path)
+        self.cfg = yaml.safe_load(self.text)
+
+    def _group(self, name):
+        return next(g for g in self.cfg["proxy-groups"] if g["name"] == name)
+
+    def test_version_marker(self):
+        self.assertEqual(h.template_version(self.path), "1.2")
+
+    def test_builtin_proxies(self):
+        self.assertEqual({p["name"] for p in self.cfg["proxies"]}, {"🎮 DIRECT", "✂️ REJECT", "🐬 HIJACK"})
+
+    def test_group_names(self):
+        self.assertEqual([g["name"] for g in self.cfg["proxy-groups"]],
+                         ["🧩 INJECT", "🗳️ PROXY LIST", "💫 AUTO MODE", "📄 FREE NODE", "📑 KEYRING", "🌳 SMART MODE",
+                          "👾 GAMING", "💤 AdBlock", "💕 Plusplus", "🍪 WIFI MODE", "🧊 KEYRING", "☘️ FREE NODE"])
+
+    def test_hidden_urltest_groups(self):
+        for n, prov in (("📄 FREE NODE", "📄 Free"), ("📑 KEYRING", "📑 Keyring")):
+            g = self._group(n)
+            self.assertEqual((g["type"], g["use"], g.get("hidden")), ("url-test", [prov], True), n)
+            self.assertNotIn("proxies", g)
+
+    def test_select_groups_point_to_hidden_urltest(self):
+        for n, hid, prov in (("☘️ FREE NODE", "📄 FREE NODE", "📄 Free"), ("🧊 KEYRING", "📑 KEYRING", "📑 Keyring")):
+            g = self._group(n)
+            self.assertEqual((g["type"], g["proxies"], g["use"]), ("select", [hid], [prov]), n)
+
+    def test_inject_exposes_free_and_keyring(self):
+        px = self._group("🧩 INJECT")["proxies"]
+        self.assertEqual(px, ["💫 AUTO MODE", "🗳️ PROXY LIST", "☘️ FREE NODE", "🧊 KEYRING", "🎮 DIRECT"])
+
+    def test_rules_reference_existing_targets(self):
+        targets = {g["name"] for g in self.cfg["proxy-groups"]} | {p["name"] for p in self.cfg["proxies"]} | {"DIRECT", "REJECT"}
+        for r in self.cfg["rules"]:
+            self.assertIn(r.rsplit(",", 1)[1], targets, r)
+        self.assertNotIn("HIJACT", self.text.split("\nport:", 1)[1])      # typo v1.2 dikoreksi
+
+    def test_keyring_provider_auto_update(self):
+        p = self.cfg["proxy-providers"]["📑 Keyring"]
+        self.assertEqual((p["type"], p["interval"], p["proxy"]), ("http", 864000, "💫 AUTO MODE"))
+        for rp in self.cfg["rule-providers"].values():
+            self.assertEqual(rp["proxy"], "💫 AUTO MODE")
+
+    def test_dns_and_rule_order_same_as_v11(self):
+        import yaml
+        v11 = yaml.safe_load(h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v1.1.yaml")))
+        self.assertEqual(self.cfg["dns"], v11["dns"])
+        self.assertEqual([r.rsplit(",", 1)[0] for r in self.cfg["rules"]], [r.rsplit(",", 1)[0] for r in v11["rules"]])
+
+    def test_builds_clean_all_platforms(self):
+        for plat in h.PLATFORMS:
+            cfg, _ = h.build_config(self.text, plat)
+            self.assertEqual(h.validate_config(cfg, plat), [], plat)
+
+    def test_wifi_removed_on_openwrt(self):
+        for plat in ("nikki", "openclash"):
+            cfg, _ = h.build_config(self.text, plat)
+            self.assertNotIn("🍪 WIFI MODE", {g["name"] for g in cfg["proxy-groups"]})
+            self.assertFalse([r for r in cfg["rules"] if "WifiClients" in r])
+
+    def test_no_group_name_collides_with_node_emoji(self):
+        used = "".join(g["name"].split(" ")[0] for g in self.cfg["proxy-groups"])
+        for e in h.DEFAULT_EMOJIS:
+            self.assertNotIn(e, used)
+
+
 class TemplateV11(unittest.TestCase):
     """Template v1.1: 🗺️ Public jadi grup (bukan node), provider 📄 Free & 📑 Keyring, nama 🐦 Free dibetulkan."""
 
@@ -819,13 +894,13 @@ class FreeNodeSub2yaml(unittest.TestCase):
 
     def test_invalid_nodes_dropped_and_names_deduped(self):
         bad = {"name": "tanpa-server", "type": "ss", "port": 1}
-        self._write([self._node("A"), self._node("A"), bad, self._node("🧩 Inject")])    # nama bentrok dengan group template
+        self._write([self._node("A"), self._node("A"), bad, self._node("🧩 INJECT")])    # nama bentrok dengan group template
         (plat, n, notes, error), = h.import_free_nodes(self.src, ["box"], base_dir=self.base)
         self.assertIsNone(error)
         names = [x["name"] for x in h.load_provider_nodes(h.free_node_path("box", self.base))]
         self.assertEqual(n, 3)
         self.assertEqual(len(names), len(set(names)))
-        self.assertNotIn("🧩 Inject", names)
+        self.assertNotIn("🧩 INJECT", names)
         self.assertTrue(any("tanpa-server" in x for x in notes))
 
     def test_avoids_names_used_in_active(self):
@@ -934,7 +1009,7 @@ class ValidatorReferences(unittest.TestCase):
 
 
 class MasterTemplatesClean(unittest.TestCase):
-    """Semua template master (v0.3 s/d v1.1) harus lolos validator tanpa ERR untuk ketiga platform."""
+    """Semua template master (v0.3 s/d v1.2) harus lolos validator tanpa ERR untuk ketiga platform."""
 
     def test_all_masters_no_errors(self):
         for path in h.list_master_templates():

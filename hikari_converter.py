@@ -37,7 +37,7 @@ BASE_DIR = os.path.join(SCRIPT_DIR, "hasil")
 RULESET_SOURCE = os.path.join(SCRIPT_DIR, "ruleset")
 SUBSCRIPTION_SOURCE = os.path.join(SCRIPT_DIR, "subscription.yaml")   # node gratis (template v1.0+): dipakai sebagai cache awal subs.yaml
 SEED_FILES = {"subs.yaml": SUBSCRIPTION_SOURCE}                      # file provider yang disemai dari repo saat generate
-FREE_NODE_FILE = "free.yaml"                                         # provider "📄 Free" (group 🐦 Free) — diisi sub2yaml
+FREE_NODE_FILE = "free.yaml"                                         # provider "📄 Free" (group ☘️ FREE NODE) — diisi sub2yaml
 SUB2YAML_SCRIPT = os.path.join(SCRIPT_DIR, "sub2yaml.py")            # dijalankan interaktif dari menu 1 → 4
 SUB2YAML_OUT_DIR = os.path.join(BASE_DIR, "proxy")                   # keluaran sub2yaml: hasil/proxy/free.yaml (+ custom-*.yaml, report.txt)
 USER_NODE_FILES = ("active.yaml", "trial.yaml")                      # file node milik pengguna; free.yaml/subs.yaml bukan sumber regenerate
@@ -54,9 +54,9 @@ DEFAULT_SKIP_CERT_VERIFY = True
 
 EMOJI_PATH = os.path.join(SCRIPT_DIR, "emoji.json")        # daftar emoji nama node (bisa diedit lewat menu)
 # Daftar bawaan = isi emoji.json bawaan repo (dipakai kalau file hilang / rusak / di-Reset lewat menu).
-# Sengaja tanpa emoji yang dipakai nama group di template (🧩 💫 📚 🌳 💤 💕 🍪 👾 🗺️ 🐦 🛠️ 🎮 ✂️ 🐬).
+# Sengaja tanpa emoji yang dipakai nama group di template (🧩 🗳️ 💫 📄 📑 🌳 👾 💤 💕 🍪 🧊 ☘️ 🎮 ✂️ 🐬).
 DEFAULT_EMOJIS = ["🦊", "🎿", "💟", "🩻", "💭", "🔮", "🐠", "🍂", "🐣", "🧢", "🪭",
-                  "🍞", "☕", "🧊", "🍕", "🍟", "🛋️", "🏙️", "🌃", "🌠", "🌌", "⛱️"]
+                  "🍞", "☕", "🍕", "🍟", "🛋️", "🏙️", "🌃", "🌠", "🌌", "⛱️"]
 
 NIKKI_RUN_DIR = "/etc/nikki/run"
 WIFI_PROVIDER = "WifiClients"
@@ -2782,7 +2782,7 @@ def feature_misc_menu():
 #  Menu
 # =====================================================================
 # =====================================================================
-#  Free node (sub2yaml → proxy/free.yaml, group 🐦 Free)
+#  Free node (sub2yaml → proxy/free.yaml, group ☘️ FREE NODE)
 # =====================================================================
 # Kontrak dengan sub2yaml: keluarannya YAML Clash `proxies: [...]` (sama dengan subscription.yaml).
 # Hikari hanya memvalidasi lalu menulis ke <platform>/<proxy_dir>/free.yaml; config.yaml tidak perlu di-generate ulang
@@ -2887,7 +2887,7 @@ def run_sub2yaml(script=None, out_dir=None):
 
 
 def feature_import_free_nodes():
-    clear_screen(); banner(); section("Free Node ➜ 🐦 Free (sub2yaml)")
+    clear_screen(); banner(); section("Free Node ➜ ☘️ FREE NODE (sub2yaml)")
     print(f"  {C.DIM}Isi proxy/free.yaml dari keluaran sub2yaml (YAML Clash `proxies:`). Node divalidasi dan dijaga unik.{C.RESET}\n")
     src = None
     if os.path.isfile(SUB2YAML_SCRIPT):

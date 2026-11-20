@@ -97,7 +97,7 @@ Tangkapan layar dari perangkat penulis (Termux + Nikki di OpenWrt, jaringan XL A
 ```mermaid
 flowchart LR
     A[Link URI<br/>vless / vmess / trojan] --> B[hikari_converter.py]
-    T[template/config_v1.1.yaml<br/>template netral] --> B
+    T[template/config_v1.2.yaml<br/>template netral] --> B
     R[ruleset/] --> B
     B --> P{Pilih platform}
     P --> X[📱 Box<br/>hasil/full_config_box/]
@@ -148,7 +148,7 @@ hikari-clash/
 ├── hikari_converter.py          # Script utama (menu & generator)
 ├── banner.py                    # Banner Hikari /.CLASH
 ├── mrs_codec.py                 # Codec rule-set .mrs ⇄ .yaml/.txt   (menu 5)
-├── sub2yaml.py                  # Subscription (base64) ➜ YAML Clash, dites & diurut; hasilnya diimpor ke 🐦 Free (menu 1 → 4)
+├── sub2yaml.py                  # Subscription (base64) ➜ YAML Clash, dites & diurut; hasilnya diimpor ke ☘️ FREE NODE (menu 1 → 4)
 ├── src/                         # Sumber subscription untuk sub2yaml: barry-far.txt, 0xRadikal.txt, roosterkid.txt (update lewat menu [8] sub2yaml)
 ├── bin/                         # (otomatis, tidak di-commit) core mihomo hasil unduh sub2yaml; di /sdcard dipasang di ~/.hikari-clash/bin
 ├── nodetest.py                  # Tester node proxy                  (menu 5)
@@ -156,7 +156,8 @@ hikari-clash/
 ├── sniffer.py                   # Inspector koneksi (Sniffer Only)   (menu 5)
 ├── template/
 │   ├── sniffer_only.yaml        # Config pengintai: tanpa node, semua DIRECT (bukan template konversi; tidak ikut glob config_v*.yaml)
-│   ├── config_v1.1.yaml         # Template master terbaru (netral; grup 🗺️ Public, 🐦 Free, 🛠️ Keyring; provider node gratis)
+│   ├── config_v1.2.yaml         # Template master terbaru (netral; nama group kapital; ☘️ FREE NODE, 🧊 KEYRING; provider node gratis)
+│   ├── config_v1.1.yaml         # Template master lama (dibiarkan utuh)
 │   ├── config_v1.0.yaml         # Template master lama (dibiarkan utuh)
 │   ├── config_v0.9.yaml         # Template master lama (dibiarkan utuh)
 │   ├── config_v0.8.yaml         # Template master lama (dibiarkan utuh)
@@ -225,9 +226,9 @@ Menu `1 → 3`. Kamu mengubah template, DNS, profil ISP, emoji, atau secret dan 
 - **`[A]`** — bangun ulang semua sumber sekaligus dengan pilihan baku: rule-provider & secret ikut template, profil ISP dari `settings.json`.
 - Nama node dipakai apa adanya (emoji tidak ditambah lagi), dan node di provider lain tidak disentuh.
 
-### Free node dari sub2yaml (🐦 Free)
+### Free node dari sub2yaml (☘️ FREE NODE)
 
-Menu `1 → 4`. Mengisi `proxy/free.yaml` — provider `📄 Free` yang dipakai group **🐦 Free** — dari keluaran `sub2yaml`.
+Menu `1 → 4`. Mengisi `proxy/free.yaml` — provider `📄 Free` yang dipakai group **☘️ FREE NODE** — dari keluaran `sub2yaml`.
 
 1. **Sumber**: pilih `[1]` untuk menjalankan `sub2yaml.py` langsung (menu & tampilannya sama dengan Hikari), atau `[2]` untuk memilih/mengetik path file YAML hasilnya (mis. `hasil/proxy/free.yaml`). `subscription.yaml` repo juga bisa dipilih sebagai contoh.
 2. **Platform**: `B` Box · `N` Nikki · `O` OpenClash · `A` semua (default). Nama folder mengikuti platform: `proxy/` untuk Box & Nikki, `proxy_provider/` untuk OpenClash.
@@ -379,35 +380,36 @@ Urutan rule = prioritas (atas ke bawah):
 | # | Rule-set | Group tujuan | Fungsi |
 |---|---|---|---|
 | 1 | `Direct` | DIRECT | LAN, `.local`, `.lan` |
-| 2 | `DnsHijack` | 🐬 Hijack | DNS port 53 |
-| 3 | `Reject` | ✂️ Reject | DoT (853) & QUIC (UDP 443) |
-| 4 | `WifiClients` | 🍪 Wifi | Client WiFi/hotspot *(Box saja)* |
+| 2 | `DnsHijack` | 🐬 HIJACK | DNS port 53 |
+| 3 | `Reject` | ✂️ REJECT | DoT (853) & QUIC (UDP 443) |
+| 4 | `WifiClients` | 🍪 WIFI MODE | Client WiFi/hotspot *(Box saja)* |
 | 5 | `Blocker` | 💤 AdBlock | Blokir iklan |
 | 6 | `Plusplus` | 💕 Plusplus | Unblock konten +18 |
-| 6b | *(inline)* `AND,((NETWORK,UDP),(DST-PORT,3478-3479))` dan `…19302-19309` | 🧩 Inject | STUN/TURN (WebRTC) dipaksa lewat proxy supaya IP asli tidak bocor *(v0.6)* |
-| 7 | `Portgames` | 👾 Gaming | Port game (default Direct) |
-| 8 | `Inject` | 🧩 Inject | Google, Bing, DuckDuckGo |
-| 9 | `SmartMode` | 🌳 Smart | AI, game launcher, sosmed, ISP |
-| – | `MATCH` | 🧩 Inject | Sisanya |
+| 6b | *(inline)* `AND,((NETWORK,UDP),(DST-PORT,3478-3479))` dan `…19302-19309` | 🧩 INJECT | STUN/TURN (WebRTC) dipaksa lewat proxy supaya IP asli tidak bocor *(v0.6)* |
+| 7 | `Portgames` | 👾 GAMING | Port game (default Direct) |
+| 8 | `Inject` | 🧩 INJECT | Google, Bing, DuckDuckGo |
+| 9 | `SmartMode` | 🌳 SMART MODE | AI, game launcher, sosmed, ISP |
+| – | `MATCH` | 🧩 INJECT | Sisanya |
 
-Group node (v1.1): **🧩 Inject** adalah pusat. Semua rule utama dan trafik default menuju ke sini, lalu Inject memilih dari daftar group di bawah. Node milikmu ada di provider **🗳️ Active** + **📅 Trial**:
+Group node (v1.2): **🧩 INJECT** adalah pusat. Semua rule utama dan trafik default menuju ke sini, lalu INJECT memilih dari daftar group di bawah. Node milikmu ada di provider **🗳️ Active** + **📅 Trial**:
 
 | Group | Tipe | Isi / fungsi |
 |---|---|---|
-| **📚 List** | select | Pilih manual dari node **Active** + **Trial** |
-| **💫 Auto** | url-test | Otomatis memilih node tercepat dari **Active** + **Trial** |
-| **🗺️ Public** | url-test (`hidden`) | Best ping dari node gratis (**📄 Free** + **📑 Keyring**). Disembunyikan dari daftar group dashboard; hanya bisa dipilih lewat **🛠️ Keyring** dan **🐦 Free** |
-| **🛠️ Keyring** | select | Pilih **🗺️ Public** (otomatis) atau node gratis satu per satu dari **📄 Free** & **📑 Keyring** |
-| **🐦 Free** | select | Sama seperti 🛠️ Keyring |
+| **🗳️ PROXY LIST** | select | Pilih manual dari node **Active** + **Trial** |
+| **💫 AUTO MODE** | url-test | Otomatis memilih node tercepat dari **Active** + **Trial** |
+| **📄 FREE NODE** | url-test (`hidden`) | Best ping dari provider **📄 Free**. Disembunyikan dari dashboard; dipilih lewat **☘️ FREE NODE** |
+| **📑 KEYRING** | url-test (`hidden`) | Best ping dari provider **📑 Keyring**. Disembunyikan dari dashboard; dipilih lewat **🧊 KEYRING** |
+| **☘️ FREE NODE** | select | Pilih **📄 FREE NODE** (otomatis) atau node satu per satu dari **📄 Free** |
+| **🧊 KEYRING** | select | Pilih **📑 KEYRING** (otomatis) atau node satu per satu dari **📑 Keyring** |
 
 Node gratis datang dari dua provider:
 
 | Provider | Tipe | Isi |
 |---|---|---|
-| **📑 Keyring** | `http` → `proxy/subs.yaml` | Node dari `subscription.yaml` repo, di-update otomatis lewat group 💫 Auto (butuh node Active/Trial yang hidup) |
+| **📑 Keyring** | `http` → `proxy/subs.yaml` | Node dari `subscription.yaml` repo, di-update otomatis lewat group 💫 AUTO MODE (butuh node Active/Trial yang hidup) |
 | **📄 Free** | `file` → `proxy/free.yaml` | Khusus keluaran **sub2yaml**: diisi lewat `1 → 4` (file kosong `proxies: []` dibuat otomatis saat generate, tidak pernah ditimpa) |
 
-Nama group di tabel ini identik dengan `template/config_v1.1.yaml`. Kalau kamu mengganti nama di template, ganti juga di `rules:` dan `proxies:` group yang mengacu ke nama itu. Validator (menu 4) menandai referensi yang salah.
+Nama group di tabel ini identik dengan `template/config_v1.2.yaml`. Kalau kamu mengganti nama di template, ganti juga di `rules:` dan `proxies:` group yang mengacu ke nama itu. Validator (menu 4) menandai referensi yang salah.
 ---
 
 ## 📚 Ruleset
@@ -437,7 +439,7 @@ echo 'alias hikari="cd /storage/emulated/0/Documents/hikari-clash && python hika
 source ~/.bashrc
 ```
 
-**📦 Active vs Trial** — `active.yaml` untuk node harian, `trial.yaml` untuk node yang lagi dicoba. Keduanya otomatis masuk **💫 Auto** dan **📚 List**.
+**📦 Active vs Trial** — `active.yaml` untuk node harian, `trial.yaml` untuk node yang lagi dicoba. Keduanya otomatis masuk **💫 AUTO MODE** dan **🗳️ PROXY LIST**.
 
 **📑 Keyring & 📄 Free (v1.0+)** — saat generate, script menaruh `proxy/subs.yaml` (salinan `subscription.yaml` sebagai cache awal) dan `proxy/free.yaml` (kosong, untuk hasil sub2yaml) di samping `active.yaml`/`trial.yaml`. Di Mode Offline, provider `📑 Keyring` ikut jadi `file` (tidak auto-update). Regenerate (`1 → 3`) hanya membaca `active.yaml`/`trial.yaml`; `subs.yaml` dan `free.yaml` tidak dianggap sumber node. Isi `free.yaml` dari sub2yaml lewat `1 → 4`. ⚠️ Node gratis publik dikelola pihak lain: jangan dipakai untuk login/transaksi sensitif, karena operator node bisa melihat trafik yang tidak terenkripsi end-to-end.
 
@@ -447,7 +449,7 @@ source ~/.bashrc
 
 **🌐 Tips DNS (penting!)**
 
-- **Default sekarang (v0.9 sampai v1.1):** `nameserver` = **BebasDNS Unfiltered** (DoH), `fallback` = **Cloudflare + Google** (DoH), `proxy-server-nameserver` & `default-nameserver` = `1.1.1.1`/`8.8.8.8`, `direct-nameserver` = Quad9 `9.9.9.10`/`149.112.112.10`, `fallback-filter.geoip: false`. Dengan `respect-rules` + `fake-ip`, query DNS domain yang lewat proxy keluar lewat proxy, jadi dnsleak test seharusnya menampilkan resolver BebasDNS/Cloudflare/Google, bukan DNS ISP. DNS polos di `proxy-server-`/`direct-nameserver` bisa dibelokkan ISP (hipotesis, belum diuji di jaringan XL); kalau terjadi, pakai **Mode Anti-Blokir** (template v0.7/v0.8 sudah begitu). Menu `5 → 2` memeriksa ini secara statis; verifikasi akhir tetap lewat dnsleaktest.com / bash.ws dari perangkat. (Catatan: Mihomo meng-query `fallback` bersamaan dengan `nameserver`, jadi **semua** isi keduanya harus non-ISP.)
+- **Default sekarang (v0.9 sampai v1.2):** `nameserver` = **BebasDNS Unfiltered** (DoH), `fallback` = **Cloudflare + Google** (DoH), `proxy-server-nameserver` & `default-nameserver` = `1.1.1.1`/`8.8.8.8`, `direct-nameserver` = Quad9 `9.9.9.10`/`149.112.112.10`, `fallback-filter.geoip: false`. Dengan `respect-rules` + `fake-ip`, query DNS domain yang lewat proxy keluar lewat proxy, jadi dnsleak test seharusnya menampilkan resolver BebasDNS/Cloudflare/Google, bukan DNS ISP. DNS polos di `proxy-server-`/`direct-nameserver` bisa dibelokkan ISP (hipotesis, belum diuji di jaringan XL); kalau terjadi, pakai **Mode Anti-Blokir** (template v0.7/v0.8 sudah begitu). Menu `5 → 2` memeriksa ini secara statis; verifikasi akhir tetap lewat dnsleaktest.com / bash.ws dari perangkat. (Catatan: Mihomo meng-query `fallback` bersamaan dengan `nameserver`, jadi **semua** isi keduanya harus non-ISP.)
 - `fallback-filter.geoip: false` dipasang karena filter bawaan Mihomo (geoip CN) tidak relevan di Indonesia. Perilaku persisnya belum diuji di core asli; validator memperingatkan kalau `fallback` dipakai tanpa itu.
 - **Hasil dnscheck.tools:** tabel **DNSSEC** akan tetap FAIL semua — itu normal. Mihomo tidak memvalidasi DNSSEC, `fake-ip` selalu menjawab, dan resolve asli terjadi di resolver server node. Yang menentukan lolos/tidaknya kebocoran adalah daftar "Your DNS resolvers" (tidak boleh ada resolver ISP-mu) dan "Your IP addresses" (tidak boleh ada IP ISP-mu; kalau ada, cek koneksi DIRECT di dashboard).
 - **Internet Positif / situs terblokir:** tiga lapis berbeda. (1) DNS ISP dibelokkan → diatasi fake-ip untuk domain yang lewat proxy, dan DoH berbasis IP (v0.7 / Mode Anti-Blokir) untuk sisanya. (2) Koneksi lewat proxy tapi `ERR_CONNECTION_CLOSED` dengan `DL 0 B` di dashboard dan *Remote address* berupa IP Indonesia → server node-nya sendiri yang menutup koneksi (DNS/egress server di dalam jaringan yang menyensor); tidak bisa diperbaiki dari config klien — coba node di luar negeri dan bandingkan. (3) Rule: pastikan domain-nya jatuh ke 🧩 Inject, bukan DIRECT (kolom Rule/Chains di dashboard). Tes terbaik: buka situs terblokir lalu lihat Chains-nya, bukan dnscheck.tools (DNSSEC tidak ada hubungannya dengan sensor).
@@ -492,20 +494,23 @@ mihomo -t -d hasil/full_config_box -f hasil/full_config_box/config.yaml
 | Rule-provider gagal download | GitHub raw lambat/terblokir | Mode Offline, atau pakai `proxy:` pada provider |
 | `transport 'xhttp' belum didukung` | Transport belum ada di parser | Pakai node dengan ws/grpc/tcp, atau tambahkan manual di YAML |
 | Provider kosong bikin error di core tertentu | `trial.yaml` / `free.yaml` berisi `proxies: []` | Isi minimal 1 node |
-| `🐦 Free` kosong | `free.yaml` belum diisi sub2yaml (default `proxies: []`) | `1 → 4`, lalu restart core |
+| `☘️ FREE NODE` kosong | `free.yaml` belum diisi sub2yaml (default `proxies: []`) | `1 → 4`, lalu restart core |
 | `free.yaml` dari sub2yaml ditolak core (field/karakter tidak dikenali) | Versi lama memakai `{}` inline dan tidak membuang node dengan UUID/reality rusak saat TCP-only | Pakai `sub2yaml.py` versi ini (block style + validasi offline), jalankan ulang lalu impor `1 → 4` |
 | `free.yaml` isinya node "hidup" tapi hampir semua tanpa ping / semua ping 1–3 ms | Versi lama jatuh ke tes TCP (port terbuka) saat core tidak ada; atau Box/Nikki/VPN aktif sehingga semua koneksi TCP dijawab proxy lokal | Pakai `sub2yaml.py` versi ini (URL-test mihomo wajib, 2 kali verifikasi) dan matikan Box/VPN saat tes |
 | `Unduh core mihomo … tidak bisa dijalankan` / `Permission denied` | Folder Hikari di `/sdcard` (noexec), atau varian core tidak cocok dengan HP | Versi ini otomatis memasang di `~/.hikari-clash/bin` dan mencoba varian lain; baca baris alasan yang ditampilkan. Manual: taruh binary di `~/.hikari-clash/bin/mihomo` lalu `chmod 755` |
 | Unduh core terputus di tengah jalan | Koneksi GitHub tidak stabil | Tekan `[9]` lagi: unduhan dilanjutkan dari `bin/*.part` |
 | `src/` kosong / source basi | File `.txt` belum diunduh atau sudah lama | Menu `[8]` di sub2yaml, atau `python3 sub2yaml.py --update-source` (butuh internet) |
-| `📑 Keyring` kosong / provider gagal download | `subs.yaml` di-download lewat 💫 Auto (butuh node di Active/Trial yang hidup) atau GitHub raw terblokir | Pakai cache awal dari `subscription.yaml`, atau Mode Offline |
+| `📑 Keyring` kosong / provider gagal download | `subs.yaml` di-download lewat 💫 AUTO MODE (butuh node di Active/Trial yang hidup) atau GitHub raw terblokir | Pakai cache awal dari `subscription.yaml`, atau Mode Offline |
 
 ---
 
 ## ❓ FAQ
 
-**Apa bedanya `template/template.yaml` dan `template/config_v1.1.yaml`?**
+**Apa bedanya `template/template.yaml` dan `template/config_v1.2.yaml`?**
 Yang kedua master. `template.yaml` salinan kerja yang dibuat otomatis saat kamu edit lewat menu. Kalau `template.yaml` ada, dialah yang dipakai — jadi setelah ada master baru, ganti lewat `2 → 2` (Check Status akan memberi tahu kalau salinan kerjamu tertinggal).
+
+**Apa bedanya template v1.2 dengan v1.1?**
+Terutama penamaan dan susunan group node, DNS dan urutan rule sama. (1) Nama diganti kapital: `🧩 Inject` → `🧩 INJECT`, `📚 List` → `🗳️ PROXY LIST`, `💫 Auto` → `💫 AUTO MODE`, `🌳 Smart` → `🌳 SMART MODE`, `👾 Gaming` → `👾 GAMING`, `🍪 Wifi` → `🍪 WIFI MODE`, serta `🎮 DIRECT`, `✂️ REJECT`, `🐬 HIJACK`. (2) `🗺️ Public` dihapus, diganti dua url-test tersembunyi, **📄 FREE NODE** (provider 📄 Free) dan **📑 KEYRING** (provider 📑 Keyring); group pilihannya **☘️ FREE NODE** (dulu 🐦 Free) dan **🧊 KEYRING** (dulu 🛠️ Keyring) masing-masing memilih url-test-nya sendiri. (3) 🌳 SMART MODE dan 💕 Plusplus memilih ☘️ FREE NODE & 🧊 KEYRING langsung. (4) Provider 📑 Keyring `interval: 864000`. Emoji `🧊` dikeluarkan dari daftar emoji nama node karena kini dipakai nama group. Config lama tetap jalan selama dibuat ulang dari v1.2 (*Regenerate* `1 → 3`); `template/template.yaml` salinan kerjamu tidak ikut berubah, ganti lewat `2 → 2`.
 
 **Apa bedanya template v1.1 dengan v1.0?**
 Koreksi, bukan fitur baru. (1) **🗺️ Public** dipindah dari blok `proxies:` ke `proxy-groups` (grup url-test tidak boleh ada di `proxies:`). (2) **🛠️ Keyring** dan **🐦 Free**: provider lewat `use:`, grup 🗺️ Public lewat `proxies:` (sebelumnya terbalik). (3) Nama **🐦 Free** dibetulkan (ada karakter tak terlihat di depan namanya, sehingga tidak cocok dengan 🧩 Inject). (4) Provider **📑 Keyring** memakai `proxy: 💫 Auto` (sebelumnya merujuk grup yang sudah tidak ada). (5) Typo `expexted-status` → `expected-status`. Rename dari v1.0: 🛸 AUTO MODE → 💫 Auto, 👒 PROXY LIST → 📚 List, 🌳 SMART ROUTING → 🌳 Smart, 🪼 Gaming → 👾 Gaming, 🛹 Free node → 🐦 Free (provider 📖 → 📄 Free), provider 🍞 → 📑 Keyring. Grup 🥪 Subscription dihapus; node gratisnya sekarang bisa dipilih lewat 🛠️ Keyring dan 🐦 Free. Config hasil v1.0 tetap jalan selama dibuat ulang dari v1.1 (*Regenerate* `1 → 3`).
