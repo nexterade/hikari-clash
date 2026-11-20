@@ -781,7 +781,7 @@ def find_core(extra=None):
     prefix = os.environ.get("PREFIX")
     if prefix:
         cands.append(os.path.join(prefix, "bin", "mihomo"))
-    cands += ["/data/adb/box/bin/mihomo", "/data/adb/box/bin/clash", "/usr/local/bin/mihomo",
+    cands += ["/usr/local/bin/mihomo",
               "/usr/bin/mihomo", "/etc/openclash/core/clash_meta"]
     seen = set()
     for c in cands:
@@ -841,6 +841,45 @@ def _http_get(url, timeout=60, live=None):
         return bytes(buf), r.geturl()
 
 
+def _download(url, part, live=None, tries=8):
+    """Unduh url -> file `part` dengan RESUME (Range). Koneksi putus / terpotong = lanjut dari byte terakhir,
+    bukan ulang dari awal. File `part` dibiarkan ada, jadi menjalankan ulang pun melanjutkan."""
+    os.makedirs(os.path.dirname(part), exist_ok=True)
+    label = live.msg if live else ""
+    for attempt in range(tries):
+        have = os.path.getsize(part) if os.path.exists(part) else 0
+        headers = {"User-Agent": "Mozilla/5.0 sub2yaml"}
+        if have:
+            headers["Range"] = f"bytes={have}-"
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as r:
+                if have and r.status != 206:  # server tidak mendukung Range -> mulai ulang
+                    have = 0
+                clen = int(r.headers.get("Content-Length") or 0)
+                total = have + clen if clen else 0
+                with open(part, "ab" if have else "wb") as f:
+                    while True:
+                        chunk = r.read(65536)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        have += len(chunk)
+                        if live:
+                            live.set(msg=f"{label}  {human_size(have)}" + (f" / {human_size(total)}" if total else ""))
+            if total and have < total:
+                raise IOError("koneksi terputus sebelum selesai")
+            return True
+        except urllib.error.HTTPError as e:
+            if e.code == 416:  # sudah lengkap
+                return True
+        except Exception:
+            pass
+        if live:
+            live.set(msg=f"{label}  terputus, melanjutkan ({attempt + 1}/{tries})")
+        time.sleep(min(5, 1 + attempt))
+    return False
+
+
 def download_core(dest_dir=None):
     """Unduh core Mihomo terbaru dari GitHub (MetaCubeX/mihomo) ke ./bin/. Return path atau None."""
     dest_dir = dest_dir or CORE_DIR
@@ -871,18 +910,19 @@ def download_core(dest_dir=None):
             except Exception as e:
                 lv.fail(f"GitHub tidak terjangkau: {str(e)[:80]}")
                 return None
-        raw = None
+        part, got = None, False
         for u in urls:
-            try:
-                raw, _ = _http_get(u, 300, lv)
-                name = u.rsplit("/", 1)[-1]
+            name = u.rsplit("/", 1)[-1]
+            part = os.path.join(dest_dir, name + ".part")
+            if _download(u, part, lv):
+                got = True
                 break
-            except Exception:
-                continue
-        if raw is None:
-            lv.fail("unduhan gagal")
+        if not got:
+            lv.fail("unduhan gagal setelah beberapa kali mencoba (file sebagian disimpan; jalankan lagi untuk melanjutkan)")
             return None
         try:
+            with open(part, "rb") as f:
+                raw = f.read()
             if name.endswith(".zip"):
                 with zipfile.ZipFile(io.BytesIO(raw)) as z:
                     member = next(n for n in z.namelist() if n.lower().endswith(".exe"))
@@ -896,8 +936,16 @@ def download_core(dest_dir=None):
             os.chmod(path + ".tmp", 0o755)
             os.replace(path + ".tmp", path)
         except Exception as e:
-            lv.fail(f"gagal memasang: {str(e)[:80]}")
+            try:
+                os.remove(part)  # file korup: buang supaya percobaan berikutnya mengunduh bersih
+            except OSError:
+                pass
+            lv.fail(f"gagal memasang: {str(e)[:80]}  (file dibuang, coba lagi)")
             return None
+        try:
+            os.remove(part)
+        except OSError:
+            pass
         if not _core_ok(path):
             lv.fail("file terunduh tidak bisa dijalankan di perangkat ini")
             try:
