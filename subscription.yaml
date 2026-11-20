@@ -1,876 +1,105 @@
 proxies:
-  - name: 🇦🇪 AE | @Raydikalx | F16E75 | 532ms
-    type: vless
-    server: 95.174.68.188
-    port: 14430
-    uuid: 965ffbbe-c6b6-4d5f-8dea-6d8abc55d9c0
-    udp: true
-    network: ws
-    ws-opts:
-      path: /vless
-      headers:
-        Host: 95.174.68.188
-  - name: 🇦🇹 AT | @Raydikalx | 88EA53 | 312ms
+  - name: 🇦🇹 openproxylist.com | 278ms
     type: ss
     server: 152.53.1.57
     port: 8388
     cipher: chacha20-ietf-poly1305
     password: AdawffFMHymlasRb0VOP3HFf7sTG5sJx
     udp: true
-  - name: 🇦🇺 AU | @Raydikalx | 373E2E | 202ms
-    type: trojan
-    server: 45.63.30.142
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: connectwithemployerstohireyouridealteam.com
-  - name: 🇦🇺 AU | @Raydikalx | 063CD6 | 209ms
-    type: trojan
-    server: 45.63.30.142
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: connectwithemployerstohireyouridealteam.com
-    skip-cert-verify: true
-  - name: 🇧🇷 BR | @Raydikalx | C8B193 | 414ms
-    type: trojan
-    server: 216.238.104.154
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: findtemporaryworkandfreelancerprojectsonlineplatform.com
-  - name: 🇨🇦 CA | @Raydikalx | D13817 | 281ms
-    type: vmess
-    server: 104.18.42.163
-    port: 443
-    uuid: 6a89a215-22bf-4bd7-9642-b95b2e09583a
-    alterId: 0
-    cipher: auto
-    udp: true
-    tls: true
-    servername: guanwang.awsno.com
-    network: ws
-    ws-opts:
-      path: /hls/cctv5phd.m3u8
-      headers:
-        Host: guanwang.awsno.com
-  - name: 🇨🇦 CA | @Raydikalx | 408106 | 284ms
-    type: vmess
-    server: 172.64.145.93
-    port: 443
-    uuid: 6a89a215-22bf-4bd7-9642-b95b2e09583a
-    alterId: 0
-    cipher: auto
-    udp: true
-    tls: true
-    servername: guanwang.awsno.com
-    network: ws
-    ws-opts:
-      path: /hls/cctv5phd.m3u8
-      headers:
-        Host: guanwang.awsno.com
-  - name: 🇨🇦 CA | @Raydikalx | 810F88 | 346ms
+  - name: 🇫🇮 openproxylist.com | 276ms
     type: ss
-    server: 192.99.151.230
+    server: static.28.210.29.2.clients.your-server.de
+    port: 25565
+    cipher: chacha20-ietf-poly1305
+    password: C8ZJ7R4p_HHJ32cst7ilT-0Zi2F22hAc
+    udp: true
+  - name: 🇮🇹 openproxylist.com | 354ms
+    type: ss
+    server: 57.131.27.21
     port: 8388
     cipher: aes-256-gcm
     password: itzvpn@321
     udp: true
-  - name: 🇨🇦 CA | @Raydikalx | C6F198 | 383ms
-    type: ss
-    server: 198.100.154.175
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: 3h3hb2gptqz6suyt
-    udp: true
-  - name: 🇨🇦 t.me/ConfigsHub | 449ms
-    type: ss
-    server: 51.222.136.236
-    port: 8882
-    cipher: aes-256-gcm
-    password: kDWvXYZoTBcGkC4
-    udp: true
-  - name: 🇨🇱 CL | @Raydikalx | 3679D3 | 432ms
+  - name: 🇰🇷 openproxylist.com | 175ms
     type: trojan
-    server: 64.176.7.205
+    server: 158.247.253.243
     port: 443
     password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
     udp: true
-    sni: advanceyouremploymentskillsandcareerdevelopmenthub.com
-  - name: 🇩🇪 DE | @Raydikalx | 8E45CE | 238ms
-    type: vless
-    server: 187.7.206.176
-    port: 443
-    uuid: 352a250d-080b-47b5-b7db-f9f8fa31c551
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: 1fw71dc.virtual-network.lol
-    client-fingerprint: chrome
-  - name: 🇩🇪 DE | @Raydikalx | 654C8D | 264ms
-    type: vless
-    server: 217.60.94.115
-    port: 443
-    uuid: a346c521-7a7f-452b-9356-a4893feb5982
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: de13-r.bankai.party
-    reality-opts:
-      public-key: FWitre1jinQR7qz5HQ0q2Q4Gg9xA9B0SyizCziN7Ch0
-      short-id: ''
-    client-fingerprint: chrome
-  - name: 🇩🇪 DE | @Raydikalx | D2858D | 281ms
-    type: vless
-    server: 93.123.101.198
-    port: 443
-    uuid: a346c521-7a7f-452b-9356-a4893feb5982
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: de14-r.bankai.party
-    client-fingerprint: qq
-    reality-opts:
-      public-key: FWitre1jinQR7qz5HQ0q2Q4Gg9xA9B0SyizCziN7Ch0
-      short-id: ''
-  - name: 🇩🇪 DE | @Raydikalx | 00302A | 316ms
-    type: vmess
-    server: 91.107.169.224
-    port: 80
-    uuid: 014f8bf6-9221-4f99-838f-4c16ca90334f
-    alterId: 0
-    cipher: auto
-    udp: true
-    network: ws
-    ws-opts:
-      path: /
-      headers:
-        Host: google.whatsapp.snapp.torob.basalam.dns-look.space.
-      v2ray-http-upgrade: true
-  - name: 🇩🇪 DE | @Raydikalx | 46DF80 | 333ms
-    type: ss
-    server: 47.245.174.67
-    port: 443
-    cipher: 2022-blake3-chacha20-poly1305
-    password: 8yO3ANWefuuGs1lRKXECQA1FEhxlWFV2ppQMcBaZo5Y=
-    udp: true
-  - name: 🇩🇪 DE | @Raydikalx | A0ABF0 | 558ms
-    type: vless
-    server: 217.69.174.175
-    port: 443
-    uuid: cda0862a-0f87-4be9-8ed8-1d0c9e382839
-    udp: true
-    tls: true
-    servername: 04535dt.us8.h1clayd.click
-    client-fingerprint: firefox
-    reality-opts:
-      public-key: UoS8qZ74hP_ECcncCz55lzvlcVss3R7VA0WYZE0YQCY
-      short-id: ba2a3dce62b99092
-  - name: 🇪🇪 EE | @Raydikalx | 404595 | 296ms
-    type: vless
-    server: 178.130.46.188
-    port: 443
-    uuid: a346c521-7a7f-452b-9356-a4893feb5982
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: nl16-r.bankai.party
-    client-fingerprint: chrome
-    reality-opts:
-      public-key: FWitre1jinQR7qz5HQ0q2Q4Gg9xA9B0SyizCziN7Ch0
-      short-id: ''
-  - name: 🇪🇸 ES-5.188.181.201-5649 | 255ms
-    type: ss
-    server: 5.188.181.201
-    port: 9025
-    cipher: aes-256-cfb
-    password: XPtzA9sCug3SPR4c
-    udp: true
-  - name: 🇪🇸 ES-5.188.181.201-0243 | 259ms
-    type: ss
-    server: 5.188.181.201
-    port: 9014
-    cipher: aes-256-cfb
-    password: KnJGad3FqTvjqbaX
-    udp: true
-  - name: 🇪🇸 ES-5.188.181.201-0242 | 276ms
-    type: ss
-    server: 5.188.181.201
-    port: 9037
-    cipher: aes-256-cfb
-    password: TN2YqghxeFDKZfLU
-    udp: true
-  - name: 🇪🇸 ES-5.188.181.201-0208 | 279ms
-    type: ss
-    server: 5.188.181.201
-    port: 9027
-    cipher: aes-256-cfb
-    password: EXN3S3eQpjE7EJu8
-    udp: true
-  - name: 🇪🇸 ES-5.188.181.201-5646 | 303ms
-    type: ss
-    server: 5.188.181.201
-    port: 9041
-    cipher: aes-256-cfb
-    password: U6qnYRhfyDmn8sgn
-    udp: true
-  - name: 🇪🇸 ES-5.188.181.201-0244 | 495ms
-    type: ss
-    server: 5.188.181.201
-    port: 9031
-    cipher: aes-256-cfb
-    password: BwcAUZk8hUFAkDGN
-    udp: true
-  - name: 🇫🇮 FI | @Raydikalx | 486CCD | 287ms
-    type: vless
-    server: 193.233.199.30
-    port: 443
-    uuid: a346c521-7a7f-452b-9356-a4893feb5982
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: fin3-r.bankai.party
-    client-fingerprint: chrome
-    reality-opts:
-      public-key: FWitre1jinQR7qz5HQ0q2Q4Gg9xA9B0SyizCziN7Ch0
-      short-id: ''
-  - name: 🇫🇮 FI | @Raydikalx | 19ED58 | 529ms
-    type: vless
-    server: 138.124.80.29
-    port: 443
-    uuid: a346c521-7a7f-452b-9356-a4893feb5982
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: fin1-r.bankai.party
-    reality-opts:
-      public-key: FWitre1jinQR7qz5HQ0q2Q4Gg9xA9B0SyizCziN7Ch0
-      short-id: ''
-    client-fingerprint: chrome
-  - name: 🇫🇷 FR | @Raydikalx | 31156F | 284ms
-    type: vless
-    server: 138.124.70.41
-    port: 14430
-    uuid: 6cc745e3-4eb9-46c8-a4a1-85dee7b87edc
-    udp: true
-    network: ws
-    ws-opts:
-      path: /vless
-      headers:
-        Host: 138.124.70.41
-  - name: 🇫🇷 FR | @Raydikalx | D6482C | 425ms
-    type: ss
-    server: 51.77.144.182
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: x19py0a8ipglqkbe
-    udp: true
-  - name: 🇬🇧 GB | @Raydikalx | B6ECFA | 284ms
-    type: vmess
-    server: 57.129.132.223
-    port: 80
-    uuid: a25cbf11-2908-4a1b-a3a8-9a571777dca3
-    alterId: 0
-    cipher: auto
-    udp: true
-    network: ws
-    ws-opts:
-      path: /vmess/
-      headers:
-        Host: 57.129.132.223
-  - name: 🇬🇧 GB | @Raydikalx | 477566 | 311ms
-    type: ss
-    server: 18.130.78.177
-    port: 443
-    cipher: 2022-blake3-chacha20-poly1305
-    password: Cg2Dw4OhdBZhqbeO9ZTA3g/Gk/AvsrYZGhAJeGnQIx4=
-    udp: true
-  - name: 🇬🇧 GB | @Raydikalx | 1E1DE7 | 422ms
-    type: vless
-    server: 158.220.113.176
-    port: 80
-    uuid: c762af05-2e92-4133-bc30-8cf45dd40a28
-    udp: true
-    network: ws
-    ws-opts:
-      path: /
-      headers:
-        Host: suh.cryptofront.uk
-  - name: 🇭🇰 Join+Telegram:@Farah_VPN | 273ms
-    type: trojan
-    server: 47.242.93.89
-    port: 12012
-    password: '12012'
-    udp: true
-    sni: ali-hk.b-gfw.cfd
+    sni: connectgraduateswithjobopeningsandgrowprofessionally.com
     skip-cert-verify: true
-  - name: 🇮🇹 IT | @Raydikalx | C00EBC | 293ms
+  - name: '🇳🇱 openproxylist.com] #2 | 246ms'
     type: ss
-    server: 57.131.4.13
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: mx81glqbtlwuhcjo
-    udp: true
-  - name: 🇯🇵 JP | @Raydikalx | 9EF41E | 156ms
-    type: ss
-    server: 149.22.87.241
-    port: 443
-    cipher: aes-128-gcm
-    password: shadowsocks
-    udp: true
-  - name: 🇯🇵 JP | @Raydikalx | EA55E0 | 172ms
-    type: ss
-    server: 84.247.155.196
-    port: 80
-    cipher: aes-256-gcm
-    password: 3eOFeNssde7PYYMv
-    udp: true
-  - name: 🇯🇵 JP | @Raydikalx | 2459E0 | 175ms
-    type: ss
-    server: 149.22.87.240
-    port: 443
-    cipher: aes-128-gcm
-    password: shadowsocks
-    udp: true
-  - name: 🇰🇿 KZ | @Raydikalx | 69AA35 | 533ms
-    type: vless
-    server: 91.224.74.146
-    port: 443
-    uuid: e44962da-9e02-41aa-b86f-a83a521875b6
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: 212.192.156.15
-    client-fingerprint: firefox
-    reality-opts:
-      public-key: a9O5evb8g385KJm77j9SKlB7MvHzUBGes6c8BAxyO1U
-      short-id: 5fd3245e96291c37
-  - name: 🇰🇿 KZ | @Raydikalx | C21715 | 542ms
-    type: vless
-    server: 91.224.74.146
-    port: 443
-    uuid: e44962da-9e02-41aa-b86f-a83a521875b6
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    client-fingerprint: firefox
-    reality-opts:
-      public-key: a9O5evb8g385KJm77j9SKlB7MvHzUBGes6c8BAxyO1U
-      short-id: 5fd3245e96291c37
-  - name: 🇳🇱 NL | @Raydikalx | 1605BD | 246ms
-    type: ss
-    server: 82.38.31.203
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | D6A012 | 263ms
-    type: ss
-    server: 82.38.31.218
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | 539FCF | 264ms
-    type: ss
-    server: 82.38.31.181
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | 110626 | 265ms
-    type: ss
-    server: 82.38.31.62
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: oZIoA69Q8yhcQV8ka3Pa3A
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | F88388 | 267ms
-    type: ss
-    server: 193.29.139.198
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | 7F1FD1 | 270ms
-    type: ss
-    server: 82.38.31.156
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: oZIoA69Q8yhcQV8ka3Pa3A
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | 2155C7 | 275ms
-    type: ss
-    server: 82.38.31.193
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | DE1FC2 | 281ms
-    type: ss
-    server: 82.38.31.190
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | 834F70 | 282ms
-    type: ss
-    server: 82.38.31.219
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | C59792 | 282ms
-    type: ss
-    server: 82.38.31.191
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | EF693F | 285ms
-    type: ss
-    server: 82.38.31.47
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: oZIoA69Q8yhcQV8ka3Pa3A
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | D5274E | 287ms
-    type: ss
-    server: 82.38.31.213
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | C4DE22 | 288ms
-    type: vless
-    server: 177.177.215.45
-    port: 444
-    uuid: 254f28cb-d0c1-41e9-a06b-f2155213ff04
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: ams2.shtil.io
-    client-fingerprint: chrome
-  - name: 🇳🇱 NL | @Raydikalx | 036515 | 290ms
-    type: ss
-    server: 82.38.31.215
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | 6ACD13 | 291ms
-    type: ss
-    server: 82.38.31.205
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | 59FA55 | 292ms
-    type: ss
-    server: 82.38.31.165
-    port: 443
-    cipher: chacha20-ietf-poly1305
-    password: oZIoA69Q8yhcQV8ka3Pa3A
-    udp: true
-  - name: '🇳🇱 Join+Telegram:@Farah_VPN #4 | 294ms'
-    type: trojan
-    server: 66.163.127.155
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: indyourperfectremotetechjobfromthecomfortofhome.com
-  - name: 🇳🇱 NL | @Raydikalx | 254EA2 | 297ms
-    type: ss
-    server: 82.38.31.49
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: oZIoA69Q8yhcQV8ka3Pa3A
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | 21A7E6 | 302ms
-    type: ss
-    server: 82.38.31.201
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | E338FE | 302ms
-    type: ss
-    server: 82.38.31.185
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | 0594FF | 310ms
-    type: ss
-    server: 82.38.31.39
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: oZIoA69Q8yhcQV8ka3Pa3A
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | B10C19 | 310ms
-    type: ss
-    server: 82.38.31.187
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | 6D0EBA | 315ms
-    type: ss
-    server: 82.38.31.199
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | F40693 | 319ms
-    type: ss
-    server: 82.38.31.206
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | 6F14DC | 320ms
-    type: ss
-    server: 82.38.31.61
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: oZIoA69Q8yhcQV8ka3Pa3A
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | 2CE0FB | 321ms
-    type: ss
-    server: 82.38.31.48
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: oZIoA69Q8yhcQV8ka3Pa3A
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | A0EA09 | 321ms
-    type: ss
-    server: 82.38.31.195
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | 2213E0 | 321ms
-    type: ss
-    server: 82.38.31.204
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | B57E00 | 322ms
-    type: ss
-    server: 82.38.31.217
-    port: 8080
-    cipher: chacha20-ietf-poly1305
-    password: k1dBOmOB4oqi7Ump37a1bQ
-    udp: true
-  - name: 🇳🇱 NL | @Raydikalx | C52848 | 508ms
-    type: ss
-    server: 141.144.195.47
+    server: 158.101.205.73
     port: 45819
     cipher: 2022-blake3-chacha20-poly1305
-    password: fGUGXAutES7Y5cpEYfB8g+M2mC72cIy5WJJ3azmDgW0=
+    password: yoow9zuAW2IUx29EL25NzX29/xx20FpSEKOsnu/TnBE=
     udp: true
-  - name: 🇳🇴 NO | @Raydikalx | D97531 | 340ms
+  - name: '🇳🇱 openproxylist.com] #3 | 294ms'
     type: ss
-    server: 185.213.23.63
-    port: 990
+    server: 144.21.35.158
+    port: 45819
+    cipher: 2022-blake3-chacha20-poly1305
+    password: rx1e8SsjGM7ZKlR0tLnzSWoxhyRRJJrcTccM3uMu+Rc=
+    udp: true
+  - name: '🇳🇱 openproxylist.com] #4 | 1521ms'
+    type: ss
+    server: 194.87.233.93
+    port: 46190
     cipher: chacha20-ietf-poly1305
-    password: ARgvGZywA+gacgGV26Bvmu05+wZmRW/j+AdU+Z8Bt44=
+    password: 2Ef8X21WALqK7H6N8A78j5WYtzZ999PP8rF8DaLsb5LLyDLQpf5dGVAjdA3mj1wudigKXTt5heYU9jmaBbfxXBJJAqhPHkxe
     udp: true
-  - name: '🇸🇬 Channel id: @ConfigV2RayNG | 144ms'
+  - name: '🇷🇺 openproxylist.com] #2 | 349ms'
     type: vless
-    server: 140.245.62.225
-    port: 36442
-    uuid: c6624b96-e346-490b-9145-74c2543a9483
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: xjpp.zjlo.top
-    client-fingerprint: chrome
-  - name: 🇸🇰 SK | @Raydikalx | 9EC026 | 514ms
-    type: vless
-    server: 196.245.153.111
+    server: vps3.nemnogogo.com
     port: 443
-    uuid: cda0862a-0f87-4be9-8ed8-1d0c9e382839
+    uuid: 38308ff1-5aa9-494f-a25a-0f2870d56b3e
     udp: true
     tls: true
-    servername: 76574ct.nl8.h1clayd.click
-    client-fingerprint: firefox
-    reality-opts:
-      public-key: 9zW5lTDbs9svY-lzlPp-pq0j2Sr6g031SY0E-3xSHDc
-      short-id: 2ca59bdc5121f921
-  - name: 🇺🇸 US | @Raydikalx | 9A77C9 | 372ms
-    type: trojan
-    server: 216.152.155.158
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: resources.nextjobopportunityandclaimyouridealrole.com
-    skip-cert-verify: true
-  - name: 🇺🇸 US | @Raydikalx | 7DA3D8 | 373ms
-    type: vmess
-    server: 188.114.99.137
-    port: 443
-    uuid: 6a89a215-22bf-4bd7-9642-b95b2e09583a
-    alterId: 0
-    cipher: auto
-    udp: true
-    tls: true
-    servername: guanwang.awsno.com
-    client-fingerprint: chrome
-    network: ws
-    ws-opts:
-      path: /hls/cctv5phd.m3u8
-      headers:
-        Host: guanwang.awsno.com
-  - name: 🇺🇸 US | @Raydikalx | 881B69 | 389ms
-    type: trojan
-    server: 169.197.140.169
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: api.discoverfreshgraduatejobsstartyourprofessionaljourney.com
-  - name: 🇺🇸 US | @Raydikalx | A75581 | 400ms
-    type: trojan
-    server: 216.152.156.49
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: cdn.healthcarejobshubenhancemedicalprofessionalskillstoday.com
-  - name: 🇺🇸 US | @Raydikalx | 739ADB | 479ms
-    type: vless
-    server: 147.45.60.136
-    port: 443
-    uuid: a346c521-7a7f-452b-9356-a4893feb5982
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: usahk2-r.bankai.party
-    client-fingerprint: qq
-    reality-opts:
-      public-key: FWitre1jinQR7qz5HQ0q2Q4Gg9xA9B0SyizCziN7Ch0
-      short-id: ''
-  - name: 🇺🇸 US | @Raydikalx | F81BCD | 488ms
-    type: vless
-    server: 45.138.100.248
-    port: 14430
-    uuid: ae908ff5-f749-402c-af25-e6e9aef4d6bb
-    udp: true
-    network: ws
-    ws-opts:
-      path: /vless
-      headers:
-        Host: 45.138.100.248
-  - name: 🇿🇦 ZA | @Raydikalx | F7DB86 | 523ms
-    type: trojan
-    server: 139.84.231.142
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: explorecareerpathsandunlockprofessionalsuccesstoday.com
-    skip-cert-verify: true
-  - name: 🇿🇦 ZA | @Raydikalx | AF6AB4 | 559ms
-    type: trojan
-    server: 139.84.231.142
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: explorecareerpathsandunlockprofessionalsuccesstoday.com
-  - name: '🏳️ @V2ray_confiig #7 | 163ms'
-    type: vless
-    server: 140.245.62.225
-    port: 36442
-    uuid: 5269e0b4-0dff-4f97-e0c7-83130bacb009
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: xjpp.zjlo.top
-  - name: 🏳️ @V2ray_confiig | 257ms
-    type: trojan
-    server: 208.69.78.33
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: courses.yourultimateprofessionalcareerhub.com
-  - name: 🏳️ 🔹93@oneclickvpnkeys | 265ms
-    type: trojan
-    server: 34.94.152.229
-    port: 443
-    password: '123456'
-    udp: true
-    sni: us.ctt25.uk
-    client-fingerprint: chrome
-  - name: '🏳️ @ConfigV2RayNG #8 | 282ms'
-    type: trojan
-    server: 66.163.112.171
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: learn.unlockyourfuturefindyourperfectcareer.com
-  - name: 🏳️ 🔹12@oneclickvpnkeys | 283ms
-    type: vless
-    server: 78.17.215.141
-    port: 443
-    uuid: a346c521-7a7f-452b-9356-a4893feb5982
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: de15-r.bankai.party
-    reality-opts:
-      public-key: FWitre1jinQR7qz5HQ0q2Q4Gg9xA9B0SyizCziN7Ch0
-      short-id: 457fab2ac885dbe0
-    client-fingerprint: chrome
-  - name: 🏳️ 156.146.38.168:443 | 300ms
-    type: ss
-    server: 156.146.38.168
-    port: 443
-    cipher: aes-128-gcm
-    password: shadowsocks
-    udp: true
-  - name: '🏳️ @filembad #11 | 307ms'
-    type: vless
-    server: 185.232.204.116
-    port: 443
-    uuid: ab5e91ee-f600-4825-a2bc-d6471d5cee03
-    udp: true
-    tls: true
-    servername: food-from-finlda-here-we-go.keno.su
-    client-fingerprint: chrome
-    reality-opts:
-      public-key: Au1rmQdDRjlEJk17IfLQv5PBUEEosMWNhAlrWZj6mnY
-      short-id: '12345678'
-    network: grpc
-    grpc-opts:
-      grpc-service-name: grpc
-  - name: '🏳️ ✰𝗝𝗼𝗶𝗻 ➠ @v2raymelliii✰ #3 | 309ms'
-    type: vless
-    server: 146.19.254.171
-    port: 8443
-    uuid: 24fb9b5b-43b7-4058-a7e5-a0499ada1fda
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: 146.19.254.171
-    client-fingerprint: chrome
-  - name: 🏳️ 🔹62@oneclickvpnkeys | 310ms
-    type: vless
-    server: 193.233.199.94
-    port: 443
-    uuid: a346c521-7a7f-452b-9356-a4893feb5982
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: fin4-r.bankai.party
-    reality-opts:
-      public-key: FWitre1jinQR7qz5HQ0q2Q4Gg9xA9B0SyizCziN7Ch0
-      short-id: ''
-    client-fingerprint: chrome
-  - name: 🏳️ @v2ray313 کانالمون 🍊 | 318ms
-    type: trojan
-    server: 208.69.78.208
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: resources.yourultimateprofessionalcareerhub.com
-  - name: 🏳️ ⚡04 | ⚡Telegram = t.me/ex_proxies | 323ms
-    type: ss
-    server: 98.98.79.198
-    port: 8080
-    cipher: rc4-md5
-    password: 14fFPrbezE3HDZzsMOr6
-    udp: true
-  - name: '🏳️ @VPsave #20 | 333ms'
-    type: vless
-    server: 146.19.254.171
-    port: 8443
-    uuid: 24fb9b5b-43b7-4058-a7e5-a0499ada1fda
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: 146.19.254.171
+    servername: vps3.nemnogogo.com
     alpn:
       - h2
-      - h3
-      - http/1.1
-    client-fingerprint: chrome
-  - name: 🏳️ @v2ray313 کانالمون 🎸 | 336ms
+    client-fingerprint: firefox
+    network: grpc
+    grpc-opts:
+      grpc-service-name: mobile.api.Event
+  - name: 🇷🇺 openproxylist.com | 365ms
     type: vless
-    server: 167.233.129.126
-    port: 2474
-    uuid: 287db857-de04-4212-bd69-5d14083e340e
+    server: 201.24.121.243
+    port: 443
+    uuid: 32b5ca9b-3f81-4031-965d-e8b074216e8d
     udp: true
-  - name: 🏳️ 🧩 [17] @ConfigV2RayNG | 339ms
+    tls: true
+    servername: kk-ru24a1.testkknegr.online
+    alpn:
+      - h2
+    client-fingerprint: chrome
+    network: grpc
+    grpc-opts:
+      grpc-service-name: vlgrpc
+  - name: 🇸🇪 openproxylist.com | 354ms
+    type: vless
+    server: 138.124.86.230
+    port: 48115
+    uuid: b2fe1fa4-6a79-4938-a3f4-63b54ae7f16b
+    udp: true
+    tls: true
+    servername: 138-124-86-230.sslip.io
+    client-fingerprint: firefox
+    network: grpc
+    grpc-opts:
+      grpc-service-name: 138-124-86-230-sslip-io
+  - name: '🇸🇬 openproxylist.com] #3 | 242ms'
     type: trojan
-    server: 216.152.147.74
+    server: 15.235.184.127
     port: 443
     password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
     udp: true
-    sni: api.connectingpeoplewithgreatjobs.com
-  - name: '🏳️ @VPsave #19 | 358ms'
-    type: vless
-    server: 146.19.254.171
-    port: 8443
-    uuid: 24fb9b5b-43b7-4058-a7e5-a0499ada1fda
+    sni: exploredigitaljobplatformandfindonlinework.com
+  - name: '🇺🇸 openproxylist.com] #3 | 377ms'
+    type: ss
+    server: 23.230.52.119
+    port: 42878
+    cipher: chacha20-ietf-poly1305
+    password: ijoUwfdnkz7mX4pWdkSpmEixTZCt2TRm1JDr4BSaBAWkLxYGoXBHXadFKY5D5ZfoVTwqsx46jCmEUDnQUizJDYrM7B5anhnu
     udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: 146.19.254.171
-  - name: '🏳️ @meliproxyy #13 | 430ms'
-    type: trojan
-    server: 66.163.118.251
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: resources.discovergreatjobsandadvanceyourcareer.com
-  - name: '🏳️ @ConfigV2RayNG #10 | 454ms'
-    type: trojan
-    server: 66.163.118.244
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: api.discovergreatjobsandadvanceyourcareer.com
-  - name: 🏳️ 🔹42@oneclickvpnkeys | 458ms
-    type: vless
-    server: 217.60.27.153
-    port: 443
-    uuid: 12776e55-6230-48b9-b069-1bb8a04b4237
-    udp: true
-    flow: xtls-rprx-vision
-    tls: true
-    servername: music.3apes.online
-    reality-opts:
-      public-key: q4_o7NvD6vQg4hYsyO29Q6PVufjTJHDUbQTqstre9EQ
-      short-id: ''
-    client-fingerprint: chrome
-  - name: '🏳️ @FarazV2ray #9 | 477ms'
-    type: vless
-    server: 179.254.115.111
-    port: 443
-    uuid: cda0862a-0f87-4be9-8ed8-1d0c9e382839
-    udp: true
-    tls: true
-    servername: 04535dt.us8.h1clayd.click
-    client-fingerprint: chrome
-    reality-opts:
-      public-key: UoS8qZ74hP_ECcncCz55lzvlcVss3R7VA0WYZE0YQCY
-      short-id: ba2a3dce62b99092
-  - name: '🏳️ @VPsave #103 | 531ms'
-    type: vless
-    server: 196.245.153.111
-    port: 443
-    uuid: cda0862a-0f87-4be9-8ed8-1d0c9e382839
-    udp: true
-    tls: true
-    servername: 76574ct.nl8.h1clayd.click
-    client-fingerprint: chrome
-    reality-opts:
-      public-key: 9zW5lTDbs9svY-lzlPp-pq0j2Sr6g031SY0E-3xSHDc
-      short-id: 2ca59bdc5121f921
-  - name: '🏳️ @OutlineReleasedKey #2 | 567ms'
-    type: trojan
-    server: 139.84.231.142
-    port: 443
-    password: 0ab6c98dae3b48e8b9c4a776b6c9c19a
-    udp: true
-    sni: explorecareerpathsandunlockprofessionalsuccesstoday.com
-    client-fingerprint: chrome
