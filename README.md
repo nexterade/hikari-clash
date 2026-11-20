@@ -96,7 +96,7 @@ Tangkapan layar dari perangkat penulis (Termux + Nikki di OpenWrt, jaringan XL A
 ```mermaid
 flowchart LR
     A[Link URI<br/>vless / vmess / trojan] --> B[hikari_converter.py]
-    T[template/config_v0.9.yaml<br/>template netral] --> B
+    T[template/config_v1.0.yaml<br/>template netral] --> B
     R[ruleset/] --> B
     B --> P{Pilih platform}
     P --> X[📱 Box<br/>hasil/full_config_box/]
@@ -150,7 +150,8 @@ hikari-clash/
 ├── nodetest.py                  # Tester node proxy                  (menu 5)
 ├── routetest.py                 # Tester route domain/IP             (menu 5)
 ├── template/
-│   ├── config_v0.9.yaml         # Template master terbaru (netral, DNS pilihan pemilik, STUN via proxy, link repo hikari-clash)
+│   ├── config_v1.0.yaml         # Template master terbaru (netral, + group 🥪 Subscription & 🛹 Free node, provider node gratis)
+│   ├── config_v0.9.yaml         # Template master lama (dibiarkan utuh)
 │   ├── config_v0.8.yaml         # Template master lama (dibiarkan utuh)
 │   ├── config_v0.7.yaml         # Template master lama (dibiarkan utuh)
 │   ├── config_v0.6.yaml         # Template master lama (dibiarkan utuh)
@@ -158,6 +159,7 @@ hikari-clash/
 │   ├── config_v0.4.yaml         # Template master lama (dibiarkan utuh)
 │   ├── config_v0.3.yaml         # Template master lama (dibiarkan utuh)
 │   └── template.yaml            # (otomatis) salinan kerja, dibuat saat kamu edit lewat menu
+├── subscription.yaml            # Node gratis (100 node, dibuat sub2yaml.py) — URL raw-nya dipakai provider 🍞 Subscription
 ├── emoji.json                   # Daftar emoji nama node (edit lewat menu atau langsung di file)
 ├── settings.json                # (otomatis, tidak di-commit) pengaturan pengguna: profil ISP
 ├── ruleset/                     # Ruleset (WAJIB): *.yaml & *.mrs
@@ -308,16 +310,23 @@ Urutan rule = prioritas (atas ke bawah):
 | 1 | `Direct` | DIRECT | LAN, `.local`, `.lan` |
 | 2 | `DnsHijack` | 🐬 Hijack | DNS port 53 |
 | 3 | `Reject` | ✂️ Reject | DoT (853) & QUIC (UDP 443) |
-| 4 | `WifiClients` | 🍪 WIFI | Client WiFi/hotspot *(Box saja)* |
-| 5 | `Blocker` | 💤 BLOCKER | Blokir iklan |
-| 6 | `Plusplus` | 💕 PLUSPLUS | Unblock konten +18 |
+| 4 | `WifiClients` | 🍪 Wifi | Client WiFi/hotspot *(Box saja)* |
+| 5 | `Blocker` | 💤 AdBlock | Blokir iklan |
+| 6 | `Plusplus` | 💕 Plusplus | Unblock konten +18 |
 | 6b | *(inline)* `AND,((NETWORK,UDP),(DST-PORT,3478-3479))` dan `…19302-19309` | 🧩 Inject | STUN/TURN (WebRTC) dipaksa lewat proxy supaya IP asli tidak bocor *(v0.6)* |
-| 7 | `Portgames` | 🪼 GAMING | Port game (default Direct) |
+| 7 | `Portgames` | 🪼 Gaming | Port game (default Direct) |
 | 8 | `Inject` | 🧩 Inject | Google, Bing, DuckDuckGo |
 | 9 | `SmartMode` | 🌳 SMART ROUTING | AI, game launcher, sosmed, ISP |
 | – | `MATCH` | 🧩 Inject | Sisanya |
 
-Group node: **🧩 Inject** (pusat), **🛸 AUTO MODE** (url-test), **👒 PROXY LIST** (pilih manual). Semua memakai provider `Active` + `Trial`. Nama group di tabel ini identik dengan `template/config_v0.9.yaml` — kalau kamu mengganti nama di template, ganti juga di `rules:` dan `proxies:` group yang mengacu ke nama itu.
+Group node: **🧩 Inject** (pusat), **🛸 AUTO MODE** (url-test), **👒 PROXY LIST** (pilih manual). Ketiganya memakai provider **🗳️ Active** + **📅 Trial** (node milikmu). Sejak v1.0 ada dua group tambahan, juga bisa dipilih dari 🧩 Inject:
+
+| Group | Provider | Isi |
+|---|---|---|
+| **🥪 Subscription** | `🍞 Subscription` (`http`, `proxy/subs.yaml`) | Node gratis dari `subscription.yaml` repo, di-update otomatis lewat group 🛸 AUTO MODE |
+| **🛹 Free node** | `📖 Free node` (`file`, `proxy/free.yaml`) | Node gratis yang kamu isi sendiri (file kosong `proxies: []` dibuat otomatis, tidak pernah ditimpa) |
+
+Nama group di tabel ini identik dengan `template/config_v1.0.yaml` — kalau kamu mengganti nama di template, ganti juga di `rules:` dan `proxies:` group yang mengacu ke nama itu.
 
 ---
 
@@ -350,13 +359,15 @@ source ~/.bashrc
 
 **📦 Active vs Trial** — `active.yaml` untuk node harian, `trial.yaml` untuk node yang lagi dicoba. Keduanya otomatis masuk **AUTO MODE** dan **PROXY LIST**.
 
+**🥪 Subscription & 🛹 Free node (v1.0)** — saat generate, script menaruh `proxy/subs.yaml` (salinan `subscription.yaml` sebagai cache awal) dan `proxy/free.yaml` (kosong) di samping `active.yaml`/`trial.yaml`. Di Mode Offline, provider `🍞 Subscription` ikut jadi `file` (tidak auto-update). Regenerate (`1 → 3`) hanya membaca `active.yaml`/`trial.yaml`; `subs.yaml` dan `free.yaml` tidak dianggap sumber node. ⚠️ Node gratis publik dikelola pihak lain: jangan dipakai untuk login/transaksi sensitif, karena operator node bisa melihat trafik yang tidak terenkripsi end-to-end.
+
 **🦊 Emoji nama node** — tiap link yang di-convert dapat emoji acak (tidak berulang dalam satu batch selama daftarnya cukup). Edit lewat `2 → 4`, atau ubah langsung `emoji.json`. Nama yang sudah berawalan emoji (apa pun, mis. `🪟 Rekayasa` atau `🇸🇬 Singapore`) dibiarkan apa adanya, tidak jadi dobel, jadi aman dipakai bareng Append. Tambah emoji dengan spasi/koma sebagai pemisah, mis. `🦊 🐼 🐯`.
 
 **➕ Pakai Append** — tambah node baru tanpa menghapus yang lama. Nama otomatis dijaga unik.
 
 **🌐 Tips DNS (penting!)**
 
-- **Default sekarang (v0.9):** `nameserver` = **BebasDNS Unfiltered** (DoH), `fallback` = **Cloudflare + Google** (DoH), `proxy-server-nameserver` & `default-nameserver` = `1.1.1.1`/`8.8.8.8`, `direct-nameserver` = Quad9 `9.9.9.10`/`149.112.112.10`, `fallback-filter.geoip: false`. Dengan `respect-rules` + `fake-ip`, query DNS domain yang lewat proxy keluar lewat proxy, jadi dnsleak test seharusnya menampilkan resolver BebasDNS/Cloudflare/Google, bukan DNS ISP. DNS polos di `proxy-server-`/`direct-nameserver` bisa dibelokkan ISP (hipotesis, belum diuji di jaringan XL); kalau terjadi, pakai **Mode Anti-Blokir** (template v0.7/v0.8 sudah begitu). Menu `5 → 2` memeriksa ini secara statis; verifikasi akhir tetap lewat dnsleaktest.com / bash.ws dari perangkat. (Catatan: Mihomo meng-query `fallback` bersamaan dengan `nameserver`, jadi **semua** isi keduanya harus non-ISP.)
+- **Default sekarang (v0.9 dan v1.0):** `nameserver` = **BebasDNS Unfiltered** (DoH), `fallback` = **Cloudflare + Google** (DoH), `proxy-server-nameserver` & `default-nameserver` = `1.1.1.1`/`8.8.8.8`, `direct-nameserver` = Quad9 `9.9.9.10`/`149.112.112.10`, `fallback-filter.geoip: false`. Dengan `respect-rules` + `fake-ip`, query DNS domain yang lewat proxy keluar lewat proxy, jadi dnsleak test seharusnya menampilkan resolver BebasDNS/Cloudflare/Google, bukan DNS ISP. DNS polos di `proxy-server-`/`direct-nameserver` bisa dibelokkan ISP (hipotesis, belum diuji di jaringan XL); kalau terjadi, pakai **Mode Anti-Blokir** (template v0.7/v0.8 sudah begitu). Menu `5 → 2` memeriksa ini secara statis; verifikasi akhir tetap lewat dnsleaktest.com / bash.ws dari perangkat. (Catatan: Mihomo meng-query `fallback` bersamaan dengan `nameserver`, jadi **semua** isi keduanya harus non-ISP.)
 - `fallback-filter.geoip: false` dipasang karena filter bawaan Mihomo (geoip CN) tidak relevan di Indonesia. Perilaku persisnya belum diuji di core asli; validator memperingatkan kalau `fallback` dipakai tanpa itu.
 - **Hasil dnscheck.tools:** tabel **DNSSEC** akan tetap FAIL semua — itu normal. Mihomo tidak memvalidasi DNSSEC, `fake-ip` selalu menjawab, dan resolve asli terjadi di resolver server node. Yang menentukan lolos/tidaknya kebocoran adalah daftar "Your DNS resolvers" (tidak boleh ada resolver ISP-mu) dan "Your IP addresses" (tidak boleh ada IP ISP-mu; kalau ada, cek koneksi DIRECT di dashboard).
 - **Internet Positif / situs terblokir:** tiga lapis berbeda. (1) DNS ISP dibelokkan → diatasi fake-ip untuk domain yang lewat proxy, dan DoH berbasis IP (v0.7 / Mode Anti-Blokir) untuk sisanya. (2) Koneksi lewat proxy tapi `ERR_CONNECTION_CLOSED` dengan `DL 0 B` di dashboard dan *Remote address* berupa IP Indonesia → server node-nya sendiri yang menutup koneksi (DNS/egress server di dalam jaringan yang menyensor); tidak bisa diperbaiki dari config klien — coba node di luar negeri dan bandingkan. (3) Rule: pastikan domain-nya jatuh ke 🧩 Inject, bukan DIRECT (kolom Rule/Chains di dashboard). Tes terbaik: buka situs terblokir lalu lihat Chains-nya, bukan dnscheck.tools (DNSSEC tidak ada hubungannya dengan sensor).
@@ -400,17 +411,21 @@ mihomo -t -d hasil/full_config_box -f hasil/full_config_box/config.yaml
 | Port bentrok / core gagal start | Dua port sama | Menu `4` (Validasi) menunjukkan port ganda |
 | Rule-provider gagal download | GitHub raw lambat/terblokir | Mode Offline, atau pakai `proxy:` pada provider |
 | `transport 'xhttp' belum didukung` | Transport belum ada di parser | Pakai node dengan ws/grpc/tcp, atau tambahkan manual di YAML |
-| Provider kosong bikin error di core tertentu | `trial.yaml` berisi `proxies: []` | Isi minimal 1 node |
+| Provider kosong bikin error di core tertentu | `trial.yaml` / `free.yaml` berisi `proxies: []` | Isi minimal 1 node |
+| `🥪 Subscription` kosong / provider gagal download | `subs.yaml` di-download lewat 🛸 AUTO MODE (butuh node di Active/Trial yang hidup) atau GitHub raw terblokir | Pakai cache awal dari `subscription.yaml`, atau Mode Offline |
 
 ---
 
 ## ❓ FAQ
 
-**Apa bedanya `template/template.yaml` dan `template/config_v0.9.yaml`?**
+**Apa bedanya `template/template.yaml` dan `template/config_v1.0.yaml`?**
 Yang kedua master. `template.yaml` salinan kerja yang dibuat otomatis saat kamu edit lewat menu. Kalau `template.yaml` ada, dialah yang dipakai — jadi setelah ada master baru, ganti lewat `2 → 2` (Check Status akan memberi tahu kalau salinan kerjamu tertinggal).
 
+**Apa bedanya template v1.0 dengan v0.9?**
+(1) Group baru **🥪 Subscription** (provider `🍞 Subscription`, `http` → `subscription.yaml` repo) dan **🛹 Free node** (provider `📖 Free node`, `file` → `proxy/free.yaml`), keduanya ditambahkan ke pilihan **🧩 Inject**. (2) Nama group diseragamkan: `💤 BLOCKER` → `💤 AdBlock`, `💕 PLUSPLUS` → `💕 Plusplus`, `🍪 WIFI` → `🍪 Wifi`, `🪼 GAMING` → `🪼 Gaming`; nama provider jadi `🗳️ Active` / `📅 Trial`. (3) Rule-provider `Plusplus` ikut memakai `proxy: 🛸 AUTO MODE` seperti yang lain. DNS, urutan rule, dan sniffer sama dengan v0.9. v0.3–v0.9 tidak diubah. *Config lama yang kamu edit manual dan masih memakai nama group lama tidak ikut berubah — generate ulang dari template v1.0.*
+
 **Apa bedanya template v0.9 dengan v0.8?**
-Hanya dua hal. (1) DNS: `nameserver` = BebasDNS Unfiltered (DoH), `proxy-server-nameserver` & `default-nameserver` = `1.1.1.1`/`8.8.8.8`, `direct-nameserver` = Quad9 `9.9.9.10`/`149.112.112.10`, `fallback` = Cloudflare + Google (DoH). Ini kembali memakai DNS polos port 53 untuk `proxy-server-`/`direct-nameserver` (v0.7/v0.8 memakai DoH berbasis IP); kalau ISP membelokkannya, jalankan menu DNS → **Mode Anti-Blokir**. (2) URL icon grup memakai branch `master` (`.../hikari-clash/refs/heads/master/icon/*.png`); URL rule-provider tetap branch `main`. v0.3–v0.8 tidak diubah.
+Hanya dua hal. (1) DNS: `nameserver` = BebasDNS Unfiltered (DoH), `proxy-server-nameserver` & `default-nameserver` = `1.1.1.1`/`8.8.8.8`, `direct-nameserver` = Quad9 `9.9.9.10`/`149.112.112.10`, `fallback` = Cloudflare + Google (DoH). Ini kembali memakai DNS polos port 53 untuk `proxy-server-`/`direct-nameserver` (v0.7/v0.8 memakai DoH berbasis IP); kalau ISP membelokkannya, jalankan menu DNS → **Mode Anti-Blokir**. (2) URL icon grup dan rule-provider memakai branch `master` (`.../hikari-clash/refs/heads/master/...`). v0.3–v0.8 tidak diubah.
 
 **Apa bedanya template v0.8 dengan v0.7?**
 Hanya link sumber: semua rule-provider dan icon grup sekarang menunjuk ke `https://github.com/nexterade/hikari-clash` (branch `main`). Dulu ruleset ada di `nexterade/crispy-funicular` dan icon di `nexterade/Hikari-SC` (branch `master`). v0.3–v0.7 tetap menunjuk ke repo lama. *Catatan: URL icon di v0.8 memakai branch `main` dan ternyata tidak valid — diperbaiki di v0.9 (branch `master`).*

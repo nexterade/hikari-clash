@@ -33,7 +33,8 @@ class Paths(unittest.TestCase):
         self.assertIn("config_v0.6.yaml", masters)          # v0.6 juga tidak ditimpa
         self.assertIn("config_v0.7.yaml", masters)          # v0.7 juga tidak ditimpa
         self.assertIn("config_v0.8.yaml", masters)          # v0.8 juga tidak ditimpa
-        self.assertEqual(masters[-1], "config_v0.9.yaml")
+        self.assertIn("config_v0.9.yaml", masters)          # v0.9 juga tidak ditimpa
+        self.assertEqual(masters[-1], "config_v1.0.yaml")
         self.assertEqual([f for f in os.listdir(ROOT) if f.startswith("config-template")], [])
 
 
@@ -519,20 +520,20 @@ class TemplateV09(unittest.TestCase):
         self.v08 = h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.8.yaml"))
         self.v09 = h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.9.yaml"))
 
-    def test_icons_master_rulesets_main(self):
+    def test_icons_and_rulesets_master(self):
         cfg = self.yaml.safe_load(self.v09)
         icons = [g["icon"] for g in cfg["proxy-groups"] if g.get("icon")]
         self.assertGreaterEqual(len(icons), 7)
         for u in icons:
             self.assertRegex(u, r"^https://raw\.githubusercontent\.com/nexterade/hikari-clash/refs/heads/master/icon/[0-9a-f]+\.png$")
         for v in cfg["rule-providers"].values():
-            self.assertIn("nexterade/hikari-clash/refs/heads/main/ruleset/", v["url"])
-        self.assertNotIn("refs/heads/main/icon/", self.v09.split("proxy-groups:", 1)[1])
+            self.assertIn("nexterade/hikari-clash/refs/heads/master/ruleset/", v["url"])
+        self.assertNotIn("refs/heads/main/", self.v09.split("proxy-groups:", 1)[1])
 
-    def test_v09_differs_from_v08_only_in_dns_and_icon_branch(self):
+    def test_v09_differs_from_v08_only_in_dns_and_branch(self):
         a, b = self.yaml.safe_load(self.v08), self.yaml.safe_load(self.v09)
         a["dns"], b["dns"] = {}, {}
-        norm = lambda s: s.replace("refs/heads/main/icon/", "refs/heads/master/icon/")
+        norm = lambda s: s.replace("refs/heads/main/", "refs/heads/master/")
         self.assertEqual(norm(self.yaml.safe_dump(a, allow_unicode=True)), norm(self.yaml.safe_dump(b, allow_unicode=True)))
 
     def test_v08_untouched(self):
@@ -636,3 +637,113 @@ class StunAndLegacy(unittest.TestCase):
         self.assertEqual(r("udp://a.com:5050"), "G1")
         self.assertEqual(r("tcp://a.com:5050"), "G3")
         self.assertEqual(r("tcp://a.com:8080"), "G2")
+
+
+class TemplateV10(unittest.TestCase):
+    """Template v1.0: group baru (Subscription, Free node), provider baru, nama group/provider berubah."""
+
+    def setUp(self):
+        import yaml
+        self.yaml = yaml
+        self.text = h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v1.0.yaml"))
+        self.cfg = yaml.safe_load(self.text)
+        self.v09 = yaml.safe_load(h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v0.9.yaml")))
+
+    def test_version_marker(self):
+        self.assertEqual(h.template_version(os.path.join(h.TEMPLATE_DIR, "config_v1.0.yaml")), "1.0")
+
+    def test_new_groups_and_providers(self):
+        names = [g["name"] for g in self.cfg["proxy-groups"]]
+        for n in ("🥪 Subscription", "🛹 Free node"):
+            self.assertIn(n, names)
+        self.assertEqual(set(self.cfg["proxy-providers"]),
+                         {"🗳️ Active", "📅 Trial", "📖 Free node", "🍞 Subscription"})
+        self.assertEqual(self.cfg["proxy-providers"]["🍞 Subscription"]["type"], "http")
+        self.assertEqual(self.cfg["proxy-providers"]["📖 Free node"]["type"], "file")
+
+    def test_inject_exposes_new_groups(self):
+        inject = next(g for g in self.cfg["proxy-groups"] if g["name"] == "🧩 Inject")
+        self.assertIn("🥪 Subscription", inject["proxies"])
+        self.assertIn("🛹 Free node", inject["proxies"])
+
+    def test_dns_and_rules_order_same_as_v09(self):
+        self.assertEqual(self.cfg["dns"], self.v09["dns"])
+        strip = lambda rules: [r.split(",")[0] + "," + r.split(",")[1] for r in rules]
+        self.assertEqual(strip(self.cfg["rules"]), strip(self.v09["rules"]))
+
+    def test_template_keys_not_platform_specific(self):
+        for k in ("tun", "find-process-mode", "geodata-mode", "experimental", "external-ui"):
+            self.assertNotIn(k, self.cfg)
+
+    def test_v09_untouched(self):
+        self.assertEqual({g["name"] for g in self.v09["proxy-groups"]} & {"🥪 Subscription", "🛹 Free node"}, set())
+
+    def test_builds_clean_all_platforms(self):
+        for plat in h.PLATFORMS:
+            cfg, _ = h.build_config(self.text, plat)
+            self.assertEqual(h.validate_config(cfg, plat), [], plat)
+            self.assertFalse([m for l, m in h.dns_leak_audit(cfg, plat) if l in ("LEAK", "WARN")])
+
+    def test_generate_creates_free_and_seeds_subs(self):
+        old = h.BASE_DIR
+        with tempfile.TemporaryDirectory() as d:
+            h.BASE_DIR = os.path.join(d, "hasil")
+            try:
+                node = h.convert_line(VLESS)
+                for plat, P in h.PLATFORMS.items():
+                    out, _, issues, error = h.setup_full_config([dict(node)], "active.yaml", plat)
+                    self.assertIsNone(error)
+                    self.assertEqual(issues, [], (plat, issues))
+                    pdir = os.path.join(out, P["proxy_dir"])
+                    self.assertEqual(sorted(os.listdir(pdir)), ["active.yaml", "free.yaml", "subs.yaml", "trial.yaml"])
+                    self.assertTrue(h.load_provider_nodes(os.path.join(pdir, "subs.yaml")))     # tersemai dari subscription.yaml
+                    self.assertEqual(h.load_provider_nodes(os.path.join(pdir, "free.yaml")), [])
+            finally:
+                h.BASE_DIR = old
+
+    def test_regenerate_keeps_user_free_and_ignores_free_subs(self):
+        old = h.BASE_DIR
+        with tempfile.TemporaryDirectory() as d:
+            h.BASE_DIR = os.path.join(d, "hasil")
+            try:
+                node = h.convert_line(VLESS)
+                out, *_ = h.setup_full_config([dict(node)], "active.yaml", "box")
+                free = os.path.join(out, "proxy", "free.yaml")
+                open(free, "w", encoding="utf-8").write("proxies: []\n# punya pengguna\n")
+                labels = [x[0] for x in h.stored_node_sources()]
+                self.assertEqual(labels, ["box/active.yaml"])                        # subs.yaml berisi 100 node tapi bukan sumber
+                h.setup_full_config([dict(node)], "active.yaml", "box")
+                self.assertIn("punya pengguna", open(free, encoding="utf-8").read())  # tidak ditimpa
+            finally:
+                h.BASE_DIR = old
+
+    def test_offline_mode_converts_proxy_providers(self):
+        for plat in h.PLATFORMS:
+            cfg, notes = h.build_config(self.text, plat, provider_mode="offline")
+            self.assertTrue(all(p["type"] == "file" for p in cfg["proxy-providers"].values()), plat)
+            self.assertTrue(all("url" not in p for p in cfg["proxy-providers"].values()))
+            self.assertTrue(any("proxy-provider" in n for n in notes))
+
+    def test_offline_generate_has_no_missing_files(self):
+        old = h.BASE_DIR
+        with tempfile.TemporaryDirectory() as d:
+            h.BASE_DIR = os.path.join(d, "hasil")
+            try:
+                node = h.convert_line(VLESS)
+                for plat in h.PLATFORMS:
+                    _, _, issues, error = h.setup_full_config([dict(node)], "active.yaml", plat, provider_mode="offline")
+                    self.assertIsNone(error)
+                    self.assertEqual(issues, [], (plat, issues))
+            finally:
+                h.BASE_DIR = old
+
+    def test_subscription_yaml_valid(self):
+        data = self.yaml.safe_load(h.read_text(h.SUBSCRIPTION_SOURCE))
+        proxies = data["proxies"]
+        self.assertTrue(proxies)
+        names = [p["name"] for p in proxies]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertFalse(set(names) & {g["name"] for g in self.cfg["proxy-groups"]})
+        for p in proxies:
+            self.assertTrue(p.get("server") and p.get("port") and p.get("type"))
+

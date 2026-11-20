@@ -34,6 +34,9 @@ if SCRIPT_DIR not in sys.path:          # supaya banner.py / mrs_codec.py / node
 
 BASE_DIR = os.path.join(SCRIPT_DIR, "hasil")
 RULESET_SOURCE = os.path.join(SCRIPT_DIR, "ruleset")
+SUBSCRIPTION_SOURCE = os.path.join(SCRIPT_DIR, "subscription.yaml")   # node gratis (v1.0): dipakai sebagai cache awal subs.yaml
+SEED_FILES = {"subs.yaml": SUBSCRIPTION_SOURCE}                      # file provider yang disemai dari repo saat generate
+USER_NODE_FILES = ("active.yaml", "trial.yaml")                      # file node milik pengguna; free.yaml/subs.yaml bukan sumber regenerate
 TEMPLATE_DIR = os.path.join(SCRIPT_DIR, "template")
 TEMPLATE_PATH = os.path.join(TEMPLATE_DIR, "template.yaml")  # working copy (boleh diedit lewat menu)
 TEMPLATE_GLOB = "config_v*.yaml"                             # master di template/; dipakai kalau template.yaml belum ada
@@ -44,7 +47,8 @@ DEFAULT_SKIP_CERT_VERIFY = True
 
 EMOJI_PATH = os.path.join(SCRIPT_DIR, "emoji.json")        # daftar emoji nama node (bisa diedit lewat menu)
 # Daftar bawaan = isi emoji.json bawaan repo (dipakai kalau file hilang / rusak / di-Reset lewat menu).
-# Sengaja tanpa emoji yang dipakai nama group di template (🧩 🛸 👒 🌳 💤 💕 🍪 🪼 🎮 ✂️ 🐬).
+# Sengaja tanpa emoji yang dipakai nama group di template (🧩 🛸 👒 🌳 💤 💕 🍪 🪼 🥪 🛹 🎮 ✂️ 🐬).
+# (🍞 tetap ada: di v1.0 hanya dipakai nama proxy-provider, bukan nama group/proxy, jadi tidak bentrok.)
 DEFAULT_EMOJIS = ["🦊", "🎿", "💟", "🩻", "💭", "🔮", "🐠", "🍂", "🐣", "🧢", "🪭",
                   "🍞", "☕", "🧊", "🍕", "🍟", "🛋️", "🏙️", "🌃", "🌠", "🌌", "⛱️"]
 
@@ -743,6 +747,15 @@ def build_config(tpl_text, platform, provider_mode="template", secret_mode="temp
                     prov.pop(k, None)
                 n += 1
         notes.append(f"mode offline: {n} rule-provider http -> file (tanpa update otomatis)")
+        m = 0
+        for prov in (cfg.get("proxy-providers") or {}).values():
+            if isinstance(prov, dict) and prov.get("type") == "http":
+                prov["type"] = "file"
+                for k in ("url", "interval", "proxy"):
+                    prov.pop(k, None)
+                m += 1
+        if m:
+            notes.append(f"mode offline: {m} proxy-provider http -> file (node gratis tidak di-update otomatis; isi dari subscription.yaml)")
 
     if secret_mode == "random":
         cfg["secret"] = secrets.token_urlsafe(9)
@@ -1065,6 +1078,24 @@ def setup_full_config(proxies, target_name, platform, provider_mode="template", 
             with open(other, "w", encoding="utf-8") as f:
                 f.write("proxies: []\n")
 
+        # provider bawaan template v1.0: free.yaml (type file, diisi manual) wajib ada supaya core tidak gagal start;
+        # subs.yaml (type http) disemai dari subscription.yaml repo sebagai cache awal. File yang sudah ada tidak ditimpa.
+        for pv in (cfg.get("proxy-providers") or {}).values():
+            if not isinstance(pv, dict) or not isinstance(pv.get("path"), str):
+                continue
+            fname = os.path.basename(pv["path"])
+            if fname in USER_NODE_FILES:
+                continue
+            dest = os.path.join(proxy_dir, fname)
+            if os.path.exists(dest):
+                continue
+            seed = SEED_FILES.get(fname)
+            if seed and os.path.isfile(seed):
+                shutil.copyfile(seed, dest)
+            elif pv.get("type") == "file":
+                with open(dest, "w", encoding="utf-8") as f:
+                    f.write("proxies: []\n")
+
         target_rules = os.path.join(out_dir, P["rule_dir"])
         if os.path.exists(target_rules):
             shutil.rmtree(target_rules)
@@ -1282,9 +1313,11 @@ def stored_node_sources():
     """Provider hasil generate yang berisi node → list[(label, path, pid, target_name, nodes)]."""
     out = []
     for label, fn in provider_files():
+        pid, name = label.split("/", 1)
+        if name not in USER_NODE_FILES:      # free.yaml / subs.yaml bukan hasil convert pengguna
+            continue
         nodes = load_provider_nodes(fn)
         if nodes:
-            pid, name = label.split("/", 1)
             out.append((label, fn, pid, name, nodes))
     return out
 
