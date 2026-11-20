@@ -44,6 +44,9 @@ USER_NODE_FILES = ("active.yaml", "trial.yaml")                      # file node
 TEMPLATE_DIR = os.path.join(SCRIPT_DIR, "template")
 TEMPLATE_PATH = os.path.join(TEMPLATE_DIR, "template.yaml")  # working copy (boleh diedit lewat menu)
 TEMPLATE_GLOB = "config_v*.yaml"                             # master di template/; dipakai kalau template.yaml belum ada
+SNIFFER_TEMPLATE = os.path.join(TEMPLATE_DIR, "sniffer_only.yaml")   # config pengintai: tanpa node, semua DIRECT (menu Misc > Sniffer Only)
+SNIFFER_OUT_DIR = os.path.join(BASE_DIR, "sniffer")                 # hasil/sniffer/<platform>/config.yaml + cache CIDR CDN
+SNIFFER_ASN_URL = "https://github.com/xishang0128/geoip/releases/download/latest/GeoLite2-ASN.mmdb"
 
 # node dari link biasanya pakai bug-host/SNI custom -> cert tidak cocok.
 # Kalau link eksplisit bilang allowInsecure=0 maka dihormati.
@@ -2549,6 +2552,175 @@ def feature_misc_route():
             warn(f"provider {name}: {why}")
 
 
+# ---------- Sniffer Only ----------
+def build_sniffer_config(platform, with_asn=False, secret_mode="template", template_path=None):
+    """Config pengintai dari template/sniffer_only.yaml, disesuaikan per platform. Return (cfg, notes).
+    Tanpa profil ISP (kuota reguler) dan tanpa provider. geodata-mode dipaksa false: GeoIP di /connections
+    hanya terisi di mode mmdb."""
+    cfg, notes = build_config(read_text(template_path or SNIFFER_TEMPLATE), platform,
+                              secret_mode=secret_mode, isp="none")
+    cfg["geodata-mode"] = False
+    if with_asn:
+        cfg.setdefault("geox-url", {})["asn"] = SNIFFER_ASN_URL
+        rules = cfg.setdefault("rules", [])
+        rules.insert(1 if rules and str(rules[0]).startswith("GEOIP,ZZ") else 0, "IP-ASN,0,DIRECT")
+        notes.append("ASN aktif: core akan mengunduh GeoLite2-ASN.mmdb (kuota reguler) saat start")
+    return cfg, notes
+
+
+def write_sniffer_config(platform, with_asn=False, secret_mode="template", out_root=None):
+    """Tulis hasil/sniffer/<platform>/config.yaml. Return (path, issues, notes)."""
+    cfg, notes = build_sniffer_config(platform, with_asn, secret_mode)
+    out_dir = os.path.join(out_root or SNIFFER_OUT_DIR, platform)
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, "config.yaml")
+    issues = validate_config(cfg, platform, out_dir)
+    if os.path.exists(path):
+        backup_file(path)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(render_config(cfg, platform, "(sniffer only)"))
+    return path, issues, notes
+
+
+SNIFFER_INSTALL_HINT = {
+    "box": "salin config.yaml ke /data/adb/box/clash/  (cadangkan config lama dulu)",
+    "nikki": "salin config.yaml ke /etc/nikki/profiles/  (tanpa folder proxy/ruleset)",
+    "openclash": "salin config.yaml ke /etc/openclash/config/  (tanpa folder provider)",
+}
+
+
+def _pick_platform(default="b"):
+    print(f"  {C.CYAN}[B]{C.RESET} Box   {C.CYAN}[N]{C.RESET} Nikki   {C.CYAN}[O]{C.RESET} OpenClash")
+    key = ask(f"{C.YELLOW}Platform (Enter={default.upper()}) ❯{C.RESET} ").strip().lower() or default
+    return {"b": "box", "n": "nikki", "o": "openclash"}.get(key)
+
+
+def _sniffer_generate():
+    clear_screen(); banner("MISC"); section("Sniffer Only — Generate Config")
+    if not os.path.isfile(SNIFFER_TEMPLATE):
+        err(f"Template tidak ditemukan: {os.path.relpath(SNIFFER_TEMPLATE, SCRIPT_DIR)}"); pause(); return
+    print(f"  {C.DIM}Tanpa node, semua trafik DIRECT lewat kuota reguler. Hanya mengintip koneksi.{C.RESET}\n")
+    plat = _pick_platform()
+    if not plat:
+        err("Pilihan tidak valid."); time.sleep(1); return
+    print(f"\n  {C.DIM}ASN = nama pemilik IP (mis. AS13335 Cloudflare). Butuh GeoLite2-ASN.mmdb yang diunduh core saat start.{C.RESET}")
+    with_asn = ask(f"{C.YELLOW}Aktifkan ASN? (y/N) ❯{C.RESET} ").strip().lower() == "y"
+    rnd = ask(f"{C.YELLOW}Secret acak? (y/N, N = 'hikari') ❯{C.RESET} ").strip().lower() == "y"
+    spinner("Membangun config", 0.4)
+    try:
+        path, issues, notes = write_sniffer_config(plat, with_asn, "random" if rnd else "template")
+    except Exception as e:
+        err(f"Gagal membuat config: {type(e).__name__}: {e}"); pause(); return
+    ok(f"Config {PLATFORMS[plat]['label']} → {os.path.relpath(path, SCRIPT_DIR)}")
+    for n in notes:
+        print(f"  {C.DIM}· {n}{C.RESET}")
+    print_issues(issues)
+    print(f"\n  {C.BOLD}Pasang:{C.RESET} {SNIFFER_INSTALL_HINT[plat]}")
+    print(f"  {C.DIM}Lalu jalankan core, buka aplikasi yang mau diintip, dan pakai menu [2] Inspector.{C.RESET}")
+    print(f"  {C.DIM}Nikki/OpenClash menimpa port/dns/controller dari LuCI; GeoIP butuh mode mmdb (bukan geoip.dat).{C.RESET}")
+    pause()
+
+
+def _sniffer_controller_defaults():
+    """Alamat & secret dari config sniffer yang pernah digenerate; kalau tidak ada, default template."""
+    for pid in PLATFORMS:
+        cp = os.path.join(SNIFFER_OUT_DIR, pid, "config.yaml")
+        if os.path.isfile(cp):
+            try:
+                cfg = yaml.safe_load(read_text(cp)) or {}
+                return str(cfg.get("external-controller") or "127.0.0.1:9090"), str(cfg.get("secret") or "")
+            except (OSError, yaml.YAMLError):
+                break
+    return "127.0.0.1:9090", "hikari"
+
+
+def _sniffer_inspect():
+    sn = _import_tool("sniffer")
+    if not sn:
+        pause(); return
+    clear_screen(); banner("MISC"); section("Sniffer Only — Inspector Live")
+    addr, secret = _sniffer_controller_defaults()
+    print(f"  {C.DIM}Membaca /connections dari core yang SEDANG jalan dengan config sniffer.{C.RESET}\n")
+    a = ask(f"  Controller (Enter = {addr}) ❯ ").strip() or addr
+    sec = ask(f"  Secret     (Enter = {secret or 'kosong'}) ❯ ").strip() or secret
+    detail = ask(f"  Tampilan   [1] ringkas  [2] detail (Enter=2) ❯ ").strip() != "1"
+    base = sn.controller_url(a)
+    ranges = sn.CdnRanges(SNIFFER_OUT_DIR)
+    if not ranges.cloudfront:
+        warn("Daftar CIDR CloudFront belum ada → CloudFront hanya dikenali dari nama *.cloudfront.net (menu [3] untuk mengunduh).")
+    try:
+        first = sn.fetch_connections(base, sec)      # snapshot pertama ikut diproses, tidak dibuang
+    except sn.SnifferError as e:
+        err(str(e)); pause(); return
+    tracker = sn.Tracker(ranges)
+    print(f"\n  {C.GREEN}Terhubung{C.RESET} ke {base}. Buka aplikasi/situs yang mau diintip. {C.DIM}Ctrl+C untuk berhenti.{C.RESET}\n{sep(50)}")
+    try:
+        while True:
+            try:
+                conns, first = (first, None) if first is not None else (sn.fetch_connections(base, sec), None)
+                new = tracker.update(conns)
+            except sn.SnifferError as e:
+                warn(f"{e} — mencoba lagi...")
+                time.sleep(3); continue
+            for row in new:
+                if detail:
+                    for ln in sn.fmt_detail(row):
+                        print(ln)
+                    print(f"  {C.DIM}{'·' * 30}{C.RESET}")
+                else:
+                    print(sn.fmt_compact(row))
+            time.sleep(2)
+    except KeyboardInterrupt:
+        print()
+    rows = tracker.all()
+    print(f"{sep(50)}\n{C.BOLD}Ringkasan sesi{C.RESET}")
+    for ln in sn.summary_lines(rows):
+        print(f"  {ln}")
+    if not rows:
+        pause(); return
+    if ask(f"\n{C.YELLOW}Simpan ke hasil/sniffer/? (y/N) ❯{C.RESET} ").strip().lower() == "y":
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        try:
+            p1 = sn.export_csv(rows, os.path.join(SNIFFER_OUT_DIR, f"koneksi_{stamp}.csv"))
+            p2 = sn.export_json(rows, os.path.join(SNIFFER_OUT_DIR, f"koneksi_{stamp}.json"))
+            ok(f"{os.path.relpath(p1, SCRIPT_DIR)}"); ok(f"{os.path.relpath(p2, SCRIPT_DIR)}")
+        except OSError as e:
+            err(f"Gagal menyimpan: {e}")
+    pause()
+
+
+def _sniffer_update_cidr():
+    sn = _import_tool("sniffer")
+    if not sn:
+        pause(); return
+    clear_screen(); banner("MISC"); section("Sniffer Only — Update CIDR CDN")
+    print(f"  {C.DIM}Mengunduh daftar resmi Cloudflare (cloudflare.com/ips-v4, ips-v6) dan CloudFront (AWS ip-ranges.json).")
+    print(f"  Memakai kuota reguler: ip-ranges.json berukuran beberapa MB. Hasil di-cache di hasil/sniffer/.{C.RESET}\n")
+    if ask(f"{C.YELLOW}Lanjut? (y/N) ❯{C.RESET} ").strip().lower() != "y":
+        return
+    spinner("Mengunduh", 0.4)
+    for name, n, e in sn.update_cdn_ranges(SNIFFER_OUT_DIR):
+        (err if e else ok)(f"{name}: {e}" if e else f"{name}: {n} CIDR")
+    pause()
+
+
+def feature_misc_sniffer():
+    while True:
+        clear_screen(); banner("MISC"); section("Sniffer Only")
+        print(f"  {C.CYAN}[1]{C.RESET} Generate Config          {C.DIM}(tanpa node, semua DIRECT){C.RESET}")
+        print(f"  {C.CYAN}[2]{C.RESET} Inspector Live           {C.DIM}(detail tiap koneksi dari /connections){C.RESET}")
+        print(f"  {C.CYAN}[3]{C.RESET} Update CIDR CDN          {C.DIM}(Cloudflare + CloudFront, resmi){C.RESET}")
+        print(f"  {C.CYAN}[0]{C.RESET} Kembali\n{sep(50)}")
+        pilih = ask(f"{C.YELLOW}Pilih menu ❯{C.RESET} ").strip()
+        if pilih == "0":
+            return
+        elif pilih == "1": _sniffer_generate()
+        elif pilih == "2": _sniffer_inspect()
+        elif pilih == "3": _sniffer_update_cidr()
+        else:
+            err("Pilihan tidak valid."); time.sleep(0.8)
+
+
 # ---------- Info ----------
 def feature_misc_info():
     clear_screen(); banner("MISC"); section("Info Lingkungan")
@@ -2575,7 +2747,8 @@ def feature_misc_menu():
         print(f"  {C.CYAN}[2]{C.RESET} Config Tester            {C.DIM}(validator + mihomo -t bila core ada){C.RESET}")
         print(f"  {C.CYAN}[3]{C.RESET} Proxy Node Tester        {C.DIM}(offline atau via core){C.RESET}")
         print(f"  {C.CYAN}[4]{C.RESET} Route Tester             {C.DIM}(domain/IP ➜ rule & group){C.RESET}")
-        print(f"  {C.CYAN}[5]{C.RESET} Info Lingkungan")
+        print(f"  {C.CYAN}[5]{C.RESET} Sniffer Only             {C.DIM}(config pengintai koneksi + inspector){C.RESET}")
+        print(f"  {C.CYAN}[6]{C.RESET} Info Lingkungan")
         print(f"  {C.CYAN}[0]{C.RESET} Kembali ke Menu Utama\n{sep(50)}")
         pilih = ask(f"{C.YELLOW}Pilih menu ❯{C.RESET} ").strip()
         if pilih == "0":
@@ -2584,7 +2757,8 @@ def feature_misc_menu():
         elif pilih == "2": feature_misc_config()
         elif pilih == "3": feature_misc_nodes()
         elif pilih == "4": feature_misc_route()
-        elif pilih == "5": feature_misc_info()
+        elif pilih == "5": feature_misc_sniffer()
+        elif pilih == "6": feature_misc_info()
         else:
             err("Pilihan tidak valid."); time.sleep(0.8)
 

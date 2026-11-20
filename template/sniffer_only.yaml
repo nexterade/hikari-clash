@@ -1,0 +1,150 @@
+# =====================================================
+# HIKARI /.CLASH — Sniffer Only v1.0  (Box / Nikki / OpenClash)
+# template-version: sniffer-1.0
+# Core : Mihomo (Meta) >= 1.19
+#
+# Tujuan : MENGINTIP koneksi, bukan menerowongnya. Dipakai dari menu
+#          Miscellaneous > Sniffer Only (generate config + inspector live).
+#
+# Ciri   :
+#   - TANPA node, TANPA proxy-provider, TANPA rule-provider. Semua trafik DIRECT
+#     lewat kuota reguler. Tidak ada bug-host / SNI custom / DNS khusus ISP.
+#   - Sniffer menyala di TLS/HTTP/QUIC. override-destination: false supaya
+#     IP tujuan asli dan host hasil sniff TETAP TERPISAH di /connections
+#     (destinationIP  vs  sniffHost  vs  host).
+#   - dns.enhanced-mode: redir-host (bukan fake-ip) supaya destinationIP berisi
+#     IP sungguhan, bukan 198.18.x.x.
+#   - Group di bawah hanyalah LABEL (isinya cuma DIRECT). Rule menempelkan label
+#     ke tiap koneksi, jadi dashboard (MetaCubeXD / Zashboard / Yacd) langsung
+#     menampilkan kolom chain: "🔶 Cloudflare", "🟧 CloudFront", dst.
+#   - GeoIP negara diisi Mihomo ke metadata.destinationGeoIP lewat rule probe
+#     "GEOIP,ZZ,DIRECT" (negara ZZ tidak pernah cocok; efek sampingnya mengisi
+#     cache GeoIP). Itu hanya jalan di mode mmdb, jadi geodata-mode HARUS false.
+#
+# Batasan (jujur) :
+#   - Cloudflare dikenali dari daftar CIDR resmi (cloudflare.com/ips-v4 & ips-v6)
+#     yang ditulis inline di bawah. Cek berkala kalau daftarnya berubah.
+#   - CloudFront di config ini hanya dikenali dari nama *.cloudfront.net.
+#     Pengenalan lewat IP dilakukan inspector (daftar resmi AWS, menu
+#     Sniffer Only > Update daftar CIDR).
+#   - Sniffer hanya melihat SNI / Host header / QUIC SNI. Trafik terenkripsi
+#     tanpa SNI (ECH, protokol non-HTTP) tampil sebagai IP murni.
+#   - Tidak ada tun di template; Box/Nikki/OpenClash mengelola intersepsi sendiri.
+#
+# Catatan: Nikki/OpenClash biasanya menimpa port, dns, controller & secret dari
+# setting LuCI-nya sendiri; nilai di sini cuma default. Secret default 'hikari'.
+# =====================================================
+
+port: 7891
+socks-port: 7892
+redir-port: 9797
+mixed-port: 7890
+tproxy-port: 9898
+ipv6: false
+mode: rule
+log-level: info
+allow-lan: true
+bind-address: '*'
+external-controller: 127.0.0.1:9090
+secret: hikari
+unified-delay: true
+tcp-concurrent: true
+geodata-loader: memconservative
+geo-auto-update: false
+geox-url:
+  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat
+  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat
+  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb
+
+sniffer:
+  enable: true
+  override-destination: false
+  force-dns-mapping: true
+  parse-pure-ip: true
+  skip-dst-address:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 127.0.0.0/8
+    - 224.0.0.0/4
+  sniff:
+    TLS:
+      ports:
+        - 443
+        - 8443
+    HTTP:
+      ports:
+        - 80
+        - 8080-8880
+      override-destination: false
+    QUIC:
+      ports:
+        - 443
+        - 8443
+
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  cache-algorithm: arc
+  ipv6: false
+  use-hosts: true
+  enhanced-mode: redir-host
+  respect-rules: false
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  nameserver:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+
+proxy-groups:
+  - name: 🏠 LAN
+    type: select
+    proxies:
+      - DIRECT
+  - name: 🧭 DNS
+    type: select
+    proxies:
+      - DIRECT
+  - name: 🔶 Cloudflare
+    type: select
+    proxies:
+      - DIRECT
+  - name: 🟧 CloudFront
+    type: select
+    proxies:
+      - DIRECT
+  - name: 🔍 Lainnya
+    type: select
+    proxies:
+      - DIRECT
+
+rules:
+  - GEOIP,ZZ,DIRECT
+  - GEOIP,LAN,🏠 LAN
+  - DST-PORT,53,🧭 DNS
+  - DST-PORT,853,🧭 DNS
+  - DOMAIN-SUFFIX,cloudfront.net,🟧 CloudFront
+  - IP-CIDR,173.245.48.0/20,🔶 Cloudflare
+  - IP-CIDR,103.21.244.0/22,🔶 Cloudflare
+  - IP-CIDR,103.22.200.0/22,🔶 Cloudflare
+  - IP-CIDR,103.31.4.0/22,🔶 Cloudflare
+  - IP-CIDR,141.101.64.0/18,🔶 Cloudflare
+  - IP-CIDR,108.162.192.0/18,🔶 Cloudflare
+  - IP-CIDR,190.93.240.0/20,🔶 Cloudflare
+  - IP-CIDR,188.114.96.0/20,🔶 Cloudflare
+  - IP-CIDR,197.234.240.0/22,🔶 Cloudflare
+  - IP-CIDR,198.41.128.0/17,🔶 Cloudflare
+  - IP-CIDR,162.158.0.0/15,🔶 Cloudflare
+  - IP-CIDR,104.16.0.0/13,🔶 Cloudflare
+  - IP-CIDR,104.24.0.0/14,🔶 Cloudflare
+  - IP-CIDR,172.64.0.0/13,🔶 Cloudflare
+  - IP-CIDR,131.0.72.0/22,🔶 Cloudflare
+  - IP-CIDR6,2400:cb00::/32,🔶 Cloudflare
+  - IP-CIDR6,2606:4700::/32,🔶 Cloudflare
+  - IP-CIDR6,2803:f800::/32,🔶 Cloudflare
+  - IP-CIDR6,2405:b500::/32,🔶 Cloudflare
+  - IP-CIDR6,2405:8100::/32,🔶 Cloudflare
+  - IP-CIDR6,2a06:98c0::/29,🔶 Cloudflare
+  - IP-CIDR6,2c0f:f248::/32,🔶 Cloudflare
+  - MATCH,🔍 Lainnya

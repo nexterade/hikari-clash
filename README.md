@@ -26,6 +26,7 @@ satu template → siap pakai di **Box for Root**, **Nikki**, dan **OpenClash**
 - [Struktur Folder](#-struktur-folder)
 - [Cara Pakai](#-cara-pakai)
 - [Miscellaneous (Menu 5)](#-miscellaneous-menu-5)
+- [Sniffer Only (Menu 5 → 5)](#-sniffer-only-menu-5--5)
 - [Memasang Hasil ke Perangkat](#-memasang-hasil-ke-perangkat)
 - [Perbedaan Output per Platform](#-perbedaan-output-per-platform)
 - [Isi Template & Group](#-isi-template--group)
@@ -62,7 +63,7 @@ Ngatur config Mihomo di tiga platform itu ribet: port beda, path beda, fitur And
 | ♻️ **Regenerate** | Ubah template/DNS/profil ISP lalu bangun ulang config dari node yang sudah tersimpan — **tanpa paste URI lagi** (`1 → 3`) |
 | ➕ **Replace / Append** | Timpa atau tambah node ke provider yang sudah ada |
 | 🌐 **Menu DNS** | Preset (Cloudflare+Google, Quad9, NextDNS, AdGuard, [BebasDNS](https://github.com/bebasid/bebasdns)) dengan pilihan **DoH / DoT / DoQ**, atau **custom manual** (IP, DoH, DoH3, DoT, DoQ, UDP/TCP, `system`, `dhcp://`, akhiran `#proxy`) per field — divalidasi, ada preview diff, format & komentar template dijaga |
-| 🧪 **Miscellaneous** | Converter rule-provider `.mrs` ⇄ `.yaml`/`.txt`, tester config (+ `mihomo -t`), tester node (offline / via core), tester route — lihat [menu 5](#-miscellaneous-menu-5) |
+| 🧪 **Miscellaneous** | Converter rule-provider `.mrs` ⇄ `.yaml`/`.txt`, tester config (+ `mihomo -t`), tester node (offline / via core), tester route, **sniffer only** (config pengintai koneksi + inspector) — lihat [menu 5](#-miscellaneous-menu-5) |
 | 🛡️ **Aman** | Auto-backup `.bak`, input divalidasi, `PermissionError` ditangani, pilihan secret dashboard (default `hikari` / acak) |
 
 ---
@@ -151,7 +152,9 @@ hikari-clash/
 ├── src/                         # Sumber subscription untuk sub2yaml: barry-far.txt, 0xRadikal.txt (update lewat menu [8] sub2yaml)
 ├── nodetest.py                  # Tester node proxy                  (menu 5)
 ├── routetest.py                 # Tester route domain/IP             (menu 5)
+├── sniffer.py                   # Inspector koneksi (Sniffer Only)   (menu 5)
 ├── template/
+│   ├── sniffer_only.yaml        # Config pengintai: tanpa node, semua DIRECT (bukan template konversi; tidak ikut glob config_v*.yaml)
 │   ├── config_v1.0.yaml         # Template master terbaru (netral, + group 🥪 Subscription & 🛹 Free node, provider node gratis)
 │   ├── config_v0.9.yaml         # Template master lama (dibiarkan utuh)
 │   ├── config_v0.8.yaml         # Template master lama (dibiarkan utuh)
@@ -196,7 +199,7 @@ python hikari_converter.py
 [2] Edit Configuration      ← port & secret, ganti template, DNS, emoji node
 [3] Check Status            ← template, provider, config yang sudah jadi
 [4] Validasi / Audit Config ← cek template untuk ketiga platform
-[5] Miscellaneous           ← converter .mrs, tester config / node / route
+[5] Miscellaneous           ← converter .mrs, tester config / node / route, sniffer only
 ────────────────────────────
 [Q] Exit
 ```
@@ -271,7 +274,7 @@ Menu `1 → 2`: paste YAML, atau pilih file provider hasil generate. Hasil bisa 
 
 ---
 
-## 🧪 Miscellaneous (Menu 6)
+## 🧪 Miscellaneous (Menu 5)
 
 Kumpulan tools tambahan. Semuanya offline; yang butuh sesuatu dari luar (core Mihomo, zstd) bilang jelas kalau belum ada.
 
@@ -281,7 +284,39 @@ Kumpulan tools tambahan. Semuanya offline; yang butuh sesuatu dari luar (core Mi
 | **2. Config Tester** | Validator internal untuk config hasil generate + `mihomo -t` kalau core ketemu (PATH, lokasi umum Box/OpenClash, atau env `HIKARI_MIHOMO`) | Juga menjalankan **audit DNS leak statis** (DNS ISP / tak terenkripsi di nameserver & fallback, respect-rules, fake-ip, IPv6). Tes core untuk Nikki dilewati di luar perangkat Nikki (path-nya absolut `/etc/nikki/run`) |
 | **3. Proxy Node Tester** | **Offline**: DNS → TCP → TLS ke server node. **Via core**: delay sungguhan lewat `external-controller` | Offline hanya menjawab "server terjangkau dari jaringan ini?", bukan "proxy tembus ke internet?". Node UDP (hysteria/tuic) dilewati. Node hidup bisa disimpan ke `hasil/nodes_ok_*.yaml` |
 | **4. Route Tester** | Ketik domain/IP (`chatgpt.com`, `1.1.1.1:443`, `udp://x.com:443`) → rule & group yang kena | Tanpa DNS lookup; rule `GEOIP`/`SRC-*`/`PROCESS-*` ditandai "tidak bisa dievaluasi", tidak ditebak |
-| **5. Info Lingkungan** | Versi Python/PyYAML, backend zstd, lokasi core, template aktif | Berguna untuk debugging |
+| **5. Sniffer Only** | Config pengintai tanpa node + inspector detail per koneksi — lihat [Sniffer Only](#-sniffer-only-menu-5--5) | Semua trafik DIRECT lewat kuota reguler |
+| **6. Info Lingkungan** | Versi Python/PyYAML, backend zstd, lokasi core, template aktif | Berguna untuk debugging |
+
+---
+
+## 🔎 Sniffer Only (Menu 5 → 5)
+
+Config khusus **mengintip koneksi**, bukan menerowongnya: **tanpa node, tanpa provider, semua trafik DIRECT lewat kuota reguler** (tidak ada bug-host, SNI custom, atau DNS khusus ISP). Dipakai untuk melihat ke mana saja sebuah aplikasi/situs benar-benar terhubung.
+
+| Submenu | Fungsi |
+|---|---|
+| **1. Generate Config** | Bangun `hasil/sniffer/<platform>/config.yaml` dari `template/sniffer_only.yaml` untuk Box / Nikki / OpenClash (opsional: ASN, secret acak). Hanya `config.yaml` yang perlu disalin ke perangkat; folder provider tidak ada |
+| **2. Inspector Live** | Membaca `/connections` dari core yang sedang jalan, mencetak koneksi baru (mode ringkas atau detail), lalu ringkasan sesi dan ekspor CSV/JSON ke `hasil/sniffer/` |
+| **3. Update CIDR CDN** | Unduh daftar resmi Cloudflare (`cloudflare.com/ips-v4`, `ips-v6`) dan CloudFront (AWS `ip-ranges.json`, layanan `CLOUDFRONT`) ke cache lokal. Memakai kuota reguler, ukuran `ip-ranges.json` beberapa MB |
+
+**Data per koneksi:** alamat tujuan (IP:port), host hasil **sniff** (SNI/Host) dan host dari **DNS** (dipisah), subdomain, domain dasar, GeoIP negara, ASN (bila diaktifkan), CDN (Cloudflare / CloudFront) beserta **dasar deteksinya** (`rule` / `ip` / `host`), rule + chain, sumber, aplikasi (Box: nama package), dan trafik ↑/↓.
+
+**Cara kerja config:**
+
+| Setelan | Alasan |
+|---|---|
+| `sniffer.override-destination: false` | IP tujuan asli dan host hasil sniff tetap terpisah (`destinationIP` vs `sniffHost`) |
+| `dns.enhanced-mode: redir-host` | `destinationIP` berisi IP sungguhan, bukan `198.18.x.x` (fake-ip) |
+| `geodata-mode: false` + rule probe `GEOIP,ZZ,DIRECT` | Mihomo mengisi `destinationGeoIP` hanya di mode mmdb; negara `ZZ` tidak pernah cocok, jadi rule ini hanya mengisi cache GeoIP |
+| Group `🔶 Cloudflare`, `🟧 CloudFront`, `🏠 LAN`, `🧭 DNS`, `🔍 Lainnya` (isinya cuma `DIRECT`) | Label: dashboard (MetaCubeXD, Zashboard, Yacd) langsung menampilkan kolom chain tanpa inspector |
+
+**Batasan yang perlu diketahui:**
+- Cloudflare dikenali dari daftar CIDR inline di template; CloudFront di config hanya dari nama `*.cloudfront.net`. Pengenalan CloudFront lewat **IP** dilakukan inspector setelah submenu 3 dijalankan. Tebakan dari nama host (`workers.dev`, `pages.dev`, …) ditandai `dasar: host`, itu bukan bukti.
+- Sniffer hanya melihat SNI / Host header / QUIC SNI. Koneksi tanpa itu (ECH, protokol non-HTTP) tampil sebagai **IP murni**.
+- Subdomain dipecah dengan heuristik (daftar akhiran multi-label kecil seperti `co.id`), bukan Public Suffix List penuh.
+- GeoIP butuh mode mmdb dan file `country.mmdb`/`geoip.metadb` di core. ASN butuh `GeoLite2-ASN.mmdb`, diunduh core saat start kalau opsi ASN dipilih.
+- Nikki/OpenClash menimpa port, DNS, dan controller dari LuCI; pastikan di sana tidak memakai mode `geoip.dat` kalau ingin kolom GeoIP terisi.
+- Config **belum diuji dengan core Mihomo asli**; yang teruji: validator internal, struktur config, dan inspector terhadap controller tiruan. Config Tester (menu `5 → 2`) hanya memeriksa config utama, bukan config sniffer; uji dengan `mihomo -t -d <folder core> -f hasil/sniffer/<platform>/config.yaml` sebelum dipakai.
 
 ---
 
