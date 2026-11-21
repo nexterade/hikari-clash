@@ -215,3 +215,25 @@ Tindak lanjut temuan audit + permintaan pemilik proyek.
 - Screenshot di `docs/img/` masih menampilkan nama grup v1.0.
 
 **Susulan (2026-11-20) — 🗺️ Public.** `hidden: true` (tidak tampil di daftar group dashboard, tetap bisa dipakai sebagai anggota group lain). Dihapus dari 👾 Gaming & 💕 Plusplus; sekarang hanya dipilih lewat 🛠️ Keyring & 🐦 Free. Tipe group mihomo: `select`, `url-test`, `fallback`, `load-balance` (`relay` sudah dihapus).
+
+---
+
+## 8. Koreksi `skip-cert-verify` untuk SNI custom (2026-11-21)
+
+**Gejala:** semua node di `proxy/active.yaml` timeout (0 succeeded) di Nikki, padahal node yang sama jalan di DarkTunnel/HTTP Custom dan di YAML dari converter lain.
+
+**Akar masalah:** link berisi `insecure=0&allowInsecure=0` + SNI bug (`instagram.com`, `test-gateway.instagram.com`). `parse_vless` menghormati nilai itu → `skip-cert-verify: false` → Mihomo memverifikasi sertifikat server (untuk domain asli) terhadap SNI bug → handshake TLS gagal → timeout. Satu-satunya beda antara YAML yang jalan dan yang gagal adalah field ini (server, port, UUID, SNI, path, Host, service name identik). Direproduksi dengan `parse_vless` dan URI asli.
+
+| # | Sev. | Temuan | Perbaikan |
+|---|---|---|---|
+| K1 | 🔴 | `hikari_converter.py`: `allowInsecure=0`/`insecure=0` dihormati walau SNI custom → node mati (vless, trojan) | `fix_skip_verify()` memaksa `true` bila SNI ≠ `server` dan ≠ Host/host ws-h2-httpupgrade; node tanpa SNI bug tetap menghormati `0` |
+| K2 | 🔴 | `sub2yaml.py`: `apply_tls` hanya menulis `skip-cert-verify: true` jika link truthy; selain itu field kosong (default mihomo = verifikasi aktif) → node SNI bug terbaca **mati** di URL-test dan tidak masuk `free.yaml` | `fix_skip_verify()` dipanggil di `parse_all` (setelah transport/Host terisi) dan di `apply_overrides` (SNI/Host custom dari menu → `insecure(auto)`); pilihan eksplisit `insecure` pengguna tetap menang. Peringatan lama "SNI custom butuh --insecure" jadi informasi |
+| K3 | 🟠 | `active.yaml`/`trial.yaml` lama hasil generate masih `false` dan ikut dipakai saat Regenerate | `load_provider_nodes` memperbaiki node lama di memori; file tertulis benar saat regenerate/append berikutnya |
+| K4 | ⚪ | `parse_vmess` selalu `true` (tidak terpengaruh) | Tidak berubah fungsi, tetap lewat `fix_skip_verify` demi konsistensi |
+
+**Script lain diperiksa:** `nodetest.py`, `routetest.py`, `sniffer.py`, `banner.py`, `mrs_codec.py` tidak membaca/menulis `skip-cert-verify`; `nodetest.py` menguji lewat API controller core yang sedang jalan (tidak menyentuh field ini; hasilnya ikut benar karena node di core sudah benar).
+
+**Trade-off yang diketahui:** heuristik "SNI custom" juga memaksa `true` pada node CDN-fronting yang sertifikatnya sebenarnya valid untuk SNI-nya (server = IP, SNI = domain sendiri, Host berbeda). Dampaknya hanya verifikasi sertifikat dimatikan, konsisten dengan default proyek (`DEFAULT_SKIP_CERT_VERIFY = True`).
+
+**Tes:** kelas `SkipCertVerifySniCustom` di `tests/test_hikari.py` dan `tests/test_sub2yaml.py` (URI asli kasus ini, trojan, SNI = host tetap `false`, node lama di YAML, override menu, pilihan eksplisit pengguna).
+

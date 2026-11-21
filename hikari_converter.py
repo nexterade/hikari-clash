@@ -49,7 +49,8 @@ SNIFFER_OUT_DIR = os.path.join(BASE_DIR, "sniffer")                 # hasil/snif
 SNIFFER_ASN_URL = "https://github.com/xishang0128/geoip/releases/download/latest/GeoLite2-ASN.mmdb"
 
 # node dari link biasanya pakai bug-host/SNI custom -> cert tidak cocok.
-# Kalau link eksplisit bilang allowInsecure=0 maka dihormati.
+# Kalau link eksplisit bilang allowInsecure=0 maka dihormati — KECUALI node memakai SNI custom
+# (servername beda dari server & host): di kasus itu tetap dipaksa true (lihat fix_skip_verify).
 DEFAULT_SKIP_CERT_VERIFY = True
 
 EMOJI_PATH = os.path.join(SCRIPT_DIR, "emoji.json")        # daftar emoji nama node (bisa diedit lewat menu)
@@ -218,6 +219,37 @@ def _flag(value, default):
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
+def sni_is_custom(node):
+    """True kalau node TLS memakai SNI "bug" (servername beda dari server DAN dari header Host/host ws/h2).
+    Sertifikat server hampir pasti tidak cocok dengan SNI seperti itu."""
+    if not isinstance(node, dict) or not (node.get("tls") or node.get("type") == "trojan"):
+        return False
+    sni = str(node.get("servername") or node.get("sni") or "").strip().lower()
+    if not sni:
+        return False
+    names = {str(node.get("server") or "").strip().lower()}
+    ws = (node.get("ws-opts") or {}).get("headers") or {}
+    names.add(str(ws.get("Host") or ws.get("host") or "").strip().lower())
+    names.add(str((node.get("httpupgrade-opts") or {}).get("host") or "").strip().lower())
+    h2 = (node.get("h2-opts") or {}).get("host")
+    if isinstance(h2, list):
+        names.update(str(x).strip().lower() for x in h2)
+    elif h2:
+        names.add(str(h2).strip().lower())
+    names.discard("")
+    return sni not in names
+
+
+def fix_skip_verify(node):
+    """Paksa skip-cert-verify: true untuk node dengan SNI custom (lihat sni_is_custom), walau link/YAML
+    bilang false atau allowInsecure=0 — kalau tidak, handshake TLS gagal dan node cuma timeout.
+    Return True kalau ada yang diubah. Node dengan SNI = host/server tetap dihormati (verifikasi normal)."""
+    if isinstance(node, dict) and not node.get("skip-cert-verify") and sni_is_custom(node):
+        node["skip-cert-verify"] = True
+        return True
+    return False
+
+
 def _userinfo(p):
     return unquote(p.netloc.rpartition("@")[0])
 
@@ -296,6 +328,7 @@ def parse_vless(uri):
         node["reality-opts"] = {"public-key": q["pbk"], "short-id": q.get("sid", "")}
     _apply_transport(node, net, q.get("path", "/"), q.get("host") or (sni if net in ("ws", "httpupgrade") else ""),
                      q.get("serviceName", ""))
+    fix_skip_verify(node)
     return node
 
 
@@ -333,6 +366,7 @@ def parse_vmess(uri):
     path = d.get("path", "") or ""
     _apply_transport(node, net, path or "/", d.get("host") or (sni if net in ("ws", "httpupgrade", "h2") else ""),
                      path)
+    fix_skip_verify(node)
     return node
 
 
@@ -354,6 +388,7 @@ def parse_trojan(uri):
         node["client-fingerprint"] = q["fp"]
     _apply_transport(node, net, q.get("path", "/"), q.get("host") or (sni if net in ("ws", "httpupgrade") else ""),
                      q.get("serviceName", ""))
+    fix_skip_verify(node)
     return node
 
 
@@ -1060,7 +1095,10 @@ def load_provider_nodes(path):
         data = yaml.safe_load(read_text(path))
     except Exception:
         return []
-    return [x for x in (data or {}).get("proxies", []) or [] if isinstance(x, dict)] if isinstance(data, dict) else []
+    nodes = [x for x in (data or {}).get("proxies", []) or [] if isinstance(x, dict)] if isinstance(data, dict) else []
+    for n in nodes:
+        fix_skip_verify(n)   # node lama hasil generate versi sebelumnya bisa punya skip-cert-verify: false + SNI custom
+    return nodes
 
 
 def save_proxy_yaml(proxies, path):

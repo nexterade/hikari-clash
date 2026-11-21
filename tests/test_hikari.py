@@ -1019,3 +1019,49 @@ class MasterTemplatesClean(unittest.TestCase):
                 errs = [m for l, m in h.validate_config(cfg, plat) if l == "ERR"]
                 self.assertEqual(errs, [], (os.path.basename(path), plat))
 
+
+
+class SkipCertVerifySniCustom(unittest.TestCase):
+    """Regresi: link dengan allowInsecure=0/insecure=0 + SNI bug menghasilkan skip-cert-verify: false
+    -> handshake TLS gagal -> semua node timeout. SNI custom harus selalu true."""
+    GRPC = ("vless://a65c25f3-e050-4488-a968-76cdba48ea3d@id.vpnstore28.my.id:443?mode=gun&security=tls&encryption=none&insecure=0"
+            "&type=grpc&serviceName=vless&allowInsecure=0&sni=test-gateway.instagram.com#HIKARI%20GRPC")
+    WS = ("vless://a65c25f3-e050-4488-a968-76cdba48ea3d@id.vpnstore28.my.id:443?path=%2Fvless&security=tls&encryption=none&insecure=0"
+          "&host=id.vpnstore28.my.id&type=ws&allowInsecure=0&sni=instagram.com#HIKARI")
+    PLAIN = ("vless://a65c25f3-e050-4488-a968-76cdba48ea3d@id.vpnstore28.my.id:443?security=tls&insecure=0&allowInsecure=0&type=ws"
+             "&host=id.vpnstore28.my.id&path=%2Fvless&sni=id.vpnstore28.my.id#PLAIN")
+
+    def test_sni_bug_forced_true_even_if_link_says_zero(self):
+        for uri in (self.GRPC, self.WS):
+            self.assertIs(h.parse_vless(uri)["skip-cert-verify"], True, uri)
+
+    def test_sni_equal_to_host_still_honors_zero(self):
+        self.assertIs(h.parse_vless(self.PLAIN)["skip-cert-verify"], False)
+
+    def test_trojan_sni_bug(self):
+        n = h.parse_trojan("trojan://pw@id.vpnstore28.my.id:443?allowInsecure=0&sni=instagram.com#T")
+        self.assertIs(n["skip-cert-verify"], True)
+        n = h.parse_trojan("trojan://pw@id.vpnstore28.my.id:443?allowInsecure=0#T")
+        self.assertIs(n["skip-cert-verify"], False)
+
+    def test_fix_skip_verify_on_stored_node(self):
+        old = {"name": "x", "type": "vless", "server": "a.example.com", "port": 443, "tls": True,
+                "servername": "instagram.com", "skip-cert-verify": False, "network": "ws",
+                "ws-opts": {"path": "/", "headers": {"Host": "a.example.com"}}}
+        self.assertTrue(h.fix_skip_verify(old))
+        self.assertIs(old["skip-cert-verify"], True)
+        self.assertFalse(h.fix_skip_verify(old))             # idempoten
+
+    def test_no_tls_untouched(self):
+        n = {"type": "vless", "server": "a.com", "tls": False, "servername": "b.com"}
+        self.assertFalse(h.fix_skip_verify(n))
+        self.assertNotIn("skip-cert-verify", n)
+
+    def test_load_provider_nodes_repairs_old_active_yaml(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "active.yaml")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write("proxies:\n  - name: HIKARI\n    type: vless\n    server: id.vpnstore28.my.id\n"
+                        "    port: 443\n    uuid: a65c25f3-e050-4488-a968-76cdba48ea3d\n    tls: true\n    servername: instagram.com\n"
+                        "    skip-cert-verify: false\n    network: ws\n")
+            self.assertIs(h.load_provider_nodes(p)[0]["skip-cert-verify"], True)

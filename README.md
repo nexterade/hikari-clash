@@ -255,6 +255,7 @@ Bisa juga dijalankan sendiri: `python3 sub2yaml.py` (menu interaktif) atau lewat
 - **Source**: pertama kali jalan, node diambil dari file `.txt` di `src/` (`barry-far.txt`, `0xRadikal.txt`, `roosterkid.txt`; kalau `src/` kosong akan diunduh otomatis). Perbarui kapan saja lewat menu `[8]` atau `python3 sub2yaml.py --update-source`. File lama baru diganti kalau unduhan valid. Format yang dikenali: base64, daftar link polos, dan teks berhiasan seperti openproxylist (`🇩🇪 vless://… 85ms DE [ISP]` — bendera di depan dipakai untuk deteksi negara, keterangan di belakang dan baris website/donasi diabaikan, `&amp;` dinormalkan). File `.txt` lain yang kamu taruh di `src/` ikut muncul di menu `[1]`.
 - **Output**: `hasil/proxy/` (`free.yaml`, `custom-*.yaml` bila Edit config diisi, `report.txt`). Path relatif selalu relatif ke folder script, bukan folder tempat kamu menjalankan.
 - **Format YAML**: block style persis seperti `active.yaml` (tanpa `{}`/`[]` inline); nilai berisiko (angka-like, `true`/`null`, karakter khusus) otomatis diberi tanda kutip, dan keluaran dicek round-trip lewat PyYAML.
+- **SNI custom**: node TLS dengan SNI beda dari `server` dan dari header Host otomatis diberi `skip-cert-verify: true` (juga bila link bilang `allowInsecure=0`/`insecure=0`), termasuk setelah Edit config mengganti SNI/Host. Tanpa ini node hidup bisa terbaca mati di URL-test karena sertifikat tidak cocok. Pilihan eksplisit `--insecure`/menu (y/n) tetap menang.
 - **Validasi offline**: node yang pasti ditolak mihomo dibuang sebelum dites dan dicatat di `report.txt` (UUID bukan format UUID, reality `public-key`/`short-id` rusak, reality di network selain tcp/grpc/h2, `flow` di luar tcp, SNI/server mengandung spasi atau karakter terlarang). Ini berlaku juga di mode TCP-only.
 - **Tes (URL-test mihomo wajib)**: tiap node dites lewat core Mihomo sungguhan (connect lewat node ke `gstatic generate_204`, lalu dikonfirmasi sekali lagi ke `cp.cloudflare.com`). Hanya node yang punya ping di kedua tes dan rata-rata ≤ `--max-ping` (default 3000 ms) yang masuk file. Core dicari otomatis (`./bin`, `~/.hikari-clash/bin`, `PATH`, `HIKARI_MIHOMO`, lokasi OpenClash) dan **diunduh otomatis** dari GitHub (MetaCubeX/mihomo) bila belum ada: varian sesuai perangkat (mis. `android-arm64`, lalu `linux-arm64`), unduhan bisa **dilanjutkan** kalau terputus (`bin/*.part`), dan dipakai hanya setelah terbukti bisa dijalankan (`mihomo -v`). Menu `[9]` = unduh/perbarui manual, `--no-download` mematikan unduh otomatis, `--mihomo /path` memakai core sendiri (core Box di `/data/adb` butuh root, jadi tidak dipakai otomatis). **Android/Termux:** kalau folder Hikari ada di penyimpanan bersama (mis. `/storage/emulated/0/Project/hikari-clash`), file di sana tidak boleh dieksekusi, jadi core otomatis dipasang di `~/.hikari-clash/bin/` (home Termux). Jumlah node bebas: `--top N` atau menu `[4]` — tes dikerjakan per batch dan berhenti begitu N node lolos. Tes TCP **bukan lagi cadangan otomatis** (hanya mengecek port terbuka, bukan berarti bisa dipakai); `--tcp-only` tetap ada tapi harus dipilih sengaja. Kalau hampir semua ping TCP ≤3 ms (koneksi dicegat Box/Nikki/VPN lokal), tahap TCP dilewati otomatis dan semua node langsung di-URL-test — sebaiknya matikan Box/VPN saat menjalankan sub2yaml.
 
@@ -488,6 +489,7 @@ mihomo -t -d hasil/full_config_box -f hasil/full_config_box/config.yaml
 | Node Reality/Vision tidak konek | Parser lama membuang `flow` & `fp` | Script v3 membawa `flow`, `client-fingerprint`, `pbk`, `sid` |
 | `PermissionError` | Folder di `~` Termux | Pindah ke `/storage/emulated/0/...` setelah `termux-setup-storage` |
 | `PyYAML belum terpasang` | Library belum ada | `pip install pyyaml` |
+| Semua node dari `active.yaml` tidak punya ping / *timed out*, padahal node yang sama jalan di DarkTunnel/HTTP Custom | `skip-cert-verify: false` + SNI bug (mis. `instagram.com`) → sertifikat server tidak cocok → handshake TLS gagal. Biasanya karena link membawa `allowInsecure=0` / `insecure=0` | Pakai script versi ini (SNI custom otomatis `true`, juga saat regenerate node lama). Manual: ubah ke `skip-cert-verify: true` di `proxy/active.yaml` lalu reload core |
 | Dashboard minta secret | Secret default `hikari`, acak, atau dari LuCI | Lihat ringkasan setelah generate; di Nikki/OpenClash pakai secret dari LuCI |
 | Emoji node tidak sesuai `emoji.json` | JSON rusak (mis. koma berlebih di akhir) | Script sekarang memberi peringatan saat start & di Check Status; perbaiki filenya atau Reset lewat menu `2 → 4 → R` |
 | Port bentrok / core gagal start | Dua port sama | Menu `4` (Validasi) menunjukkan port ganda |
@@ -549,7 +551,15 @@ Belum; lihat [Roadmap](#-roadmap). Edit manual di file provider tetap valid.
 Ya. Default 9797 (redir), 9898 (tproxy), dns 1053 mengikuti varian Box yang dipakai di v0.1. Sesuaikan jika Box-mu berbeda.
 
 **Kenapa `skip-cert-verify` selalu `true`?**
-Kebanyakan node memakai bug-host/SNI custom sehingga sertifikat tidak cocok. Kalau link mengandung `allowInsecure=0`, nilainya dihormati.
+Kebanyakan node memakai bug-host/SNI custom sehingga sertifikat tidak cocok. Aturannya:
+- Link tanpa `allowInsecure`/`insecure` → `true`.
+- Link dengan `allowInsecure=1` → `true`.
+- Link dengan `allowInsecure=0` / `insecure=0` → `false`, **kecuali** node memakai **SNI custom** (SNI beda dari `server` *dan* dari header `Host`/`host` ws-h2). Untuk node seperti itu tetap dipaksa `true`, karena sertifikat server memang tidak mungkin cocok dengan SNI bug, dan dengan `false` handshake TLS gagal sehingga node cuma timeout. Panel/generator link sering menulis `allowInsecure=0` secara default tanpa peduli SNI-nya.
+- Node dengan SNI = server atau = Host (tanpa SNI bug) tetap menghormati `allowInsecure=0` (verifikasi sertifikat normal).
+
+Aturan yang sama berlaku di `hikari_converter.py` dan `sub2yaml.py`, juga saat memuat ulang `active.yaml`/`trial.yaml` lama (regenerate): node lama dengan `skip-cert-verify: false` + SNI custom diperbaiki otomatis.
+
+Catatan: heuristik ini juga membuat node CDN-fronting yang sertifikatnya sebenarnya valid untuk SNI-nya (server = IP, SNI = domain sendiri, dan Host berbeda) ikut dipaksa `true`. Kalau ingin verifikasi ketat untuk node tertentu, ubah manual di YAML hasil generate (jangan regenerate dari file lama, karena akan diperbaiki lagi).
 
 **Mau tahu apa saja yang diubah dari v0.1/v0.2?**
 Lihat [`AUDIT.md`](AUDIT.md): perbandingan, daftar temuan, dan koreksi.

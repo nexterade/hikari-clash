@@ -391,6 +391,33 @@ def split_hostport(s):
     return host.strip(), int(port)
 
 
+def sni_is_custom(p):
+    """True kalau SNI node TLS beda dari server DAN dari header Host/host ws/h2/httpupgrade (= SNI "bug").
+    Sertifikat server hampir pasti tidak cocok dengan SNI seperti itu."""
+    if not (p.get("tls") or p.get("type") == "trojan"):
+        return False
+    sni = str(p.get("servername") or p.get("sni") or "").strip().lower()
+    if not sni:
+        return False
+    names = {str(p.get("server") or "").strip().lower()}
+    ws = (p.get("ws-opts") or {}).get("headers") or {}
+    names.add(str(ws.get("Host") or ws.get("host") or "").strip().lower())
+    names.add(str((p.get("httpupgrade-opts") or {}).get("host") or "").strip().lower())
+    h2 = (p.get("h2-opts") or {}).get("host")
+    names.update(str(x).strip().lower() for x in (h2 if isinstance(h2, list) else [h2] if h2 else []))
+    names.discard("")
+    return sni not in names
+
+
+def fix_skip_verify(p):
+    """SNI custom + skip-cert-verify tidak true => handshake TLS gagal (node tampak mati padahal hidup).
+    Paksa true, apa pun isi allowInsecure/insecure di link (termasuk =0). Return True kalau diubah."""
+    if not p.get("skip-cert-verify") and sni_is_custom(p):
+        p["skip-cert-verify"] = True
+        return True
+    return False
+
+
 def apply_tls(p, q, fallback_sni="", trojan=False):
     sni = q.get("sni") or q.get("peer") or fallback_sni
     if trojan:
@@ -642,6 +669,7 @@ def parse_all(links):
         if not p.get("server") or not (1 <= int(p.get("port", 0)) <= 65535):
             skip("invalid", scheme, frag, link, "server/port kosong")
             continue
+        fix_skip_verify(p)   # SNI custom => skip-cert-verify true (host header baru lengkap setelah parser selesai)
         why = validate_proxy(p)
         if why:
             skip("invalid", scheme, frag, link, why)
@@ -1442,6 +1470,8 @@ def apply_overrides(p, ov):
     if ov["insecure"] is not None and tls:
         q["skip-cert-verify"] = bool(ov["insecure"])
         ch.append("insecure")
+    elif tls and fix_skip_verify(q):     # SNI/host custom dari menu tanpa 'insecure' => otomatis true
+        ch.append("insecure(auto)")
     for k, v in ov["set"].items():
         q[k] = v
         ch.append(k)
@@ -1646,7 +1676,7 @@ def edit_field(ov, key, label):
         err(str(e)); time.sleep(1.2)
         return
     if key == "sni" and ov["insecure"] is None:
-        warn("Tip: SNI custom biasanya butuh 'Skip cert verify' (Edit config > Opsi lanjutan).")
+        warn("Tip: 'Skip cert verify' otomatis true untuk SNI custom; ubah di Opsi lanjutan kalau mau memaksa false.")
         time.sleep(1.5)
 
 
@@ -2042,9 +2072,9 @@ def main():
     ccs = [detect_country(p["name"], p["server"]) for p in nodes]
 
     # --- bangun rekaman per profil per node (+ terapkan custom config)
-    if ov["sni"] and not ov["insecure"]:
-        warn("SNI custom biasanya butuh --insecure (sertifikat tidak cocok); "
-             "tanpa itu node TLS bisa gagal semua di custom-sni.")
+    if ov["sni"] and ov["insecure"] is None:
+        log("SNI custom: skip-cert-verify otomatis true (sertifikat memang tidak cocok dengan SNI bug); "
+            "pakai --insecure hanya kalau ingin memaksa ke semua node.")
     for prof in profs:
         pov, recs = prof["ov"], []
         for i, p in enumerate(nodes):

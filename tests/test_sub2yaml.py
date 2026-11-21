@@ -237,5 +237,45 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("BUKAN jaminan", open(os.path.join(out, "report.txt"), encoding="utf-8").read())
 
 
+class SkipCertVerifySniCustom(unittest.TestCase):
+    """SNI bug tanpa/dengan allowInsecure=0 harus tetap skip-cert-verify: true (kalau tidak node tampak mati)."""
+    def _parse(self, link):
+        nodes, st, skipped = s.parse_all([link])
+        self.assertEqual(len(nodes), 1, skipped)
+        return nodes[0]
+
+    def test_ws_bug_sni_zero_flag(self):
+        n = self._parse("vless://a65c25f3-e050-4488-a968-76cdba48ea3d@id.vpnstore28.my.id:443?path=%2Fvless&security=tls&encryption=none"
+                        "&insecure=0&host=id.vpnstore28.my.id&type=ws&allowInsecure=0&sni=instagram.com#A")
+        self.assertIs(n["skip-cert-verify"], True)
+
+    def test_grpc_bug_sni_without_flag(self):
+        n = self._parse("vless://a65c25f3-e050-4488-a968-76cdba48ea3d@id.vpnstore28.my.id:443?mode=gun&security=tls&encryption=none&type=grpc"
+                        "&serviceName=vless&sni=test-gateway.instagram.com#B")
+        self.assertIs(n["skip-cert-verify"], True)
+
+    def test_normal_sni_not_forced(self):
+        n = self._parse("vless://a65c25f3-e050-4488-a968-76cdba48ea3d@id.vpnstore28.my.id:443?security=tls&type=ws&host=id.vpnstore28.my.id"
+                        "&path=%2Fv&sni=id.vpnstore28.my.id#C")
+        self.assertNotIn("skip-cert-verify", n)
+
+    def test_trojan_bug_sni(self):
+        n = self._parse("trojan://pw@id.vpnstore28.my.id:443?allowInsecure=0&sni=instagram.com#D")
+        self.assertIs(n["skip-cert-verify"], True)
+
+    def test_custom_override_sets_insecure_auto(self):
+        base = self._parse("vless://a65c25f3-e050-4488-a968-76cdba48ea3d@id.vpnstore28.my.id:443?security=tls&type=ws&host=id.vpnstore28.my.id"
+                           "&path=%2Fv&sni=id.vpnstore28.my.id#E")
+        self.assertNotIn("skip-cert-verify", base)
+        ov = s.new_overrides()
+        ov["sni"] = "instagram.com"
+        q, ch = s.apply_overrides(base, ov)
+        self.assertIs(q["skip-cert-verify"], True)
+        self.assertIn("insecure(auto)", ch)
+        ov["insecure"] = False                      # pilihan eksplisit pengguna tetap dihormati
+        q, ch = s.apply_overrides(base, ov)
+        self.assertIs(q["skip-cert-verify"], False)
+
+
 if __name__ == "__main__":
     unittest.main()
