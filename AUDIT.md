@@ -237,3 +237,22 @@ Tindak lanjut temuan audit + permintaan pemilik proyek.
 
 **Tes:** kelas `SkipCertVerifySniCustom` di `tests/test_hikari.py` dan `tests/test_sub2yaml.py` (URI asli kasus ini, trojan, SNI = host tetap `false`, node lama di YAML, override menu, pilihan eksplisit pengguna).
 
+---
+
+## 9. Template v1.3 dan Sniffer Only mode WiFi (2026-11-21)
+
+**Template `config_v1.3.yaml`** (v1.2 tetap utuh sebagai master lama):
+
+| # | Perubahan | Alasan |
+|---|---|---|
+| T1 | Grup `💫 FALLBACK` (fallback, hidden; Active + Trial), masuk ke INJECT / SMART MODE / GAMING / Plusplus | Prioritas node berurutan: pindah hanya saat node gagal. Tanpa `tolerance` (field itu hanya dikenal `url-test`) |
+| T2 | Grup `🗃️ UPDATER` (fallback, hidden: AUTO MODE → DIRECT); semua rule-provider dan provider Keyring memakai `proxy: 🗃️ UPDATER` | Rule-provider dan Keyring dulu download lewat AUTO MODE; bila node mati/belum ada, update macet. Tidak ada siklus (http → UPDATER → AUTO MODE → provider `file`) |
+| T3 | URL test seluruh grup dan health-check provider: `https://cp.cloudflare.com/generate_204` (204) | Satu URL seragam; tidak ada grup yang menganggap node mati karena URL-nya lain diblokir |
+| T4 | `💫 AUTO MODE` hidden | Dipilih lewat INJECT, tidak perlu tampil sendiri |
+
+DNS dan urutan rule identik dengan v1.2 (dijaga tes `test_dns_and_rules_same_as_v12`). **Belum diuji dengan core asli:** perilaku fallback saat core baru start. Status node belum diketahui sehingga download pertama bisa tetap mencoba node lebih dulu sebelum jatuh ke DIRECT; cache ruleset/`subs.yaml` yang disemai script menutup kasus ini.
+
+**`sniffer_only.yaml` v1.1 (mode WiFi):** grup label `📶 WIFI` + rule `SRC-IP-CIDR,192.168.0.0/16,📶 WIFI` tepat sebelum `MATCH`. Di bawah rule CDN/DNS/LAN agar label Cloudflare/CloudFront tidak tertutup. Di Nikki/OpenClash semua client LAN berIP `192.168.x.x`, jadi label ini menandai semua trafik non-CDN (didokumentasikan; tidak dibuang otomatis). Rule `IP-CIDR` multicast tidak ditambahkan karena tes `test_cloudflare_rules_match_builtin_list` mengharuskan seluruh rule `IP-CIDR,` sama dengan daftar Cloudflare.
+
+**Tes baru:** kelas `TemplateV13` (urutan grup, FALLBACK, UPDATER, tanpa siklus, URL test, DNS/rule = v1.2, validator di 3 platform × 2 mode) dan dua tes mode WiFi di `tests/test_sniffer.py`. Tes yang menganggap v1.2 master terbaru dipindah ke v1.3.
+

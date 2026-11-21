@@ -1,6 +1,6 @@
 # =====================================================
-# HIKARI /.CLASH — Sniffer Only v1.0  (Box / Nikki / OpenClash)
-# template-version: sniffer-1.0
+# HIKARI /.CLASH — Sniffer Only v1.1  (Box / Nikki / OpenClash)
+# template-version: sniffer-1.1
 # Core : Mihomo (Meta) >= 1.19
 #
 # Tujuan : MENGINTIP koneksi, bukan menerowongnya. Dipakai dari menu
@@ -20,6 +20,23 @@
 #   - GeoIP negara diisi Mihomo ke metadata.destinationGeoIP lewat rule probe
 #     "GEOIP,ZZ,DIRECT" (negara ZZ tidak pernah cocok; efek sampingnya mengisi
 #     cache GeoIP). Itu hanya jalan di mode mmdb, jadi geodata-mode HARUS false.
+#
+# Mode WiFi (v1.1) :
+#   Untuk mengintip koneksi dari perangkat yang tersambung lewat WiFi / hotspot / router (IP sumber LAN).
+#   - Group 📶 WIFI (label, isinya cuma DIRECT) + rule SRC-IP-CIDR,192.168.0.0/16 tepat SEBELUM MATCH.
+#     Urutan sengaja di bawah rule CDN/DNS/LAN: koneksi ke Cloudflare/CloudFront tetap berlabel CDN-nya,
+#     sisanya dari client WiFi berlabel 📶 WIFI, dan trafik non-LAN (mis. data seluler di Box) tetap 🔍 Lainnya.
+#   - Asal perangkat selalu terlihat di kolom Source (/connections) dan "Sumber" di inspector. Untuk label
+#     per perangkat di chain, hapus tanda # pada contoh SRC-IP-CIDR /32 di bagian rules (taruh SEBELUM rule WIFI).
+#   - Subnet beda? Hotspot iPhone memakai 172.20.10.x; CGNAT seluler sering 10.x / 100.64.x (jangan dimasukkan).
+#     Cek kolom Source di dashboard lalu sesuaikan rule WIFI.
+#   - Router (Nikki/OpenClash): semua client LAN berIP 192.168.x.x, jadi SEMUA trafik non-CDN berlabel 📶 WIFI
+#     dan 🔍 Lainnya praktis kosong. Itu wajar; hapus rule WIFI kalau tidak ingin label itu.
+#   - Box + hotspot: client hotspot hanya terlihat kalau Box memakai mode tproxy (bukan redirect saja).
+#   - IPv6 dimatikan (ipv6: false); client WiFi yang memakai IPv6 bisa lolos dari pengintaian. Matikan IPv6 di
+#     router/hotspot kalau perlu, atau aktifkan ipv6 (+ dns.ipv6) bila Box/Nikki-mu mencegat IPv6.
+#   - DNS: pengisian host dari DNS (redir-host) hanya jalan kalau client memakai DNS core (1053 / hijack
+#     Nikki, OpenClash, Box). Client dengan DNS sendiri (DoH/Private DNS) tampil sebagai host sniff atau IP murni.
 #
 # Batasan (jujur) :
 #   - Cloudflare dikenali dari daftar CIDR resmi (cloudflare.com/ips-v4 & ips-v6)
@@ -114,6 +131,10 @@ proxy-groups:
     type: select
     proxies:
       - DIRECT
+  - name: 📶 WIFI
+    type: select
+    proxies:
+      - DIRECT
   - name: 🔍 Lainnya
     type: select
     proxies:
@@ -147,4 +168,10 @@ rules:
   - IP-CIDR6,2405:8100::/32,🔶 Cloudflare
   - IP-CIDR6,2a06:98c0::/29,🔶 Cloudflare
   - IP-CIDR6,2c0f:f248::/32,🔶 Cloudflare
+  # --- Mode WiFi: label per perangkat (opsional, taruh SEBELUM rule WIFI). Ganti IP & nama sesuai perangkatmu;
+  #     grup labelnya juga harus ditambahkan di proxy-groups (select, isi DIRECT).
+  # - SRC-IP-CIDR,192.168.3.100/32,📱 HP-UTAMA
+  # --- Subnet WiFi/hotspot. Aktifkan baris lain hanya kalau subnet-mu memang di range itu.
+  - SRC-IP-CIDR,192.168.0.0/16,📶 WIFI
+  # - SRC-IP-CIDR,172.16.0.0/12,📶 WIFI
   - MATCH,🔍 Lainnya

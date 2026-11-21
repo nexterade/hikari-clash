@@ -1,0 +1,497 @@
+# =====================================================
+# HIKARI /.CLASH — Universal Template v1.3  (Box / Nikki / OpenClash)
+# template-version: 1.3
+# Core : Mihomo (Meta) >= 1.19
+#
+# Template ini NETRAL platform: hanya berisi key yang valid di SEMUA platform.
+# Yang khusus satu platform TIDAK ditaruh di sini, tapi disuntik otomatis oleh
+# hikari_converter.py saat generate:
+#   - Box       : port 7890/7891/7892/9797/9898, dns 1053, controller 127.0.0.1,
+#                 tun (off), find-process-mode, geodata-mode, experimental, external-ui ./dashboard
+#   - Nikki     : path absolut /etc/nikki/run/{proxy,ruleset}, controller 0.0.0.0, tanpa tun & WIFI
+#   - OpenClash : path ./proxy_provider & ./rule_provider, controller 0.0.0.0, tanpa tun & WIFI
+#
+# Perubahan dari v0.4 (fokus: lolos dnsleak):
+#   - dns.nameserver : BebasDNS (DoH) sebagai DNS utama
+#   - dns.fallback   : Cloudflare + Google (DoH), + fallback-filter geoip:false
+#     (default Mihomo geoip:true = filter khusus CN, tidak cocok untuk Indonesia)
+#   - Tidak ada DNS ISP di template. Provider XL Axiata: pilih "Profil ISP" di menu
+#     DNS atau saat generate; script menyuntik 112.215.203.254 (hanya Nikki/OpenClash).
+# Perubahan dari v0.5 (fokus: IP asli tidak bocor lewat WebRTC/STUN):
+#   - rules: UDP 3478-3479 dan 19302-19309 (STUN/TURN) dipaksa ke 🧩 Inject, SEBELUM Portgames.
+#     Sebelumnya STUN (mis. stun.l.google.com:19302) kena Portgames 16999-20100 → 🪼 GAMING,
+#     yang pilihan pertamanya 🎮 Direct, sehingga browser membocorkan IP asli ISP.
+#     Konsekuensi: panggilan suara/video (WhatsApp/Meet/Discord) memakai STUN lewat proxy;
+#     butuh node yang mendukung UDP, kalau tidak, panggilan jatuh ke relay/TCP.
+# Isi lain identik dengan v0.5.
+# Perubahan dari v0.6 (fokus: anti-blokir / Internet Positif):
+#   - dns.proxy-server-nameserver & dns.direct-nameserver: DoH berbasis IP (https://1.1.1.1, https://8.8.8.8)
+#     menggantikan UDP polos port 53. Query polos di jalur DIRECT bisa dibelokkan ISP ke resolver sensor
+#     (jawaban IP halaman blokir); DoH berbasis IP tidak butuh bootstrap DNS dan tidak lewat port 53.
+#     Domain yang lewat proxy tidak terpengaruh: dengan fake-ip, nama domain dikirim ke node.
+#   - dns.nameserver: Cloudflare DoH berbasis IP (BebasDNS tetap tersedia di menu DNS > Preset).
+#   - Tidak ada entri khusus tes (mis. dnscheck.tools) di fake-ip-filter.
+#   - Kalau node timeout setelah memakai v0.7 (DoH ke 1.1.1.1/8.8.8.8 di-reset ISP), kembalikan
+#     proxy-server-nameserver ke IP polos lewat menu DNS > Custom manual, atau pakai v0.6.
+#   - Profil XL Axiata menyuntik 112.215.203.254 (UDP polos) ke proxy-server-nameserver di Nikki/OpenClash:
+#     itu sengaja dan satu-satunya entri polos di field tersebut.
+#
+# Perubahan dari v0.7 (fokus: pindah repo sumber):
+#   - Semua URL rule-provider dan icon grup menunjuk ke https://github.com/nexterade/hikari-clash (branch main).
+#     Sebelumnya: ruleset di nexterade/crispy-funicular (main), icon di nexterade/Hikari-SC (master).
+#   - Isi lain identik dengan v0.7. Template v0.3–v0.7 tetap menunjuk ke repo lama (tidak ditimpa).
+#
+# Perubahan dari v0.8 (fokus: DNS pilihan pemilik + URL icon):
+#   - dns.nameserver               : BebasDNS Unfiltered (https://unfiltered.dns.bebasid.com/dns-query)
+#   - dns.proxy-server-nameserver  : 1.1.1.1, 8.8.8.8 (IP polos)
+#   - dns.default-nameserver       : 1.1.1.1, 8.8.8.8 (IP polos, bootstrap)
+#   - dns.direct-nameserver        : Quad9 9.9.9.10, 149.112.112.10 (IP polos)
+#   - dns.fallback                 : Cloudflare + Google (DoH), fallback-filter geoip:false
+#   Ini kembali memakai DNS polos port 53 di proxy-server-/direct-nameserver (v0.7/v0.8 memakai DoH berbasis IP).
+#   Kalau ISP membelokkan port 53 dan node/situs gagal resolve, jalankan menu DNS > Mode Anti-Blokir.
+#   - URL icon grup: branch master (https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/*.png).
+#     URL rule-provider tetap branch main. Template v0.3–v0.8 tidak diubah.
+#
+# Perubahan dari v0.9 (penambahan proxy group dan node dari subscription)
+#    - proxygroup baru "🥪 Subscription"
+#    - tersedia node gratis (auto update)
+#
+# Perubahan dari v.1.0 dengan beberapa perubahan seperti:
+#    - tampilan emoji/icon yang baru
+#    - penambahan proxy-group dengan logika baru
+#
+# Koreksi sebelum rilis (v1.1):
+#    - 🗺️ Public dipindah dari blok proxies: ke proxy-groups (url-test tidak boleh di proxies:)
+#    - 🛠️ Keyring & 🐦 Free: provider lewat use:, grup (🗺️ Public) lewat proxies:
+#    - nama 🐦 Free dibetulkan (sebelumnya ada karakter tak terlihat U+FE0F di depan, sehingga
+#      tidak cocok dengan referensi di 🧩 Inject)
+#    - 📑 Keyring: proxy: 🛸 AUTO MODE (grup yang sudah tidak ada) -> 💫 Auto
+#    - typo expexted-status -> expected-status
+#    - 🗺️ Public: hidden: true (tidak tampil di daftar group dashboard), dan hanya dipilih lewat
+#      🛠️ Keyring & 🐦 Free (dihapus dari 👾 Gaming & 💕 Plusplus). Isinya best-ping (url-test) dari
+#      📄 Free + 📑 Keyring.
+#
+# Perubahan dari v1.1 (nama group & rules):
+#    - nama group/proxy diganti ke huruf kapital: 🎮 DIRECT, ✂️ REJECT, 🐬 HIJACK, 🧩 INJECT,
+#      🗳️ PROXY LIST, 💫 AUTO MODE, 🌳 SMART MODE, 👾 GAMING, 🍪 WIFI MODE
+#    - 🗺️ Public dihapus; diganti 📄 FREE NODE & 📑 KEYRING (url-test, hidden) dan group pilihan
+#      ☘️ FREE NODE (provider 📄 Free) & 🧊 KEYRING (provider 📑 Keyring)
+#    - 🧩 INJECT / 🌳 SMART MODE / 💕 Plusplus memilih ☘️ FREE NODE & 🧊 KEYRING langsung
+#    - 📑 Keyring: interval 864000 (auto-update subscription)
+#    - koreksi: typo rule 🐬 HIJACT -> 🐬 HIJACK
+#
+# Perubahan dari v1.2 (v1.3):
+#    - grup baru 💫 FALLBACK (type fallback, hidden; provider 🗳️ Active + 📅 Trial): pakai node pertama yang
+#      hidup, pindah ke berikutnya hanya kalau gagal. Ditambahkan ke 🧩 INJECT, 🌳 SMART MODE, 👾 GAMING, 💕 Plusplus
+#    - semua URL test (grup & health-check provider): http://www.gstatic.com/generate_204 -> https://cp.cloudflare.com/generate_204
+#      (expected-status tetap 204)
+#    - 💫 AUTO MODE: hidden: true
+#    - grup baru 🗃️ UPDATER (type fallback, hidden): 💫 AUTO MODE dulu, 🎮 DIRECT kalau semua node mati.
+#      Semua rule-provider dan provider 📑 Keyring memakai `proxy: 🗃️ UPDATER` (sebelumnya 💫 AUTO MODE), supaya
+#      download/update tidak macet saat node Active/Trial belum ada atau mati
+#
+# Catatan: Nikki/OpenClash biasanya menimpa port, dns, tun, controller &
+# secret dari setting LuCI-nya sendiri; nilai di sini cuma default.
+# Secret default 'hikari' — ganti lewat menu Edit Configuration, atau pilih "Acak" saat generate.
+# =====================================================
+
+port: 7891
+socks-port: 7892
+redir-port: 9797
+mixed-port: 7890
+tproxy-port: 9898
+ipv6: false
+mode: rule
+log-level: warning
+allow-lan: true
+bind-address: '*'
+external-controller: 127.0.0.1:9090
+secret: hikari
+unified-delay: true
+tcp-concurrent: true
+keep-alive-interval: 15
+geodata-loader: memconservative
+geo-auto-update: false
+geox-url:
+  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat
+  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat
+  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+sniffer:
+  enable: true
+  override-destination: true
+  force-dns-mapping: true
+  parse-pure-ip: true
+  skip-domain:
+    - rule-set:Skip-Sniff
+  force-domain:
+    - rule-set:Force-Sniff
+  skip-dst-address:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 127.0.0.0/8
+    - 224.0.0.0/4
+  sniff:
+    TLS:
+      ports:
+        - 443
+        - 8443
+    HTTP:
+      ports:
+        - 80
+        - 8080-8880
+      override-destination: true
+    QUIC:
+      ports:
+        - 443
+        - 8443
+
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  cache-algorithm: arc
+  prefer-h3: false
+  ipv6: false
+  use-hosts: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter-mode: blacklist
+  fake-ip-filter:
+    - rule-set:FakeIP-Filter
+  respect-rules: true
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  proxy-server-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  direct-nameserver:
+    - 9.9.9.10
+    - 149.112.112.10
+  nameserver:
+    - https://unfiltered.dns.bebasid.com/dns-query
+  fallback:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+  fallback-filter:
+    geoip: false
+
+proxies:
+  - name: 🎮 DIRECT
+    type: direct
+    udp: true
+  - name: ✂️ REJECT
+    type: reject
+  - name: 🐬 HIJACK
+    type: dns
+
+proxy-groups:
+  - name: 🧩 INJECT
+    type: select
+    proxies:
+      - 💫 AUTO MODE
+      - 💫 FALLBACK
+      - 🗳️ PROXY LIST
+      - ☘️ FREE NODE
+      - 🧊 KEYRING
+      - 🎮 DIRECT
+    icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/12449f73.png
+
+  - name: 🗳️ PROXY LIST
+    type: select
+    use:
+      - 🗳️ Active
+      - 📅 Trial
+    icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/6e5ff33e.png
+
+  - name: 💫 AUTO MODE
+    type: url-test
+    disable-udp: false
+    use:
+      - 🗳️ Active
+      - 📅 Trial
+    url: https://cp.cloudflare.com/generate_204
+    interval: 300
+    tolerance: 50
+    lazy: true
+    timeout: 5000
+    expected-status: 204
+    icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/573055d6.png
+    hidden: true
+
+  - name: 💫 FALLBACK
+    type: fallback
+    url: https://cp.cloudflare.com/generate_204
+    interval: 300
+    timeout: 5000
+    lazy: true
+    expected-status: 204
+    disable-udp: false
+    use:
+      - 🗳️ Active
+      - 📅 Trial
+    hidden: true
+
+  - name: 🌳 SMART MODE
+    type: select
+    proxies:
+      - 💫 AUTO MODE
+      - 💫 FALLBACK
+      - 🧩 INJECT
+      - ☘️ FREE NODE
+      - 🧊 KEYRING
+      - 🎮 DIRECT
+      - ✂️ REJECT
+    icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/b980f2d2.png
+
+  - name: 👾 GAMING
+    type: select
+    proxies:
+      - 🎮 DIRECT
+      - 🧩 INJECT
+      - 💫 AUTO MODE
+      - 💫 FALLBACK
+    icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/93244152.png
+
+  - name: 💤 AdBlock
+    type: select
+    proxies:
+      - ✂️ REJECT
+      - 🧩 INJECT
+      - 🎮 DIRECT
+    icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/c37c9728.png
+
+  - name: 💕 Plusplus
+    type: select
+    proxies:
+      - 🧩 INJECT
+      - 💫 AUTO MODE
+      - 💫 FALLBACK
+      - 🧊 KEYRING
+      - ☘️ FREE NODE
+      - 🎮 DIRECT
+      - ✂️ REJECT
+    icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/b3197af9.png
+
+  - name: 🍪 WIFI MODE
+    type: select
+    proxies:
+      - 🎮 DIRECT
+      - 🧩 INJECT
+    icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/8bb3db53.png
+
+  - name: 🧊 KEYRING
+    type: select
+    proxies:
+      - 📑 KEYRING
+    use:
+      - 📑 Keyring
+    icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/573055d6.png
+
+  - name: ☘️ FREE NODE
+    type: select
+    proxies:
+      - 📄 FREE NODE
+    use:
+      - 📄 Free
+    icon: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/icon/0e5ebcc7.png
+
+  - name: 🗃️ UPDATER
+    type: fallback
+    url: https://cp.cloudflare.com/generate_204
+    interval: 300
+    timeout: 5000
+    lazy: true
+    expected-status: 204
+    hidden: true
+    proxies:
+      - 💫 AUTO MODE
+      - 🎮 DIRECT
+
+  - name: 📄 FREE NODE
+    type: url-test
+    disable-udp: false
+    use:
+      - 📄 Free
+    url: https://cp.cloudflare.com/generate_204
+    interval: 500
+    tolerance: 50
+    lazy: true
+    timeout: 7000
+    expected-status: 204
+    hidden: true
+
+  - name: 📑 KEYRING
+    type: url-test
+    disable-udp: false
+    use:
+      - 📑 Keyring
+    url: https://cp.cloudflare.com/generate_204
+    interval: 500
+    tolerance: 50
+    lazy: true
+    timeout: 7000
+    expected-status: 204
+    hidden: true
+
+proxy-providers:
+  🗳️ Active:
+    type: file
+    path: ./proxy/active.yaml
+    health-check:
+      enable: true
+      url: https://cp.cloudflare.com/generate_204
+      interval: 300
+      lazy: true
+      timeout: 5000
+      expected-status: 204
+  📅 Trial:
+    type: file
+    path: ./proxy/trial.yaml
+    health-check:
+      enable: true
+      url: https://cp.cloudflare.com/generate_204
+      interval: 300
+      lazy: true
+      timeout: 5000
+      expected-status: 204
+  📄 Free:
+    type: file
+    path: ./proxy/free.yaml
+    health-check:
+      enable: true
+      url: https://cp.cloudflare.com/generate_204
+      interval: 300
+      lazy: true
+      timeout: 5000
+      expected-status: 204
+  📑 Keyring:
+    type: http
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/subscription.yaml
+    interval: 864000
+    proxy: 🗃️ UPDATER
+    path: ./proxy/subs.yaml
+    health-check:
+      enable: true
+      url: https://cp.cloudflare.com/generate_204
+      interval: 300
+      lazy: true
+      timeout: 5000
+      expected-status: 204
+
+rules:
+  - RULE-SET,Direct,DIRECT
+  - RULE-SET,DnsHijack,🐬 HIJACK
+  - RULE-SET,Reject,✂️ REJECT
+  - RULE-SET,WifiClients,🍪 WIFI MODE
+  - RULE-SET,Blocker,💤 AdBlock
+  - RULE-SET,Plusplus,💕 Plusplus
+  - AND,((NETWORK,UDP),(DST-PORT,3478-3479)),🧩 INJECT
+  - AND,((NETWORK,UDP),(DST-PORT,19302-19309)),🧩 INJECT
+  - RULE-SET,Portgames,👾 GAMING
+  - RULE-SET,Inject,🧩 INJECT
+  - RULE-SET,SmartMode,🌳 SMART MODE
+  - MATCH,🧩 INJECT
+
+rule-providers:
+  Blocker:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/blocker.mrs
+    interval: 864000
+    path: ./ruleset/blocker.mrs
+    proxy: 🗃️ UPDATER
+  Plusplus:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/plus18.mrs
+    interval: 864000
+    path: ./ruleset/plus18.mrs
+    proxy: 🗃️ UPDATER
+  FakeIP-Filter:
+    type: http
+    behavior: domain
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/fakeip-filter.yaml
+    interval: 864000
+    path: ./ruleset/fakeip-filter.yaml
+    proxy: 🗃️ UPDATER
+  DnsHijack:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/dns-hijack.yaml
+    interval: 864000
+    path: ./ruleset/dns-hijack.yaml
+    proxy: 🗃️ UPDATER
+  Reject:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/reject.yaml
+    interval: 864000
+    path: ./ruleset/reject.yaml
+    proxy: 🗃️ UPDATER
+  Direct:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/direct.yaml
+    interval: 864000
+    path: ./ruleset/direct.yaml
+    proxy: 🗃️ UPDATER
+  SmartMode:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/smartmode.yaml
+    interval: 864000
+    path: ./ruleset/smartmode.yaml
+    proxy: 🗃️ UPDATER
+  Inject:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/inject.yaml
+    interval: 864000
+    path: ./ruleset/inject.yaml
+    proxy: 🗃️ UPDATER
+  WifiClients:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/wifi.yaml
+    interval: 864000
+    path: ./ruleset/wifi.yaml
+    proxy: 🗃️ UPDATER
+  Skip-Sniff:
+    type: http
+    behavior: domain
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/skip-sniff.yaml
+    interval: 864000
+    path: ./ruleset/skip-sniff.yaml
+    proxy: 🗃️ UPDATER
+  Force-Sniff:
+    type: http
+    behavior: domain
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/force-sniff.yaml
+    interval: 864000
+    path: ./ruleset/force-sniff.yaml
+    proxy: 🗃️ UPDATER
+  Portgames:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/nexterade/hikari-clash/refs/heads/master/ruleset/port-games.yaml
+    interval: 864000
+    path: ./ruleset/port-games.yaml
+    proxy: 🗃️ UPDATER

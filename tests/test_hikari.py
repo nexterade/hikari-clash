@@ -36,7 +36,8 @@ class Paths(unittest.TestCase):
         self.assertIn("config_v0.9.yaml", masters)          # v0.9 juga tidak ditimpa
         self.assertIn("config_v1.0.yaml", masters)          # v1.0 tetap utuh
         self.assertIn("config_v1.1.yaml", masters)          # v1.1 tetap utuh
-        self.assertEqual(masters[-1], "config_v1.2.yaml")
+        self.assertIn("config_v1.2.yaml", masters)          # v1.2 tetap utuh
+        self.assertEqual(masters[-1], "config_v1.3.yaml")
         self.assertEqual([f for f in os.listdir(ROOT) if f.startswith("config-template")], [])
 
 
@@ -1008,8 +1009,88 @@ class ValidatorReferences(unittest.TestCase):
         self.assertTrue(any("'🐦 Free' yang tidak ada" in m for m in self._errs(cfg)))
 
 
+class TemplateV13(unittest.TestCase):
+    """Template v1.3: 💫 FALLBACK, 🗃️ UPDATER (jalur download provider), URL test Cloudflare, AUTO MODE hidden."""
+    URL = "https://cp.cloudflare.com/generate_204"
+
+    def setUp(self):
+        import yaml
+        self.path = os.path.join(h.TEMPLATE_DIR, "config_v1.3.yaml")
+        self.text = h.read_text(self.path)
+        self.cfg = yaml.safe_load(self.text)
+        self.groups = {g["name"]: g for g in self.cfg["proxy-groups"]}
+
+    def test_version_marker(self):
+        self.assertEqual(h.template_version(self.path), "1.3")
+
+    def test_group_names(self):
+        self.assertEqual(list(self.groups),
+                         ["🧩 INJECT", "🗳️ PROXY LIST", "💫 AUTO MODE", "💫 FALLBACK", "🌳 SMART MODE", "👾 GAMING",
+                          "💤 AdBlock", "💕 Plusplus", "🍪 WIFI MODE", "🧊 KEYRING", "☘️ FREE NODE", "🗃️ UPDATER",
+                          "📄 FREE NODE", "📑 KEYRING"])
+
+    def test_fallback_group(self):
+        g = self.groups["💫 FALLBACK"]
+        self.assertEqual((g["type"], g["use"], g["hidden"], g["expected-status"], g["url"]),
+                         ("fallback", ["🗳️ Active", "📅 Trial"], True, 204, self.URL))
+        self.assertNotIn("tolerance", g)                       # tolerance hanya dikenal url-test
+        for n in ("🧩 INJECT", "🌳 SMART MODE", "👾 GAMING", "💕 Plusplus"):
+            self.assertIn("💫 FALLBACK", self.groups[n]["proxies"], n)
+
+    def test_auto_mode_hidden(self):
+        self.assertIs(self.groups["💫 AUTO MODE"]["hidden"], True)
+
+    def test_updater_falls_back_to_direct(self):
+        g = self.groups["🗃️ UPDATER"]
+        self.assertEqual((g["type"], g["proxies"], g["hidden"]), ("fallback", ["💫 AUTO MODE", "🎮 DIRECT"], True))
+        self.assertNotIn("use", g)
+
+    def test_downloads_go_through_updater(self):
+        for name, rp in self.cfg["rule-providers"].items():
+            self.assertEqual(rp["proxy"], "🗃️ UPDATER", name)
+        for name, pp in self.cfg["proxy-providers"].items():
+            if pp["type"] == "http":
+                self.assertEqual(pp["proxy"], "🗃️ UPDATER", name)
+
+    def test_updater_has_no_dependency_cycle(self):
+        """Provider http -> UPDATER -> AUTO MODE -> provider file saja (tidak boleh kembali ke provider http)."""
+        def providers(gname, seen=()):
+            g = self.groups.get(gname)
+            if not g or gname in seen:
+                return set()
+            out = set(g.get("use", []))
+            for m in g.get("proxies", []):
+                out |= providers(m, seen + (gname,))
+            return out
+        http = {n for n, p in self.cfg["proxy-providers"].items() if p["type"] == "http"}
+        self.assertEqual(providers("🗃️ UPDATER") & http, set())
+
+    def test_all_test_urls_are_cloudflare_204(self):
+        urls = {g["url"] for g in self.cfg["proxy-groups"] if "url" in g}
+        urls |= {p["health-check"]["url"] for p in self.cfg["proxy-providers"].values() if "health-check" in p}
+        self.assertEqual(urls, {self.URL})
+        for g in self.cfg["proxy-groups"]:
+            if "url" in g:
+                self.assertEqual(g.get("expected-status"), 204, g["name"])
+
+    def test_dns_and_rules_same_as_v12(self):
+        import yaml
+        v12 = yaml.safe_load(h.read_text(os.path.join(h.TEMPLATE_DIR, "config_v1.2.yaml")))
+        self.assertEqual(self.cfg["dns"], v12["dns"])
+        self.assertEqual(self.cfg["rules"], v12["rules"])
+
+    def test_emoji_not_used_by_node_names(self):
+        self.assertNotIn("🗃", "".join(h.DEFAULT_EMOJIS))      # dipakai nama group 🗃️ UPDATER
+
+    def test_generates_clean_on_all_platforms_and_modes(self):
+        for plat in h.PLATFORMS:
+            for mode in ("template", "offline"):
+                cfg, _ = h.build_config(self.text, plat, provider_mode=mode, isp="none")
+                self.assertEqual([m for l, m in h.validate_config(cfg, plat) if l == "ERR"], [], (plat, mode))
+
+
 class MasterTemplatesClean(unittest.TestCase):
-    """Semua template master (v0.3 s/d v1.2) harus lolos validator tanpa ERR untuk ketiga platform."""
+    """Semua template master (v0.3 s/d v1.3) harus lolos validator tanpa ERR untuk ketiga platform."""
 
     def test_all_masters_no_errors(self):
         for path in h.list_master_templates():

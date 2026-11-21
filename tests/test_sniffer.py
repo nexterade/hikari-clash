@@ -67,6 +67,23 @@ class SnifferTemplate(unittest.TestCase):
             if r.startswith(("IP-CIDR,", "IP-CIDR6,")):
                 self.assertNotIn("no-resolve", r)        # domain-only conn harus di-resolve supaya bisa cocok
 
+    def test_wifi_mode_label_and_rule_order(self):
+        """Mode WiFi: label 📶 WIFI untuk client LAN, di bawah rule CDN/DNS/LAN dan tepat sebelum MATCH."""
+        rules = self.cfg["rules"]
+        self.assertEqual(rules[-2:], ["SRC-IP-CIDR,192.168.0.0/16,📶 WIFI", "MATCH,🔍 Lainnya"])
+        self.assertIn("📶 WIFI", [g["name"] for g in self.cfg["proxy-groups"]])
+        wifi = rules.index("SRC-IP-CIDR,192.168.0.0/16,📶 WIFI")
+        for r in rules:
+            if r.endswith(("🔶 Cloudflare", "🟧 CloudFront", "🏠 LAN", "🧭 DNS")):
+                self.assertLess(rules.index(r), wifi, r)        # label CDN/DNS/LAN tidak boleh tertutup WIFI
+        self.assertIn("# template-version: sniffer-1.1", self.tpl)
+
+    def test_wifi_label_survives_on_all_platforms(self):
+        for plat in h.PLATFORMS:
+            cfg, _ = h.build_sniffer_config(plat)
+            self.assertIn("SRC-IP-CIDR,192.168.0.0/16,📶 WIFI", cfg["rules"], plat)
+            self.assertEqual(h.validate_config(cfg, plat), [], plat)
+
     def test_no_isp_dns_and_no_proxy_dns(self):
         dns = self.cfg["dns"]
         self.assertNotIn("proxy-server-nameserver", dns)
