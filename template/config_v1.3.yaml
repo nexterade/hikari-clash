@@ -83,7 +83,7 @@
 # Perubahan dari v1.2 (v1.3):
 #    - grup baru 💫 FALLBACK (type fallback, hidden; provider 🗳️ Active + 📅 Trial): pakai node pertama yang
 #      hidup, pindah ke berikutnya hanya kalau gagal. Ditambahkan ke 🧩 INJECT, 🌳 SMART MODE, 👾 GAMING, 💕 Plusplus
-#    - semua URL test (grup & health-check provider): http://www.gstatic.com/generate_204 -> https://cp.cloudflare.com/generate_204
+#    - semua URL test (grup & health-check provider): http://www.gstatic.com/generate_204 -> http://www.gstatic.com/generate_204
 #      (expected-status tetap 204)
 #    - 💫 AUTO MODE: hidden: true
 #    - grup baru 🗃️ UPDATER (type fallback, hidden): 💫 AUTO MODE dulu, 🎮 DIRECT kalau semua node mati.
@@ -215,7 +215,7 @@ proxy-groups:
     use:
       - 🗳️ Active
       - 📅 Trial
-    url: https://cp.cloudflare.com/generate_204
+    url: http://www.gstatic.com/generate_204
     interval: 300
     tolerance: 50
     lazy: true
@@ -226,7 +226,7 @@ proxy-groups:
 
   - name: 💫 FALLBACK
     type: fallback
-    url: https://cp.cloudflare.com/generate_204
+    url: http://www.gstatic.com/generate_204
     interval: 300
     timeout: 5000
     lazy: true
@@ -303,7 +303,7 @@ proxy-groups:
 
   - name: 🗃️ UPDATER
     type: fallback
-    url: https://cp.cloudflare.com/generate_204
+    url: http://www.gstatic.com/generate_204
     interval: 300
     timeout: 5000
     lazy: true
@@ -318,7 +318,7 @@ proxy-groups:
     disable-udp: false
     use:
       - 📄 Free
-    url: https://cp.cloudflare.com/generate_204
+    url: http://www.gstatic.com/generate_204
     interval: 500
     tolerance: 50
     lazy: true
@@ -331,7 +331,7 @@ proxy-groups:
     disable-udp: false
     use:
       - 📑 Keyring
-    url: https://cp.cloudflare.com/generate_204
+    url: http://www.gstatic.com/generate_204
     interval: 500
     tolerance: 50
     lazy: true
@@ -345,7 +345,7 @@ proxy-providers:
     path: ./proxy/active.yaml
     health-check:
       enable: true
-      url: https://cp.cloudflare.com/generate_204
+      url: http://www.gstatic.com/generate_204
       interval: 300
       lazy: true
       timeout: 5000
@@ -355,7 +355,7 @@ proxy-providers:
     path: ./proxy/trial.yaml
     health-check:
       enable: true
-      url: https://cp.cloudflare.com/generate_204
+      url: http://www.gstatic.com/generate_204
       interval: 300
       lazy: true
       timeout: 5000
@@ -365,7 +365,7 @@ proxy-providers:
     path: ./proxy/free.yaml
     health-check:
       enable: true
-      url: https://cp.cloudflare.com/generate_204
+      url: http://www.gstatic.com/generate_204
       interval: 300
       lazy: true
       timeout: 5000
@@ -378,7 +378,7 @@ proxy-providers:
     path: ./proxy/subs.yaml
     health-check:
       enable: true
-      url: https://cp.cloudflare.com/generate_204
+      url: http://www.gstatic.com/generate_204
       interval: 300
       lazy: true
       timeout: 5000
