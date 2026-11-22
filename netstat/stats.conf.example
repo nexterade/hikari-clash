@@ -1,0 +1,24 @@
+# Hikari NetStat — konfigurasi collector.
+# Salin jadi stats.conf (installer otomatis membuatnya kalau belum ada), lalu:
+#   sh stats-ctl.sh restart
+# Format: shell, KEY="nilai". Hanya isi yang perlu diubah.
+
+# Alamat external-controller Mihomo (bagian external-controller di config core-mu).
+# Kalau controller bind 0.0.0.0:9090, tetap pakai 127.0.0.1 di sini.
+API="http://127.0.0.1:9090"
+
+# Secret controller (baris `secret:` di config core). Kosongkan kalau core tanpa secret.
+SECRET=""
+
+# Alamat halaman laporan. 127.0.0.1 = hanya bisa dibuka dari HP itu sendiri.
+LISTEN="127.0.0.1:9099"
+
+# CIDR sumber yang dihitung sebagai WiFi, pisah koma. Selain ini = Data seluler.
+# Kosong = default 192.168.0.0/16. Contoh: WIFI="192.168.0.0/16,10.0.0.0/8"
+WIFI=""
+
+# Zona waktu laporan harian/mingguan/bulanan.
+TZ_NAME="Asia/Jakarta"
+
+# Jeda polling ke controller.
+INTERVAL="3s"

@@ -247,7 +247,7 @@ Tindak lanjut temuan audit + permintaan pemilik proyek.
 |---|---|---|
 | T1 | Grup `💫 FALLBACK` (fallback, hidden; Active + Trial), masuk ke INJECT / SMART MODE / GAMING / Plusplus | Prioritas node berurutan: pindah hanya saat node gagal. Tanpa `tolerance` (field itu hanya dikenal `url-test`) |
 | T2 | Grup `🗃️ UPDATER` (fallback, hidden: AUTO MODE → DIRECT); semua rule-provider dan provider Keyring memakai `proxy: 🗃️ UPDATER` | Rule-provider dan Keyring dulu download lewat AUTO MODE; bila node mati/belum ada, update macet. Tidak ada siklus (http → UPDATER → AUTO MODE → provider `file`) |
-| T3 | URL test seluruh grup dan health-check provider: `https://cp.cloudflare.com/generate_204` (204) | Satu URL seragam; tidak ada grup yang menganggap node mati karena URL-nya lain diblokir |
+| T3 | URL test seluruh grup dan health-check provider: tetap `http://www.gstatic.com/generate_204` (`expected-status: 204`) | Satu URL seragam. `https://cp.cloudflare.com/generate_204` sempat dicoba tetapi gagal connect, jadi tidak dipakai |
 | T4 | `💫 AUTO MODE` hidden | Dipilih lewat INJECT, tidak perlu tampil sendiri |
 
 DNS dan urutan rule identik dengan v1.2 (dijaga tes `test_dns_and_rules_same_as_v12`). **Belum diuji dengan core asli:** perilaku fallback saat core baru start. Status node belum diketahui sehingga download pertama bisa tetap mencoba node lebih dulu sebelum jatuh ke DIRECT; cache ruleset/`subs.yaml` yang disemai script menutup kasus ini.

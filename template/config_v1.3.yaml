@@ -83,8 +83,8 @@
 # Perubahan dari v1.2 (v1.3):
 #    - grup baru 💫 FALLBACK (type fallback, hidden; provider 🗳️ Active + 📅 Trial): pakai node pertama yang
 #      hidup, pindah ke berikutnya hanya kalau gagal. Ditambahkan ke 🧩 INJECT, 🌳 SMART MODE, 👾 GAMING, 💕 Plusplus
-#    - semua URL test (grup & health-check provider): http://www.gstatic.com/generate_204 -> http://www.gstatic.com/generate_204
-#      (expected-status tetap 204)
+#    - URL test (grup & health-check provider) tetap http://www.gstatic.com/generate_204, expected-status 204.
+#      https://cp.cloudflare.com/generate_204 sempat dicoba tapi gagal connect, jadi tidak dipakai
 #    - 💫 AUTO MODE: hidden: true
 #    - grup baru 🗃️ UPDATER (type fallback, hidden): 💫 AUTO MODE dulu, 🎮 DIRECT kalau semua node mati.
 #      Semua rule-provider dan provider 📑 Keyring memakai `proxy: 🗃️ UPDATER` (sebelumnya 💫 AUTO MODE), supaya

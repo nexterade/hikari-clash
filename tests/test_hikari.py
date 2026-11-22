@@ -1,4 +1,5 @@
 """Tes Hikari /.CLASH — jalankan dari root project:  python3 -m unittest discover -s tests -v"""
+import glob
 import json
 import os
 import re
@@ -97,7 +98,9 @@ class Template(unittest.TestCase):
         self.assertEqual(self.tpl["secret"], "hikari")
 
     def test_group_names_match_readme(self):
-        readme = open(os.path.join(ROOT, "README.md"), encoding="utf-8").read()
+        # README sudah dipecah: tabel group ada di docs/template.md, jadi baca README + semua docs/*.md
+        paths = [os.path.join(ROOT, "README.md")] + sorted(glob.glob(os.path.join(ROOT, "docs", "*.md")))
+        readme = "\n".join(open(p, encoding="utf-8").read() for p in paths)
         for g in self.tpl["proxy-groups"]:
             self.assertIn(g["name"], readme, g["name"])
         for old in ("🪺 WIFI", "🍋‍🟩 PROXY LIST", "🦈 AUTO MODE"):
@@ -1010,8 +1013,8 @@ class ValidatorReferences(unittest.TestCase):
 
 
 class TemplateV13(unittest.TestCase):
-    """Template v1.3: 💫 FALLBACK, 🗃️ UPDATER (jalur download provider), URL test Cloudflare, AUTO MODE hidden."""
-    URL = "https://cp.cloudflare.com/generate_204"
+    """Template v1.3: 💫 FALLBACK, 🗃️ UPDATER (jalur download provider), URL test gstatic, AUTO MODE hidden."""
+    URL = "http://www.gstatic.com/generate_204"
 
     def setUp(self):
         import yaml
@@ -1065,7 +1068,7 @@ class TemplateV13(unittest.TestCase):
         http = {n for n, p in self.cfg["proxy-providers"].items() if p["type"] == "http"}
         self.assertEqual(providers("🗃️ UPDATER") & http, set())
 
-    def test_all_test_urls_are_cloudflare_204(self):
+    def test_all_test_urls_are_gstatic_204(self):
         urls = {g["url"] for g in self.cfg["proxy-groups"] if "url" in g}
         urls |= {p["health-check"]["url"] for p in self.cfg["proxy-providers"].values() if "health-check" in p}
         self.assertEqual(urls, {self.URL})
