@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -115,7 +115,8 @@ tr[aria-current=true] td{color:var(--neon-y)}
 /* daftar teratas */
 .lists{display:grid;gap:18px}
 .list h2{margin-bottom:8px}
-.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:7px 0;border-bottom:1px solid var(--line)}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:8px 6px;margin:0 -6px;width:calc(100% + 12px);text-align:left;border-bottom:1px solid var(--line)}
+button.row:hover,button.row:focus-visible{background:var(--panel2)}
 .row .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
 .row .t{font:400 14px/1.3 var(--mono);color:var(--ink2);text-align:right}
 .row .bar{grid-column:1/-1;height:4px;display:flex;gap:2px;background:var(--grid)}
@@ -126,16 +127,6 @@ tr[aria-current=true] td{color:var(--neon-y)}
 .foot a{color:var(--neon-c);text-decoration:none;border-bottom:1px solid currentColor}
 .err{background:#1a0a14;color:#ffd5e6;padding:14px 16px;border-left:4px solid var(--neon-m);line-height:1.6}
 .err code{font-family:var(--mono);color:var(--neon-y)}
-
-/* ---------- kecepatan live ---------- */
-.live{padding:14px 16px}
-.live-top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
-.lbl{color:var(--ink2);font-size:14px}
-.speed{font:400 clamp(38px,12vw,60px)/1.05 var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
-.speed small{font-size:.32em;margin-left:.15em;color:var(--ink2)}
-.live-side{display:grid;gap:2px;text-align:right;font:400 13px/1.4 var(--mono);color:var(--ink2)}
-.spark{height:64px;margin-top:10px}
-.spark svg{display:block;width:100%;height:64px}
 
 /* ---------- kartu ringkasan ---------- */
 .sec{font:700 13px/1 var(--ui);letter-spacing:.14em;text-transform:uppercase;color:var(--mute);margin-top:6px}
@@ -184,64 +175,109 @@ details.panel[open]>summary::after{content:"\2212"}
   .panel{padding:20px}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- header: bahasa ---------- */
+.top{flex-wrap:wrap}
+.top-r{display:flex;align-items:center;gap:8px}
+.lang{display:flex;gap:2px}
+.lang button{font:700 12px/1 var(--mono);letter-spacing:.06em;padding:8px 10px;min-height:32px;color:var(--ink2);background:var(--panel)}
+.lang button[aria-pressed=true]{background:var(--neon-c);color:#04141a}
+
+/* ---------- bisa diklik ---------- */
+.chev{display:inline-block;margin-left:8px;color:var(--neon-c);font-weight:400}
+.more{font:700 13px/1 var(--ui);color:var(--neon-c);padding:8px 0 2px;min-height:32px}
+.more::after{content:" \203A"}
+.hero-more{margin-top:6px}
+.insights{display:grid;gap:12px}
+.insights h2{font:700 16px/1.2 var(--ui);letter-spacing:.03em}
+.itiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.itile{display:block;text-align:left;width:100%;background:var(--panel2);padding:11px 12px 11px 14px;min-width:0;position:relative;
+  clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,0 100%)}
+.itile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--neon-c);opacity:.55}
+button.itile:hover,button.itile:focus-visible{background:#1d1d31}
+button.itile::before{opacity:1}
+.itile .k{font:700 12px/1.2 var(--ui);color:var(--ink2);margin-bottom:6px}
+.itile .v{font:400 20px/1.15 var(--mono);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.itile .s{font:400 12px/1.4 var(--mono);color:var(--ink2);margin-top:4px;overflow-wrap:anywhere}
+.hours{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:3px;height:76px;align-items:end}
+.hb{height:100%;display:flex;align-items:flex-end;background:var(--grid);padding:0}
+.hb span{display:block;width:100%;background:var(--neon-c);opacity:.7}
+.hb.pk span{background:var(--neon-y);opacity:1}
+.hb:hover span,.hb:focus-visible span{opacity:1}
+.hlab{display:flex;justify-content:space-between;font:400 11px/1 var(--mono);color:var(--mute);margin-top:5px}
+tr[data-open]{cursor:pointer}
+tr[data-open]:hover td,tr[data-open]:focus-visible td{background:var(--panel2)}
+
+/* ---------- kartu info ---------- */
+.card .more{display:block}
+.card .kv span{min-width:0;overflow-wrap:anywhere}
+.card .kv b{white-space:nowrap}
+.card .sbar{height:6px;background:var(--line);margin:8px 0 6px}
+.card .sbar span{display:block;height:100%;background:var(--neon-c)}
+.wc{padding:0;width:100%}
+button.wc:hover .wb,button.wc:focus-visible .wb{outline:1px solid var(--neon-c)}
+
+/* ---------- detail (dialog) ---------- */
+dialog.dlg{background:transparent;border:0;padding:0;margin:auto auto 0;width:min(580px,100%);max-width:100%;max-height:88vh;color:var(--ink);overflow:visible}
+dialog.dlg::backdrop{background:rgba(5,5,11,.76)}
+.dlg-in{background:var(--panel);padding:16px 16px max(18px,env(safe-area-inset-bottom));max-height:88vh;overflow:auto;position:relative;
+  clip-path:polygon(0 0,calc(100% - var(--cut)) 0,100% var(--cut),100% 100%,0 100%)}
+.dlg-in::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,var(--neon-c),var(--neon-m) 60%,transparent)}
+.dlg-top{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.dlg-top h2{flex:1;font:700 17px/1.25 var(--ui);min-width:0;overflow-wrap:anywhere}
+.x{width:40px;height:40px;flex:none;font:400 18px/1 var(--mono);background:var(--panel2);color:var(--ink)}
+.x[hidden]{display:none}
+.dsub{font:400 13px/1.5 var(--mono);color:var(--ink2)}
+.dbody{display:grid;gap:14px}
+.dbody h3{font:700 13px/1 var(--ui);color:var(--ink2);margin-bottom:8px}
+.trend{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px;height:70px;align-items:end}
+.trend button{height:100%;display:flex;align-items:flex-end;background:var(--grid);padding:0}
+.trend span{display:block;width:100%;background:var(--neon-c);opacity:.7}
+.trend .on span{background:var(--neon-y);opacity:1}
+.trend button:hover span,.trend button:focus-visible span{opacity:1}
+.note{font:400 12px/1.5 var(--mono);color:var(--mute)}
+@media(min-width:700px){
+  dialog.dlg{margin:auto}
+  .dlg-in{padding-bottom:18px}
+  .itiles{grid-template-columns:repeat(3,1fr)}
+}
 </style>
 </head>
 <body>
 <main class="wrap">
   <header class="top">
     <div class="brand">Hikari<i>/</i>NetStat</div>
-    <div class="chip" id="chip" data-s="down" role="status"><b></b><span id="chipTxt">menghubungkan…</span></div>
+    <div class="top-r">
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-lang="id" aria-pressed="false">ID</button>
+      </div>
+      <div class="chip" id="chip" data-s="down" role="status"><b></b><span id="chipTxt">…</span></div>
+    </div>
   </header>
 
   <div id="err" class="err" hidden></div>
 
-  <section class="panel live" aria-label="Kecepatan sekarang">
-    <div class="live-top">
-      <div><div class="lbl">Kecepatan sekarang</div><div class="speed" id="lSpeed">–</div></div>
-      <div class="live-side"><span id="lUp"></span><span id="lConn"></span><span id="lPeak"></span></div>
-    </div>
-    <div class="spark" id="lSpark"></div>
-  </section>
+  <h2 class="sec" id="period" data-i="secPeriod"></h2>
 
-  <section class="cards" aria-label="Ringkasan">
-    <article class="card"><h2>Hari ini</h2><div id="cToday"></div></article>
-    <article class="card"><h2>App teratas hari ini</h2><div id="cTop"></div></article>
-    <article class="card"><h2>Bulan ini</h2><div id="cMonth"></div></article>
-    <article class="card"><h2>Rekor &amp; catatan</h2><div id="cRec"></div></article>
-    <article class="card full">
-      <h2>Batas data</h2>
-      <div id="cLimit"></div>
-      <div class="btns" style="margin-top:12px"><button class="btn" id="limEdit" type="button">Atur batas</button></div>
-      <div class="form" id="limForm" hidden>
-        <label>Batas paket (GB)<input id="limGb" type="text" inputmode="decimal" placeholder="contoh: 50"></label>
-        <label>Tanggal reset kuota<select id="limDay"></select></label>
-        <label>Yang dihitung<select id="limNet"><option value="data">Data seluler saja</option><option value="wifi">WiFi saja</option><option value="all">WiFi + data</option></select></label>
-        <div class="btns"><button class="btn pri" id="limSave" type="button">Simpan</button><button class="btn" id="limClear" type="button">Hapus batas</button></div>
-        <div class="sub" id="limMsg" role="status"></div>
-      </div>
-    </article>
-    <article class="card full"><h2>7 hari terakhir</h2><div id="cWeek"></div></article>
-  </section>
-
-  <h2 class="sec">Rincian per periode</h2>
-
-  <nav class="tabs" role="tablist" aria-label="Rentang waktu">
-    <button class="tab" role="tab" data-g="daily" aria-selected="true">Harian</button>
-    <button class="tab" role="tab" data-g="weekly" aria-selected="false">Mingguan</button>
-    <button class="tab" role="tab" data-g="monthly" aria-selected="false">Bulanan</button>
+  <nav class="tabs" role="tablist" aria-label="Range">
+    <button class="tab" role="tab" data-g="daily" aria-selected="true" data-i="tabDaily"></button>
+    <button class="tab" role="tab" data-g="weekly" aria-selected="false" data-i="tabWeekly"></button>
+    <button class="tab" role="tab" data-g="monthly" aria-selected="false" data-i="tabMonthly"></button>
   </nav>
 
   <section class="panel hero" aria-live="polite">
     <div class="hero-label"><b id="hTitle">–</b><span id="hRange"></span></div>
     <div class="big" id="hTotal">0<small>B</small></div>
     <div class="delta" id="hDelta"></div>
+    <button type="button" class="more hero-more" id="hMore" data-i="details"></button>
     <div class="tiles">
       <div class="tile" style="--c:var(--wifi)">
         <h3><i></i>WiFi</h3><div class="v" id="wTot">0 B</div>
         <div class="s" id="wSub"></div>
       </div>
       <div class="tile" style="--c:var(--data)">
-        <h3><i></i>Data seluler</h3><div class="v" id="dTot">0 B</div>
+        <h3><i></i><span data-i="mobile"></span></h3><div class="v" id="dTot">0 B</div>
         <div class="s" id="dSub"></div>
       </div>
     </div>
@@ -249,12 +285,21 @@ details.panel[open]>summary::after{content:"\2212"}
     <div class="internal" id="internal"></div>
   </section>
 
+  <section class="panel insights" aria-label="Usage insights">
+    <h2 data-i="insTitle"></h2>
+    <div class="itiles" id="itiles"></div>
+    <div>
+      <h3 class="lbl" style="margin-bottom:8px;font:700 13px/1 var(--ui)" data-i="byHour"></h3>
+      <div id="hourBox"></div>
+    </div>
+  </section>
+
   <section class="panel">
     <div class="chart-head">
-      <h2 id="cTitle">Pemakaian per hari</h2>
-      <div class="legend"><span><i style="background:var(--wifi)"></i>WiFi</span><span><i style="background:var(--data)"></i>Data seluler</span></div>
-      <div class="seg" role="group" aria-label="Tampilan">
-        <button id="vChart" aria-pressed="true">Grafik</button><button id="vTable" aria-pressed="false">Tabel</button>
+      <h2 id="cTitle"></h2>
+      <div class="legend"><span><i style="background:var(--wifi)"></i>WiFi</span><span><i style="background:var(--data)"></i><span data-i="mobile"></span></span></div>
+      <div class="seg" role="group" aria-label="View">
+        <button id="vChart" aria-pressed="true" data-i="vChart"></button><button id="vTable" aria-pressed="false" data-i="vTable"></button>
       </div>
     </div>
     <div id="chartBox" class="plot"></div>
@@ -263,126 +308,340 @@ details.panel[open]>summary::after{content:"\2212"}
 
   <section class="panel lists" id="lists"></section>
 
+  <section class="cards" aria-label="Summary">
+    <article class="card"><h2 data-i="cToday"></h2><div id="cToday"></div></article>
+    <article class="card"><h2 data-i="cTopApp"></h2><div id="cTop"></div></article>
+    <article class="card"><h2 data-i="cMonth"></h2><div id="cMonth"></div></article>
+    <article class="card"><h2 data-i="cStore"></h2><div id="cStore"></div></article>
+    <article class="card full"><h2 data-i="cUp"></h2><div id="cUp"></div></article>
+    <article class="card full"><h2 data-i="cNet"></h2><div id="cNet"></div></article>
+    <article class="card full"><h2 data-i="c7"></h2><div id="cWeek"></div></article>
+    <article class="card full">
+      <h2 data-i="cLimit"></h2>
+      <div id="cLimit"></div>
+      <div class="btns" style="margin-top:12px"><button class="btn" id="limEdit" type="button" data-i="limSet"></button></div>
+      <div class="form" id="limForm" hidden>
+        <label><span data-i="limGb"></span><input id="limGb" type="text" inputmode="decimal" data-ip="limGbPh"></label>
+        <label><span data-i="limDay"></span><select id="limDay"></select></label>
+        <label><span data-i="limNet"></span><select id="limNet"><option value="data" data-i="optData"></option><option value="wifi" data-i="optWifi"></option><option value="all" data-i="optAll"></option></select></label>
+        <div class="btns"><button class="btn pri" id="limSave" type="button" data-i="save"></button><button class="btn" id="limClear" type="button" data-i="limClear"></button></div>
+        <div class="sub" id="limMsg" role="status"></div>
+      </div>
+    </article>
+  </section>
+
   <details class="panel" id="dataPanel">
-    <summary>Data &amp; cadangan</summary>
+    <summary data-i="dataTitle"></summary>
     <div class="dm">
-      <p>Cadangan berisi seluruh riwayat trafik (harian, per app, per rute) dan pengaturan batas data. Formatnya sama dengan file <code>stats.json</code> di perangkat.</p>
+      <p data-ih="dataIntro"></p>
       <div class="btns">
-        <a class="btn pri" href="/api/export.json" download>Unduh cadangan (.json)</a>
-        <a class="btn" href="/api/export.csv" download>Ekspor CSV</a>
+        <a class="btn pri" href="/api/export.json" download data-i="dlJson"></a>
+        <a class="btn" href="/api/export.csv" download data-i="dlCsv"></a>
       </div>
       <hr>
-      <label>Impor dari file cadangan
+      <label><span data-i="impFile"></span>
         <input type="file" id="impFile" accept=".json,application/json">
       </label>
-      <label>Mode impor
+      <label><span data-i="impMode"></span>
         <select id="impMode">
-          <option value="fill">Isi hari yang kosong (aman)</option>
-          <option value="add">Gabungkan: jumlahkan angka</option>
-          <option value="replace">Ganti semua data</option>
+          <option value="fill" data-i="mFill"></option>
+          <option value="add" data-i="mAdd"></option>
+          <option value="replace" data-i="mReplace"></option>
         </select>
       </label>
       <div class="help" id="impHelp"></div>
-      <div class="btns"><button class="btn pri" id="impBtn" type="button">Impor</button></div>
+      <div class="btns"><button class="btn pri" id="impBtn" type="button" data-i="impBtn"></button></div>
       <div class="help" id="impMsg" role="status"></div>
     </div>
   </details>
 
-  <footer class="foot">
-    <span id="fLeft"></span>
-  </footer>
+  <footer class="foot"><span id="fLeft"></span></footer>
 </main>
+
+<dialog class="dlg" id="dlg" aria-labelledby="dTitle">
+  <div class="dlg-in">
+    <div class="dlg-top">
+      <button type="button" class="x" id="dBack" hidden aria-label="Back">‹</button>
+      <h2 id="dTitle"></h2>
+      <button type="button" class="x" id="dClose" aria-label="Close">✕</button>
+    </div>
+    <div class="dbody" id="dBody"></div>
+  </div>
+</dialog>
 
 <script>
 "use strict";
+const T={
+en:{
+  connecting:"connecting…",collectorDown:"collector down",mihomoDown:"Mihomo disconnected",live:"live · {0}",stale:"delayed {0}s",
+  errConn:"The page can't reach the collector. Check: <code>sh stats-ctl.sh status</code>, then <code>sh stats-ctl.sh start</code>.",
+  errMihomo:"The collector is running but can't read Mihomo: <code>{0}</code>. Make sure Mihomo is running and that <code>API</code> and <code>SECRET</code> in <code>stats.conf</code> match the Mihomo controller.",
+  noResp:"no response yet",
+  secPeriod:"Breakdown by period",tabDaily:"Daily",tabWeekly:"Weekly",tabMonthly:"Monthly",
+  nowDaily:"Today",nowWeekly:"This week",nowMonthly:"This month",prevDaily:"yesterday",prevWeekly:"last week",prevMonthly:"last month",
+  titleDaily:"Usage per day",titleWeekly:"Usage per week",titleMonthly:"Usage per month",
+  mobile:"Mobile data",mobileS:"Mobile",details:"Details",
+  vsPrev:"{0} vs {1} ({2})",prevPeriod:"previous period",partial:" · period not over yet",noCompare:"No comparison yet",
+  seenConns:"{0} connections seen",internal:"Internal & local (DNS, proxy port): {0} — not in total",
+  insTitle:"Usage insights",byHour:"Usage by hour (tap a bar)",
+  iActive:"Active time",iHour:"Busiest hour",iTopApp:"Top app",iTopRoute:"Top route",iPeakDay:"Busiest day",iAvgDay:"Avg per active day",
+  perActHour:"≈ {0} per active hour",daysWith:"{0} of {1} days with traffic",noHours:"No hourly data for this period yet. It fills in as the collector keeps running.",hoursAria:"Usage by hour of day",
+  vChart:"Chart",vTable:"Table",
+  colPeriod:"Period",colWifi:"WiFi",colData:"Mobile",colTotal:"Total",colConns:"Conns seen",
+  kApp:"App",kRoute:"Route",kExit:"Exit path",lApp:"Apps",lRoute:"Top routes",lExit:"Exit paths",
+  noData:"No data for this period yet. The collector counts from the first connection it sees. Open a few apps, wait a few seconds, then reload.",
+  noApp:"(no app)",others:"(others)",
+  cToday:"Today",cTopApp:"Top apps today",cMonth:"This month",cNet:"IP address",cUp:"Uptime",cStore:"Phone storage",c7:"Last 7 days",cLimit:"Data limit",
+  noTrafficToday:"No traffic today.",noAppData:"No app data yet.",avgDay:"Avg/day",estEnd:"Month-end est.",lastMonth:"Last month",
+  noIp:"No network address found.",noDevice:"Device info unavailable. Update the collector to the latest version.",
+  collSince:"Collector since",collRun:"Running for",devBoot:"Device booted",devUp:"Device uptime",trackSince:"Tracking since",
+  ofTotal:"of {0}",free:"Free",usedPct:"Used",
+  avgPerDay:"average {0} per day",
+  limNone:"No limit set. Set a plan limit to track remaining quota, projected end-of-period usage, and a daily allowance.",
+  limOf:"of {0} · {1}% · {2}",limOk:"On track",limNear:"Almost used up",limOver:"Exceeded",
+  remaining:"Remaining",projected:"Projected at period end",allowance:"Daily allowance ≈",
+  limWarn:"At the current pace the quota runs out before the period ends.",
+  limPeriod:"Period {0} → {1} · day {2} of {3} · counting: {4}",nData:"mobile data",nWifi:"WiFi",nAll:"WiFi + data",
+  limSet:"Set limit",limGb:"Plan limit (GB)",limGbPh:"e.g. 50",limDay:"Quota reset day",limNet:"Counted traffic",
+  optData:"Mobile data only",optWifi:"WiFi only",optAll:"WiFi + mobile data",save:"Save",limClear:"Remove limit",
+  limNeedGb:"Enter the limit in GB, e.g. 50",limFail:"Could not save: {0}",
+  dataTitle:"Data & backup",dataIntro:"A backup holds the full traffic history (daily, per app, per route) and the data-limit settings. It uses the same format as <code>stats.json</code> on the device.",
+  dlJson:"Download backup (.json)",dlCsv:"Export CSV",impFile:"Import from backup file",impMode:"Import mode",
+  mFill:"Fill empty days (safe)",mAdd:"Merge: add numbers",mReplace:"Replace all data",
+  hFill:"Only adds days that aren't in the current database. Safe: nothing is overwritten or doubled.",
+  hAdd:"Adds the numbers per day to the current database. Good for merging two devices; overlapping periods get doubled.",
+  hReplace:"Replaces ALL data with the file. The current database is backed up automatically first.",
+  impBtn:"Import",impPick:"Choose a .json file first.",impConfirm:"Replace ALL data with this file? The current database is backed up automatically first.",
+  impRun:"Importing…",impDone:"Done: {0} new days, {1} merged, {2} skipped. {3} days in total now.",impBak:" Backup of old data: {0}",impFail:"Failed: {0}",
+  footer:"Counted since {0} · WiFi = source {1} · {2} · Totals come from Mihomo's counters; top lists are estimates from connections that were seen",
+  dClose:"Close",dBack:"Back",
+  dTotal:"Total",dUpDown:"Upload / download",dShare:"Share of period",dRank:"Rank in period",dTop8:"top {0}",dTrend:"Trend across periods",dBest:"Biggest period",dAvgP:"Average (periods with data)",
+  dTop8note:"Top lists only keep the 8 biggest entries per period, so periods where this isn't in the top 8 show as empty.",
+  dNotInTop:"Not in this period's top list.",dTopApps:"Top apps",dHourOf:"Hour {0}",dActMin:"Active minutes",dRate:"≈ {0} per active minute",dDayShare:"Share of period",
+  dJump:"Open this period",dNoHourAct:"No active-minute data for this hour.",
+  ud:"d",uh:"h",um:"m"
+},
+id:{
+  connecting:"menghubungkan…",collectorDown:"collector mati",mihomoDown:"Mihomo putus",live:"live · {0}",stale:"tertunda {0} dtk",
+  errConn:"Halaman nggak bisa nyambung ke collector. Cek: <code>sh stats-ctl.sh status</code>, lalu <code>sh stats-ctl.sh start</code>.",
+  errMihomo:"Collector hidup tapi gagal baca Mihomo: <code>{0}</code>. Pastikan Mihomo jalan, lalu cek <code>API</code> dan <code>SECRET</code> di <code>stats.conf</code> sudah sama dengan controller Mihomo.",
+  noResp:"belum ada respons",
+  secPeriod:"Rincian per periode",tabDaily:"Harian",tabWeekly:"Mingguan",tabMonthly:"Bulanan",
+  nowDaily:"Hari ini",nowWeekly:"Minggu ini",nowMonthly:"Bulan ini",prevDaily:"kemarin",prevWeekly:"minggu lalu",prevMonthly:"bulan lalu",
+  titleDaily:"Pemakaian per hari",titleWeekly:"Pemakaian per minggu",titleMonthly:"Pemakaian per bulan",
+  mobile:"Data seluler",mobileS:"Seluler",details:"Detail",
+  vsPrev:"{0} dibanding {1} ({2})",prevPeriod:"periode sebelumnya",partial:" · periode ini belum penuh",noCompare:"Belum ada pembanding",
+  seenConns:"{0} koneksi terlihat",internal:"Internal & lokal (DNS, port proxy): {0} — tidak masuk total",
+  insTitle:"Wawasan pemakaian",byHour:"Pemakaian per jam (ketuk batang)",
+  iActive:"Waktu aktif",iHour:"Jam tersibuk",iTopApp:"App teratas",iTopRoute:"Rute teratas",iPeakDay:"Hari terboros",iAvgDay:"Rata-rata per hari aktif",
+  perActHour:"≈ {0} per jam aktif",daysWith:"{0} dari {1} hari ada trafik",noHours:"Belum ada data per jam untuk periode ini. Terisi seiring collector berjalan.",hoursAria:"Pemakaian per jam dalam sehari",
+  vChart:"Grafik",vTable:"Tabel",
+  colPeriod:"Periode",colWifi:"WiFi",colData:"Data",colTotal:"Total",colConns:"Koneksi terlihat",
+  kApp:"Aplikasi",kRoute:"Rute",kExit:"Jalur keluar",lApp:"Aplikasi",lRoute:"Rute teratas",lExit:"Jalur keluar",
+  noData:"Belum ada data untuk periode ini. Collector mulai menghitung sejak koneksi pertama yang dia lihat. Buka beberapa app, tunggu beberapa detik, lalu muat ulang halaman.",
+  noApp:"(tanpa app)",others:"(lainnya)",
+  cToday:"Hari ini",cTopApp:"App teratas hari ini",cMonth:"Bulan ini",cNet:"Alamat IP",cUp:"Uptime",cStore:"Penyimpanan HP",c7:"7 hari terakhir",cLimit:"Batas data",
+  noTrafficToday:"Belum ada trafik hari ini.",noAppData:"Belum ada data app.",avgDay:"Rata-rata/hari",estEnd:"Perkiraan akhir",lastMonth:"Bulan lalu",
+  noIp:"Alamat jaringan tidak ditemukan.",noDevice:"Info perangkat tidak tersedia. Perbarui collector ke versi terbaru.",
+  collSince:"Collector aktif sejak",collRun:"Sudah berjalan",devBoot:"HP menyala sejak",devUp:"Uptime HP",trackSince:"Dihitung sejak",
+  ofTotal:"dari {0}",free:"Sisa",usedPct:"Terpakai",
+  avgPerDay:"rata-rata {0} per hari",
+  limNone:"Belum ada batas. Atur batas paket untuk memantau sisa kuota, perkiraan akhir periode, dan jatah per hari.",
+  limOf:"dari {0} · {1}% · {2}",limOk:"Aman",limNear:"Hampir habis",limOver:"Terlampaui",
+  remaining:"Sisa",projected:"Perkiraan akhir periode",allowance:"Jatah ≈ per hari",
+  limWarn:"Dengan laju sekarang, kuota terlampaui sebelum periode berakhir.",
+  limPeriod:"Periode {0} → {1} · hari ke-{2} dari {3} · hitung: {4}",nData:"data seluler",nWifi:"WiFi",nAll:"WiFi + data",
+  limSet:"Atur batas",limGb:"Batas paket (GB)",limGbPh:"contoh: 50",limDay:"Tanggal reset kuota",limNet:"Yang dihitung",
+  optData:"Data seluler saja",optWifi:"WiFi saja",optAll:"WiFi + data",save:"Simpan",limClear:"Hapus batas",
+  limNeedGb:"Isi batas dalam GB, contoh: 50",limFail:"Gagal menyimpan: {0}",
+  dataTitle:"Data & cadangan",dataIntro:"Cadangan berisi seluruh riwayat trafik (harian, per app, per rute) dan pengaturan batas data. Formatnya sama dengan file <code>stats.json</code> di perangkat.",
+  dlJson:"Unduh cadangan (.json)",dlCsv:"Ekspor CSV",impFile:"Impor dari file cadangan",impMode:"Mode impor",
+  mFill:"Isi hari yang kosong (aman)",mAdd:"Gabungkan: jumlahkan angka",mReplace:"Ganti semua data",
+  hFill:"Hanya menambah hari yang belum ada di database sekarang. Aman: tidak ada angka yang ditimpa atau dobel.",
+  hAdd:"Menjumlahkan angka per hari dengan database sekarang. Cocok untuk menggabung dua perangkat; kalau periodenya tumpang tindih, angka jadi dobel.",
+  hReplace:"Mengganti SEMUA data dengan isi file. Database sekarang dicadangkan otomatis dulu di folder data.",
+  impBtn:"Impor",impPick:"Pilih file .json dulu.",impConfirm:"Ganti SEMUA data dengan isi file ini? Database sekarang dicadangkan otomatis dulu.",
+  impRun:"Mengimpor…",impDone:"Selesai: {0} hari baru, {1} digabung, {2} dilewati. Total sekarang {3} hari.",impBak:" Cadangan data lama: {0}",impFail:"Gagal: {0}",
+  footer:"Dihitung sejak {0} · WiFi = sumber {1} · {2} · Total dari counter Mihomo; daftar teratas = perkiraan dari koneksi yang sempat terlihat",
+  dClose:"Tutup",dBack:"Kembali",
+  dTotal:"Total",dUpDown:"Unggah / unduh",dShare:"Porsi periode",dRank:"Peringkat di periode",dTop8:"top {0}",dTrend:"Tren antar periode",dBest:"Periode terbesar",dAvgP:"Rata-rata (periode yang ada data)",
+  dTop8note:"Daftar teratas hanya menyimpan 8 entri terbesar per periode, jadi periode di mana ini tidak masuk top 8 tampil kosong.",
+  dNotInTop:"Tidak masuk daftar teratas periode ini.",dTopApps:"App teratas",dHourOf:"Jam {0}",dActMin:"Menit aktif",dRate:"≈ {0} per menit aktif",dDayShare:"Porsi periode",
+  dJump:"Buka periode ini",dNoHourAct:"Belum ada data menit aktif untuk jam ini.",
+  ud:"hr",uh:"j",um:"mnt"
+}};
 const $=s=>document.querySelector(s);
+const LS={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let L=LS.get("hs.lang")==="id"?"id":"en";
+const LOC=()=>L==="id"?"id-ID":"en-US";
+const t=(k,...a)=>{let s=(T[L][k]!==undefined?T[L][k]:(T.en[k]!==undefined?T.en[k]:k));a.forEach((v,i)=>{s=s.split("{"+i+"}").join(v)});return s};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
 const U=["B","KB","MB","GB","TB"];
-const nf=(v,d)=>v.toLocaleString("id-ID",{minimumFractionDigits:d,maximumFractionDigits:d});
+const nf=(v,d)=>v.toLocaleString(LOC(),{minimumFractionDigits:d,maximumFractionDigits:d});
 function split(b){let i=0;while(b>=1000&&i<U.length-1){b/=1000;i++}return [b,U[i]]}
 function fmt(b){const[v,u]=split(b);return nf(v,v>=100||u==="B"?0:v>=10?1:2)+" "+u}
 function fmtBig(b){const[v,u]=split(b);return nf(v,u==="B"?0:v>=100?0:v>=10?1:2)+"<small>"+u+"</small>"}
-const compact=b=>{const[v,u]=split(b);return (v>=10||u==="B"?Math.round(v):Math.round(v*10)/10).toString().replace(".",",")+u}
+const compact=b=>{const[v,u]=split(b);return (v>=10||u==="B"?Math.round(v):Math.round(v*10)/10).toString().replace(".",L==="id"?",":".")+u};
 const tot=c=>c?c.up+c.down:0;
 const NET=n=>n||{up:0,down:0,conns:0};
+const etot=e=>tot(NET(e.nets.wifi))+tot(NET(e.nets.data));
+const pad=n=>String(n).padStart(2,"0");
+const dn=n=>n==="(tanpa app)"?t("noApp"):n==="(lainnya)"?t("others"):n;
 
-let S=null,gran="daily",sel=null,view="chart";
-const GN={daily:{now:"Hari ini",prev:"kemarin",title:"Pemakaian per hari"},
-          weekly:{now:"Minggu ini",prev:"minggu lalu",title:"Pemakaian per minggu"},
-          monthly:{now:"Bulan ini",prev:"bulan lalu",title:"Pemakaian per bulan"}};
+/* ---------- tanggal & durasi (label dibuat di klien, ikut bahasa) ---------- */
+const dtf=(key,o)=>new Intl.DateTimeFormat(LOC(),Object.assign({timeZone:"UTC"},o)).format(new Date(key.length===7?key+"-01T00:00:00Z":key+"T00:00:00Z"));
+const lblDay=k=>dtf(k,{weekday:"short",day:"numeric",month:"short"});
+const lblWeek=(a,b)=>dtf(a,{day:"numeric",month:"short"})+" – "+dtf(b,{day:"numeric",month:"short"});
+const lblMon=k=>dtf(k,{month:"short",year:"numeric"});
+const labelG=(g,e)=>g==="daily"?lblDay(e.key):g==="weekly"?lblWeek(e.start,e.end):lblMon(e.key);
+const fmtDT=u=>new Date(u*1000).toLocaleString(LOC(),{timeZone:S?S.tz:undefined,day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:false});
+const durMin=m=>{m=Math.round(m);const h=Math.floor(m/60);return h?h+t("uh")+" "+(m%60)+t("um"):m+t("um")};
+function durSec(s,n){s=Math.max(0,Math.floor(s));const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60),p=[];
+  if(d)p.push(d+t("ud"));if(d||h)p.push(h+t("uh"));p.push(m+t("um"));return p.slice(0,n||3).join(" ")}
+const hrRange=h=>pad(h)+":00–"+pad((h+1)%24)+":00";
 
+let S=null,DV=null,DVat=0,gran="daily",sel=null,view="chart",DT=null;
+const GK={daily:"Daily",weekly:"Weekly",monthly:"Monthly"};
+const entryOf=(g,key)=>S&&S[g].find(x=>x.key===key);
+
+/* ---------- bahasa ---------- */
+function applyStatic(){
+  document.documentElement.lang=L;
+  document.querySelectorAll("[data-i]").forEach(el=>{el.textContent=t(el.dataset.i)});
+  document.querySelectorAll("[data-ih]").forEach(el=>{el.innerHTML=t(el.dataset.ih)});
+  document.querySelectorAll("[data-ip]").forEach(el=>{el.placeholder=t(el.dataset.ip)});
+  document.querySelectorAll("[data-lang]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===L));
+  $("#dClose").setAttribute("aria-label",t("dClose"));$("#dBack").setAttribute("aria-label",t("dBack"));
+  impHelp();
+}
+document.querySelectorAll("[data-lang]").forEach(b=>b.addEventListener("click",()=>{
+  if(b.dataset.lang===L)return;L=b.dataset.lang;LS.set("hs.lang",L);applyStatic();
+  if(S)render();else load();
+  if(DV)drawNet();
+}));
+
+/* ---------- status & muat data ---------- */
+let CH=["down","connecting",[]];
+function setChip(s,k,...a){CH=[s,k,a];const c=$("#chip");c.dataset.s=s;$("#chipTxt").textContent=t(k,...a)}
+const showErr=h=>{const el=$("#err");el.hidden=false;el.innerHTML=h};
 async function load(){
   try{
     const r=await fetch("/api/summary",{cache:"no-store"});
     if(!r.ok) throw new Error("HTTP "+r.status);
     S=await r.json(); $("#err").hidden=true; render();
   }catch(e){
-    S=null;
-    const el=$("#err");el.hidden=false;
-    el.innerHTML="Halaman nggak bisa nyambung ke collector. Cek: <code>sh stats-ctl.sh status</code>, lalu <code>sh stats-ctl.sh start</code>.";
-    setChip("down","collector mati");
+    S=null;showErr(t("errConn"));setChip("down","collectorDown");
   }
 }
-function setChip(s,t){const c=$("#chip");c.dataset.s=s;$("#chipTxt").textContent=t}
+async function loadDevice(){
+  try{const r=await fetch("/api/device",{cache:"no-store"});if(!r.ok)throw new Error("HTTP "+r.status);DV=await r.json();DVat=Date.now()}
+  catch(e){DV=null}
+  drawNet();
+}
 
 function render(){
   const st=S.status, age=S.generated-st.lastPoll;
-  if(st.ok&&age<20) setChip("live","live · "+new Date(S.generated*1000).toLocaleTimeString("id-ID",{hour12:false,timeZone:S.tz}));
-  else if(st.ok) setChip("stale","tertunda "+age+" dtk");
-  else{setChip("down","Mihomo putus");const el=$("#err");el.hidden=false;
-    el.innerHTML="Collector hidup tapi gagal baca Mihomo: <code>"+esc(st.lastErr||"belum ada respons")+"</code>. Pastikan Mihomo jalan, lalu cek <code>API</code> dan <code>SECRET</code> di <code>stats.conf</code> sudah sama dengan controller Mihomo."}
-  const series=S[gran], idx=Math.max(0,series.findIndex(e=>e.key===sel));
-  const i=sel&&series.some(e=>e.key===sel)?idx:series.length-1;
+  if(st.ok&&age<20) setChip("live","live",new Date(S.generated*1000).toLocaleTimeString(LOC(),{hour12:false,timeZone:S.tz}));
+  else if(st.ok) setChip("stale","stale",age);
+  else{setChip("down","mihomoDown");showErr(t("errMihomo",esc(st.lastErr||t("noResp"))))}
+  const series=S[gran];
+  const i=sel&&series.some(e=>e.key===sel)?series.findIndex(e=>e.key===sel):series.length-1;
   const e=series[i], p=i>0?series[i-1]:null;
-  document.querySelectorAll(".tab").forEach(t=>t.setAttribute("aria-selected",t.dataset.g===gran));
+  document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.g===gran));
   const w=NET(e.nets.wifi), d=NET(e.nets.data), n=NET(e.nets.internal), T=tot(w)+tot(d);
 
-  $("#hTitle").textContent=e.active?GN[gran].now:e.label;
-  $("#hRange").textContent=gran==="daily"?e.label:(e.start+" → "+e.end);
+  $("#hTitle").textContent=e.active?t("now"+GK[gran]):labelG(gran,e);
+  $("#hRange").textContent=gran==="daily"?lblDay(e.key):(dtf(e.start,{day:"numeric",month:"short"})+" → "+dtf(e.end,{day:"numeric",month:"short",year:"numeric"}));
   $("#hTotal").innerHTML=fmtBig(T);
   let dl="";
-  if(p){const pt=tot(NET(p.nets.wifi))+tot(NET(p.nets.data));
-    if(pt>0){const pc=(T-pt)/pt*100;dl=(pc>=0?"▲ ":"▼ ")+nf(Math.abs(pc),0)+"% dibanding "+(e.active?GN[gran].prev:"periode sebelumnya")+" ("+fmt(pt)+")"+(e.active?" · periode ini belum penuh":"");
+  if(p){const pt=etot(p);
+    if(pt>0){const pc=(T-pt)/pt*100;
+      dl=t("vsPrev",(pc>=0?"▲ ":"▼ ")+nf(Math.abs(pc),0)+"%",e.active?t("prev"+GK[gran]):t("prevPeriod"),fmt(pt))+(e.active?t("partial"):"");
       $("#hDelta").className="delta "+(pc>5?"up":pc<-5?"dn":"")}
-    else{dl="Belum ada pembanding";$("#hDelta").className="delta"}}
+    else{dl=t("noCompare");$("#hDelta").className="delta"}}
   $("#hDelta").textContent=dl;
+  const hm=$("#hMore");hm.dataset.open="period";hm.dataset.g=gran;hm.dataset.key=e.key;
   $("#wTot").textContent=fmt(tot(w));$("#dTot").textContent=fmt(tot(d));
-  $("#wSub").innerHTML="↓ "+fmt(w.down)+"<br>↑ "+fmt(w.up)+"<br>"+nf(w.conns,0)+" koneksi terlihat";
-  $("#dSub").innerHTML="↓ "+fmt(d.down)+"<br>↑ "+fmt(d.up)+"<br>"+nf(d.conns,0)+" koneksi terlihat";
+  $("#wSub").innerHTML="↓ "+fmt(w.down)+"<br>↑ "+fmt(w.up)+"<br>"+t("seenConns",nf(w.conns,0));
+  $("#dSub").innerHTML="↓ "+fmt(d.down)+"<br>↑ "+fmt(d.up)+"<br>"+t("seenConns",nf(d.conns,0));
   const sh=$("#share");
   if(T>0){sh.hidden=false;sh.innerHTML='<span style="width:'+(tot(w)/T*100)+'%;background:var(--wifi)"></span><span style="width:'+(tot(d)/T*100)+'%;background:var(--data)"></span>'}else sh.hidden=true;
-  $("#internal").innerHTML=tot(n)>0?'<i></i>Internal &amp; lokal (DNS, port proxy): '+fmt(tot(n))+' — tidak masuk total':"";
+  $("#internal").innerHTML=tot(n)>0?'<i></i>'+t("internal",fmt(tot(n))):"";
 
-  $("#cTitle").textContent=GN[gran].title;
-  drawChart(series,i);drawTable(series,i);drawLists(e);drawCards();
-  $("#fLeft").textContent="Dihitung sejak "+new Date(S.started*1000).toLocaleDateString("id-ID",{timeZone:S.tz,day:"numeric",month:"short",year:"numeric"})+" · WiFi = sumber "+(S.wifiCidrs||[]).join(", ")+" · "+S.tz+" · Total dari counter Mihomo; daftar teratas = perkiraan dari koneksi yang sempat terlihat";
+  $("#cTitle").textContent=t("title"+GK[gran]);
+  drawInsights(gran,e);drawChart(series,i);drawTable(series,i);drawLists(gran,e);drawCards();drawNet();
+  const f=$("#fLeft");f.textContent=t("footer",new Date(S.started*1000).toLocaleDateString(LOC(),{timeZone:S.tz,day:"numeric",month:"short",year:"numeric"}),(S.wifiCidrs||[]).join(", "),S.tz);
+  if($("#dlg").open&&DT)renderDetail();
 }
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- wawasan pemakaian ---------- */
+function peakHour(e){
+  if(!e.hours||e.hours.length!==24)return null;
+  const mx=Math.max(...e.hours);if(mx<=0)return null;
+  return {h:e.hours.indexOf(mx),b:mx};
+}
+function daysInRange(e){
+  const a=Date.parse(e.start+"T00:00:00Z"); let b=Date.parse(e.end+"T00:00:00Z");
+  if(e.active){const today=Date.parse(S.daily[S.daily.length-1].key+"T00:00:00Z");b=Math.min(b,today)}
+  return Math.max(1,Math.round((b-a)/864e5)+1);
+}
+const topOf=(e,dim)=>((e.top&&e.top[dim])||[]).find(x=>x.name!=="(lainnya)");
+function itile(k,v,s,attrs){
+  const inner='<div class="k">'+esc(k)+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div>';
+  return attrs?'<button type="button" class="itile" '+attrs+'>'+inner+'</button>':'<div class="itile">'+inner+'</div>';
+}
+function drawInsights(g,e){
+  const T=etot(e), am=e.activeMin||0, ph=peakHour(e), tiles=[];
+  tiles.push(itile(t("iActive"),am>0?durMin(am):"–",am>0&&T>0?esc(t("perActHour",fmt(T/(am/60)))):"&nbsp;"));
+  tiles.push(ph?itile(t("iHour"),pad(ph.h)+":00",esc(fmt(ph.b)+" · "+nf(T>0?ph.b/T*100:0,0)+"%"),'data-open="hour" data-g="'+g+'" data-key="'+esc(e.key)+'" data-h="'+ph.h+'"'):itile(t("iHour"),"–","&nbsp;"));
+  const ta=topOf(e,"proc"), tr=topOf(e,"group");
+  const itemAttr=(dim,x)=>'data-open="item" data-dim="'+dim+'" data-name="'+esc(x.name)+'" data-g="'+g+'" data-key="'+esc(e.key)+'"';
+  tiles.push(ta?itile(t("iTopApp"),esc(dn(ta.name)),esc(fmt(ta.wifi+ta.data)),itemAttr("proc",ta)):itile(t("iTopApp"),"–","&nbsp;"));
+  tiles.push(tr?itile(t("iTopRoute"),esc(dn(tr.name)),esc(fmt(tr.wifi+tr.data)),itemAttr("group",tr)):itile(t("iTopRoute"),"–","&nbsp;"));
+  if(g!=="daily"){
+    const pd=e.peakDay, can=pd&&S.daily.some(x=>x.key===pd.key);
+    tiles.push(pd?itile(t("iPeakDay"),esc(lblDay(pd.key)),esc(fmt(pd.total)),can?'data-open="period" data-g="daily" data-key="'+esc(pd.key)+'"':""):itile(t("iPeakDay"),"–","&nbsp;"));
+    const du=e.daysUsed||0;
+    tiles.push(du>0?itile(t("iAvgDay"),esc(fmt(T/du)),esc(t("daysWith",du,daysInRange(e)))):itile(t("iAvgDay"),"–","&nbsp;"));
+  }
+  $("#itiles").innerHTML=tiles.join("");
+  $("#hourBox").innerHTML=hourStrip(e,{g,key:e.key});
+}
+function hourStrip(e,ctx){
+  const H=e.hours&&e.hours.length===24?e.hours:null, mx=H?Math.max(...H):0;
+  if(!H||mx<=0)return '<div class="empty">'+esc(t("noHours"))+'</div>';
+  const pk=H.indexOf(mx);
+  return '<div class="hours" role="group" aria-label="'+esc(t("hoursAria"))+'">'+H.map((v,h)=>
+    '<button type="button" class="hb'+(h===pk?" pk":"")+'" data-open="hour" data-g="'+ctx.g+'" data-key="'+esc(ctx.key)+'" data-h="'+h+'" aria-label="'+hrRange(h)+" – "+esc(fmt(v))+'" title="'+hrRange(h)+" · "+esc(fmt(v))+'"><span style="height:'+(v>0?Math.max(4,v/mx*100):0)+'%"></span></button>').join("")+
+    '</div><div class="hlab"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div>';
+}
 
 /* ---------- grafik ---------- */
 function niceMax(v){if(v<=0)return 1;const e=Math.pow(10,Math.floor(Math.log10(v))),m=v/e;return (m<=1?1:m<=2?2:m<=5?5:10)*e}
 function drawChart(series,iSel){
-  const box=$("#chartBox"), W=Math.max(280,box.clientWidth||340), H=210, L=38, R=4, T=8, B=22;
-  const pw=W-L-R, ph=H-T-B, n=series.length, slot=pw/n, bw=Math.min(24,slot*.68);
+  const box=$("#chartBox"), W=Math.max(280,box.clientWidth||340), H=210, Lm=38, R=4, Tm=8, B=22;
+  const pw=W-Lm-R, ph=H-Tm-B, n=series.length, slot=pw/n, bw=Math.min(24,slot*.68);
   const vals=series.map(e=>[tot(NET(e.nets.wifi)),tot(NET(e.nets.data))]);
-  const max=niceMax(Math.max(...vals.map(v=>v[0]+v[1]),1)), y=v=>T+ph-v/max*ph;
+  const max=niceMax(Math.max(...vals.map(v=>v[0]+v[1]),1)), y=v=>Tm+ph-v/max*ph;
   let g="";
   for(let k=0;k<=4;k++){const v=max*k/4,yy=y(v);
-    g+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+yy+'" y2="'+yy+'" stroke="var(--grid)" stroke-width="1"/>'+
-       '<text x="'+(L-6)+'" y="'+(yy+4)+'" text-anchor="end" fill="var(--mute)" font-size="11" font-family="var(--mono)">'+(k?compact(v):"0")+'</text>'}
+    g+='<line x1="'+Lm+'" x2="'+(W-R)+'" y1="'+yy+'" y2="'+yy+'" stroke="var(--grid)" stroke-width="1"/>'+
+       '<text x="'+(Lm-6)+'" y="'+(yy+4)+'" text-anchor="end" fill="var(--mute)" font-size="11" font-family="var(--mono)">'+(k?compact(v):"0")+'</text>'}
   let bars="",xl="";
   series.forEach((e,i)=>{
-    const cx=L+slot*i+slot/2, x=cx-bw/2, [a,b]=vals[i], op=i===iSel?1:.74;
+    const cx=Lm+slot*i+slot/2, x=cx-bw/2, [a,b]=vals[i], op=i===iSel?1:.74;
     const hA=a/max*ph, hB=b/max*ph, gap=(hA>2&&hB>2)?2:0;
     if(hA>0.5) bars+=pathBar(x,y(a),bw,Math.max(hA-(hB>0?gap:0),1),b<=0,"var(--wifi)",op);
     if(hB>0.5) bars+=pathBar(x,y(a+b),bw,Math.max(hB,1),true,"var(--data)",op);
     const lbl=labelFor(e,i,n); if(lbl) xl+='<text x="'+cx+'" y="'+(H-6)+'" text-anchor="middle" fill="'+(i===iSel?"var(--neon-y)":"var(--mute)")+'" font-size="11" font-family="var(--mono)">'+lbl+'</text>';
-    bars+='<rect class="col" data-i="'+i+'" x="'+(cx-slot/2)+'" y="'+T+'" width="'+slot+'" height="'+(ph+B)+'" fill="transparent"/>';
+    bars+='<rect class="col" data-i="'+i+'" x="'+(cx-slot/2)+'" y="'+Tm+'" width="'+slot+'" height="'+(ph+B)+'" fill="transparent"/>';
   });
-  box.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" tabindex="0" aria-label="Grafik batang bertumpuk pemakaian WiFi dan data seluler. Gunakan panah kiri/kanan untuk memilih periode, atau buka tampilan Tabel.">'+g+bars+xl+'</svg><div class="tt" hidden></div>';
+  box.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" tabindex="0" aria-label="'+esc(t("titleDaily"))+'">'+g+bars+xl+'</svg><div class="tt" hidden></div>';
   const svg=box.querySelector("svg"), tt=box.querySelector(".tt");
   const show=i=>{const e=series[i],w=NET(e.nets.wifi),d=NET(e.nets.data);
-    tt.innerHTML="<b>"+esc(e.label)+"</b><i style=\"background:var(--wifi)\"></i>WiFi "+fmt(tot(w))+"<br><i style=\"background:var(--data)\"></i>Data "+fmt(tot(d))+"<br>Total "+fmt(tot(w)+tot(d));
-    tt.hidden=false;const cx=(L+slot*i+slot/2)/W*box.clientWidth, tw=tt.offsetWidth;
+    tt.innerHTML="<b>"+esc(labelG(gran,e))+"</b><i style=\"background:var(--wifi)\"></i>WiFi "+fmt(tot(w))+"<br><i style=\"background:var(--data)\"></i>"+esc(t("colData"))+" "+fmt(tot(d))+"<br>"+esc(t("colTotal"))+" "+fmt(tot(w)+tot(d));
+    tt.hidden=false;const cx=(Lm+slot*i+slot/2)/W*box.clientWidth, tw=tt.offsetWidth;
     tt.style.left=Math.max(0,Math.min(box.clientWidth-tw,cx-tw/2))+"px";tt.style.top="0px"};
   svg.addEventListener("pointermove",ev=>{const c=ev.target.closest(".col");if(c)show(+c.dataset.i)});
   svg.addEventListener("pointerleave",()=>tt.hidden=true);
@@ -397,151 +656,195 @@ function pathBar(x,yTop,w,h,roundTop,fill,op){
 function labelFor(e,i,n){
   if(gran==="daily"){return (n-1-i)%5===0?+e.key.slice(8):""}
   if(gran==="weekly"){return i%2===(n-1)%2?(+e.start.slice(8))+"/"+(+e.start.slice(5,7)):""}
-  return e.label.slice(0,3)}
+  return dtf(e.key,{month:"short"})}
 
 /* ---------- tabel ---------- */
 function drawTable(series,iSel){
   const rows=series.map((e,i)=>({e,i})).reverse().map(({e,i})=>{
     const w=NET(e.nets.wifi),d=NET(e.nets.data);
-    return '<tr'+(i===iSel?' aria-current="true"':'')+'><td>'+esc(e.label)+'</td><td>'+fmt(tot(w))+'</td><td>'+fmt(tot(d))+'</td><td>'+fmt(tot(w)+tot(d))+'</td><td>'+nf(w.conns+d.conns,0)+'</td></tr>'}).join("");
-  $("#tableBox").innerHTML='<table><caption style="position:absolute;left:-9999px">Pemakaian per periode</caption><thead><tr><th>Periode</th><th>WiFi</th><th>Data</th><th>Total</th><th>Koneksi terlihat</th></tr></thead><tbody>'+rows+'</tbody></table>'}
+    return '<tr tabindex="0" data-open="sel" data-g="'+gran+'" data-key="'+esc(e.key)+'"'+(i===iSel?' aria-current="true"':'')+'><td>'+esc(labelG(gran,e))+'</td><td>'+fmt(tot(w))+'</td><td>'+fmt(tot(d))+'</td><td>'+fmt(tot(w)+tot(d))+'</td><td>'+nf(w.conns+d.conns,0)+'</td></tr>'}).join("");
+  $("#tableBox").innerHTML='<table><caption style="position:absolute;left:-9999px">'+esc(t("title"+GK[gran]))+'</caption><thead><tr><th>'+t("colPeriod")+'</th><th>'+t("colWifi")+'</th><th>'+t("colData")+'</th><th>'+t("colTotal")+'</th><th>'+t("colConns")+'</th></tr></thead><tbody>'+rows+'</tbody></table>'}
 
 /* ---------- daftar teratas ---------- */
-function drawLists(e){
-  const defs=[["proc","Aplikasi"],["group","Rute teratas"],["exit","Jalur keluar"]];
+function barHtml(w,d,mx){return '<div class="bar" aria-hidden="true"><span style="width:'+(w/mx*100)+'%;background:var(--wifi)"></span><span style="width:'+(d/mx*100)+'%;background:var(--data)"></span></div>'}
+function itemRow(x,mx,dim,g,key){
+  return '<button type="button" class="row" data-open="item" data-dim="'+dim+'" data-name="'+esc(x.name)+'" data-g="'+g+'" data-key="'+esc(key)+'"><span class="n" title="'+esc(dn(x.name))+'">'+esc(dn(x.name))+'</span><span class="t">'+fmt(x.wifi+x.data)+'<b class="chev">›</b></span>'+barHtml(x.wifi,x.data,mx)+'</button>'}
+function drawLists(g,e){
+  const defs=[["proc","lApp"],["group","lRoute"],["exit","lExit"]];
   const any=Object.values(e.top||{}).some(l=>l&&l.length);
-  if(!any){$("#lists").innerHTML='<div class="empty">Belum ada data untuk periode ini. Collector mulai menghitung sejak koneksi pertama yang dia lihat. Buka beberapa app, tunggu beberapa detik, lalu muat ulang halaman.</div>';return}
-  $("#lists").innerHTML=defs.map(([k,t])=>{
+  if(!any){$("#lists").innerHTML='<div class="empty">'+esc(t("noData"))+'</div>';return}
+  $("#lists").innerHTML=defs.map(([k,tt])=>{
     const l=(e.top[k]||[]),mx=Math.max(1,...l.map(x=>x.wifi+x.data));
-    return '<div class="list"><h2>'+t+'</h2>'+(l.length?l.map(x=>'<div class="row"><span class="n" title="'+esc(x.name)+'">'+esc(x.name)+'</span><span class="t">'+fmt(x.wifi+x.data)+'</span><div class="bar" aria-hidden="true"><span style="width:'+(x.wifi/mx*100)+'%;background:var(--wifi)"></span><span style="width:'+(x.data/mx*100)+'%;background:var(--data)"></span></div></div>').join(""):'<div class="empty">–</div>')+'</div>'}).join("")}
+    return '<div class="list"><h2>'+t(tt)+'</h2>'+(l.length?l.map(x=>itemRow(x,mx,k,g,e.key)).join(""):'<div class="empty">–</div>')+'</div>'}).join("")}
 
 /* ---------- kartu ringkasan ---------- */
 const sBar=(w,d)=>{const T=w+d;return '<div class="share" aria-hidden="true">'+(T>0?'<span style="width:'+(w/T*100)+'%;background:var(--wifi)"></span><span style="width:'+(d/T*100)+'%;background:var(--data)"></span>':'')+'</div>'};
-const netRows=(w,d)=>'<div class="kv"><span><i style="background:var(--wifi)"></i>WiFi</span><b>'+fmt(w)+'</b></div><div class="kv"><span><i style="background:var(--data)"></i>Data seluler</span><b>'+fmt(d)+'</b></div>';
+const netRows=(w,d)=>'<div class="kv"><span><i style="background:var(--wifi)"></i>WiFi</span><b>'+fmt(w)+'</b></div><div class="kv"><span><i style="background:var(--data)"></i>'+esc(t("mobileS"))+'</span><b>'+fmt(d)+'</b></div>';
 const kv=(k,v)=>'<div class="kv"><span>'+k+'</span><b>'+v+'</b></div>';
+const more=(g,key)=>'<button type="button" class="more" data-open="period" data-g="'+g+'" data-key="'+esc(key)+'">'+esc(t("details"))+'</button>';
 
 function drawCards(){
   const O=S.overview, D=S.daily, today=D[D.length-1], mo=S.monthly[S.monthly.length-1], pm=S.monthly[S.monthly.length-2];
-
-  // hari ini
   const tw=NET(today.nets.wifi), td=NET(today.nets.data), tT=tot(tw)+tot(td);
   $("#cToday").innerHTML=tT>0
-    ?'<div class="v">'+fmtBig(tT)+'</div>'+sBar(tot(tw),tot(td))+netRows(tot(tw),tot(td))+'<div class="sub">↓ '+fmt(tw.down+td.down)+' · ↑ '+fmt(tw.up+td.up)+'</div>'
-    :'<div class="empty">Belum ada trafik hari ini.</div>';
+    ?'<div class="v">'+fmtBig(tT)+'</div>'+sBar(tot(tw),tot(td))+netRows(tot(tw),tot(td))+'<div class="sub">↓ '+fmt(tw.down+td.down)+' · ↑ '+fmt(tw.up+td.up)+'</div>'+more("daily",today.key)
+    :'<div class="empty">'+esc(t("noTrafficToday"))+'</div>';
 
-  // app teratas hari ini
   const apps=((today.top&&today.top.proc)||[]).slice(0,3), amx=Math.max(1,...apps.map(x=>x.wifi+x.data));
-  $("#cTop").innerHTML=apps.length?apps.map(x=>'<div class="row"><span class="n" title="'+esc(x.name)+'">'+esc(x.name)+'</span><span class="t">'+fmt(x.wifi+x.data)+'</span><div class="bar" aria-hidden="true"><span style="width:'+(x.wifi/amx*100)+'%;background:var(--wifi)"></span><span style="width:'+(x.data/amx*100)+'%;background:var(--data)"></span></div></div>').join(""):'<div class="empty">Belum ada data app.</div>';
+  $("#cTop").innerHTML=apps.length?apps.map(x=>itemRow(x,amx,"proc","daily",today.key)).join(""):'<div class="empty">'+esc(t("noAppData"))+'</div>';
 
-  // bulan ini
   const mw=tot(NET(mo.nets.wifi)), md=tot(NET(mo.nets.data)), mT=mw+md;
-  const avg=O.monthDay>0?mT/O.monthDay:0, pT=pm?tot(NET(pm.nets.wifi))+tot(NET(pm.nets.data)):0;
-  $("#cMonth").innerHTML='<div class="v">'+fmtBig(mT)+'</div>'+sBar(mw,md)+netRows(mw,md)+kv("Rata-rata/hari",fmt(avg))+kv("Perkiraan akhir bulan",fmt(avg*O.monthDays))+(pT>0?kv("Bulan lalu",fmt(pT)):"");
+  const avg=O.monthDay>0?mT/O.monthDay:0, pT=pm?etot(pm):0;
+  $("#cMonth").innerHTML='<div class="v">'+fmtBig(mT)+'</div>'+sBar(mw,md)+netRows(mw,md)+kv(t("avgDay"),fmt(avg))+kv(t("estEnd"),fmt(avg*O.monthDays))+(pT>0?kv(t("lastMonth"),fmt(pT)):"")+more("monthly",mo.key);
 
-  // rekor
-  const b=O.busiest;
-  $("#cRec").innerHTML=kv("Hari terboros",b?fmt(b.total):"–")+(b?'<div class="sub">'+esc(b.label)+'</div>':"")+kv("Beruntun ada trafik",nf(O.streak,0)+" hari")+kv("Hari tercatat",nf(O.trackedDays,0));
-
-  // 7 hari terakhir
-  const wk=D.slice(-7), wt=wk.map(e=>tot(NET(e.nets.wifi))+tot(NET(e.nets.data))), wmax=Math.max(1,...wt), wsum=wt.reduce((a,c)=>a+c,0);
-  $("#cWeek").innerHTML='<div class="v">'+fmtBig(wsum)+'</div><div class="sub">rata-rata '+fmt(wsum/wk.length)+' per hari</div><div class="wk">'+wk.map((e,i)=>{
+  const wk=D.slice(-7), wt=wk.map(etot), wmax=Math.max(1,...wt), wsum=wt.reduce((a,c)=>a+c,0);
+  $("#cWeek").innerHTML='<div class="v">'+fmtBig(wsum)+'</div><div class="sub">'+esc(t("avgPerDay",fmt(wsum/wk.length)))+'</div><div class="wk">'+wk.map((e,i)=>{
     const w=tot(NET(e.nets.wifi)), d=tot(NET(e.nets.data));
-    return '<div class="wc" title="'+esc(e.label)+': '+fmt(w+d)+'"><div class="wb"><span style="height:'+(w/wmax*100)+'%;background:var(--wifi)"></span><span style="height:'+(d/wmax*100)+'%;background:var(--data)"></span></div><em'+(i===wk.length-1?' class="now"':'')+'>'+esc(e.label.slice(0,3))+'</em></div>'}).join("")+'</div>';
-
+    return '<button type="button" class="wc" data-open="period" data-g="daily" data-key="'+esc(e.key)+'" title="'+esc(lblDay(e.key))+': '+fmt(w+d)+'" aria-label="'+esc(lblDay(e.key))+': '+fmt(w+d)+'"><div class="wb"><span style="height:'+(w/wmax*100)+'%;background:var(--wifi)"></span><span style="height:'+(d/wmax*100)+'%;background:var(--data)"></span></div><em'+(i===wk.length-1?' class="now"':'')+'>'+esc(dtf(e.key,{weekday:"short"}).slice(0,3))+'</em></button>'}).join("")+'</div>';
   drawLimit();
 }
 
+/* ---------- kartu perangkat: IP, uptime, penyimpanan ---------- */
+function drawNet(){
+  if(!S)return;
+  if(!DV){
+    const m='<div class="empty">'+esc(t("noDevice"))+'</div>';
+    $("#cNet").innerHTML=m;$("#cUp").innerHTML=kv(t("trackSince"),esc(new Date(S.started*1000).toLocaleDateString(LOC(),{timeZone:S.tz,day:"numeric",month:"short",year:"numeric"})));$("#cStore").innerHTML=m;return}
+  const skew=(Date.now()-DVat)/1000;
+  $("#cNet").innerHTML=DV.ips&&DV.ips.length?DV.ips.map(ip=>'<div class="kv"><span><i style="background:var(--'+(ip.kind==="wifi"?"wifi":"data")+')"></i>'+esc(ip.iface)+'</span><b>'+esc(ip.addr)+'</b></div>').join(""):'<div class="empty">'+esc(t("noIp"))+'</div>';
+  const run=DV.now-DV.collectorSince+skew;
+  $("#cUp").innerHTML='<div class="v">'+esc(durSec(run,2))+'</div><div class="sub">'+esc(t("collRun"))+'</div>'+
+    kv(t("collSince"),esc(fmtDT(DV.collectorSince)))+
+    (DV.boot?kv(t("devBoot"),esc(fmtDT(DV.boot)))+kv(t("devUp"),esc(durSec(DV.uptime+skew,2))):"")+
+    kv(t("trackSince"),esc(new Date(S.started*1000).toLocaleDateString(LOC(),{timeZone:S.tz,day:"numeric",month:"short",year:"numeric"})));
+  const s=DV.storage;
+  if(!s||!s.total){$("#cStore").innerHTML='<div class="empty">–</div>';return}
+  const used=s.total-s.free, pc=used/s.total*100;
+  $("#cStore").innerHTML='<div class="v">'+fmtBig(used)+'</div><div class="sub">'+esc(t("ofTotal",fmt(s.total)))+' · '+nf(pc,0)+'%</div><div class="sbar" aria-hidden="true"><span style="width:'+pc+'%"></span></div>'+kv(t("free"),fmt(s.free));
+}
+
 function drawLimit(){
-  const L=S.overview.limit, el=$("#cLimit");
-  if(!L.bytes){el.innerHTML='<div class="empty">Belum ada batas. Atur batas paket untuk memantau sisa kuota, perkiraan akhir periode, dan jatah per hari.</div>';return}
-  const pc=L.used/L.bytes*100;
-  const sv=pc>=100?["Terlampaui","var(--neon-m)"]:pc>=80?["Hampir habis","var(--neon-y)"]:["Aman","var(--neon-c)"];
-  const nn={data:"data seluler",wifi:"WiFi",all:"WiFi + data"}[L.net]||L.net;
-  el.innerHTML='<div class="v">'+fmtBig(L.used)+'</div><div class="sub">dari '+fmt(L.bytes)+' · '+nf(pc,0)+'% · '+sv[0]+'</div>'+
+  const Lm=S.overview.limit, el=$("#cLimit");
+  if(!Lm.bytes){el.innerHTML='<div class="empty">'+esc(t("limNone"))+'</div>';return}
+  const pc=Lm.used/Lm.bytes*100;
+  const sv=pc>=100?[t("limOver"),"var(--neon-m)"]:pc>=80?[t("limNear"),"var(--neon-y)"]:[t("limOk"),"var(--neon-c)"];
+  const nn={data:t("nData"),wifi:t("nWifi"),all:t("nAll")}[Lm.net]||Lm.net;
+  el.innerHTML='<div class="v">'+fmtBig(Lm.used)+'</div><div class="sub">'+esc(t("limOf",fmt(Lm.bytes),nf(pc,0),sv[0]))+'</div>'+
     '<div class="share" aria-hidden="true"><span style="width:'+Math.min(100,pc)+'%;background:'+sv[1]+'"></span></div>'+
-    kv("Sisa",L.remaining>=0?fmt(L.remaining):"−"+fmt(-L.remaining))+
-    kv("Rata-rata/hari",fmt(L.avg))+
-    kv("Perkiraan akhir periode",fmt(L.projected))+
-    (L.projected>L.bytes?'<div class="warn">Dengan laju sekarang, kuota terlampaui sebelum periode berakhir.</div>':'')+
-    (L.perDay>0?kv("Jatah ≈ per hari",fmt(L.perDay)+" × "+L.left+" hari"):"")+
-    '<div class="sub">Periode '+esc(L.start)+' → '+esc(L.end)+' · hari ke-'+L.daysElapsed+' dari '+L.daysTotal+' · hitung: '+nn+'</div>';
+    kv(t("remaining"),Lm.remaining>=0?fmt(Lm.remaining):"−"+fmt(-Lm.remaining))+
+    kv(t("avgDay"),fmt(Lm.avg))+
+    kv(t("projected"),fmt(Lm.projected))+
+    (Lm.projected>Lm.bytes?'<div class="warn">'+esc(t("limWarn"))+'</div>':'')+
+    (Lm.perDay>0?kv(t("allowance"),fmt(Lm.perDay)+" × "+Lm.left+(L==="id"?" hari":" d")):"")+
+    '<div class="sub">'+esc(t("limPeriod",Lm.start,Lm.end,Lm.daysElapsed,Lm.daysTotal,nn))+'</div>';
 }
 
 $("#limDay").innerHTML=Array.from({length:28},(_,i)=>'<option value="'+(i+1)+'">'+(i+1)+'</option>').join("");
 $("#limEdit").onclick=()=>{
   const f=$("#limForm");f.hidden=!f.hidden;
-  if(!f.hidden&&S){const L=S.overview.limit;
-    $("#limGb").value=L.bytes?String(L.bytes/1e9).replace(".",","):"";
-    $("#limDay").value=String(L.resetDay);$("#limNet").value=L.net;$("#limMsg").textContent=""}
+  if(!f.hidden&&S){const Lm=S.overview.limit;
+    $("#limGb").value=Lm.bytes?String(Lm.bytes/1e9).replace(".",L==="id"?",":"."):"";
+    $("#limDay").value=String(Lm.resetDay);$("#limNet").value=Lm.net;$("#limMsg").textContent=""}
 };
 async function saveLimit(clear){
   const gb=clear?0:parseFloat($("#limGb").value.replace(",","."));
-  if(!clear&&!(gb>0)){$("#limMsg").textContent="Isi batas dalam GB, contoh: 50";return}
+  if(!clear&&!(gb>0)){$("#limMsg").textContent=t("limNeedGb");return}
   const body={limitBytes:Math.round(gb*1e9),resetDay:+$("#limDay").value,net:$("#limNet").value};
   try{
     const r=await fetch("/api/settings",{method:"POST",headers:{"X-Hikari":"1","Content-Type":"application/json"},body:JSON.stringify(body)});
     const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||("HTTP "+r.status));
     $("#limForm").hidden=true;load();
-  }catch(e){$("#limMsg").textContent="Gagal menyimpan: "+e.message}
+  }catch(e){$("#limMsg").textContent=t("limFail",e.message)}
 }
 $("#limSave").onclick=()=>saveLimit(false);
 $("#limClear").onclick=()=>saveLimit(true);
 
-/* ---------- kecepatan live ---------- */
-let LV=null;
-const rateHtml=b=>{const[v,u]=split(b);return nf(v,u==="B"?0:v>=100?0:v>=10?1:2)+"<small>"+u+"/s</small>"};
-async function loadLive(){
-  try{const r=await fetch("/api/live",{cache:"no-store"});if(!r.ok)throw new Error("HTTP "+r.status);LV=await r.json()}
-  catch(e){LV=null}
-  drawLive();
+/* ---------- detail (dialog) ---------- */
+const dlg=$("#dlg");
+const KIND={proc:"kApp",group:"kRoute",exit:"kExit"};
+function openDetail(sp){DT=sp;renderDetail();if(!dlg.open)dlg.showModal()}
+function renderDetail(){
+  const sp=DT;let title="",sub="",html="";
+  const e=sp.g&&entryOf(sp.g,sp.key);
+  if(!e){dlg.close();return}
+  if(sp.t==="period"){title=labelG(sp.g,e);sub=sp.g==="daily"?"":dtf(e.start,{day:"numeric",month:"short"})+" → "+dtf(e.end,{day:"numeric",month:"short",year:"numeric"});html=dPeriod(sp,e)}
+  else if(sp.t==="item"){title=dn(sp.name);sub=t(KIND[sp.dim])+" · "+labelG(sp.g,e);html=dItem(sp,e)}
+  else if(sp.t==="hour"){title=t("dHourOf",hrRange(sp.h));sub=labelG(sp.g,e);html=dHour(sp,e)}
+  $("#dTitle").textContent=title;
+  $("#dBody").innerHTML=(sub?'<div class="dsub">'+esc(sub)+'</div>':"")+html;
+  $("#dBack").hidden=!sp.from;
 }
-function drawLive(){
-  const sp=$("#lSpeed");
-  if(!LV||!LV.ok||!LV.samples.length||LV.now-LV.lastPoll>15){
-    sp.innerHTML="–";$("#lUp").textContent="";$("#lPeak").textContent="";
-    $("#lConn").textContent=LV&&!LV.ok?"Mihomo tidak terbaca":"menunggu data…";$("#lSpark").innerHTML="";return}
-  const s=LV.samples, cur=s[s.length-1];
-  sp.innerHTML="↓ "+rateHtml(cur.down);
-  $("#lUp").textContent="↑ "+fmt(cur.up)+"/s";
-  $("#lConn").textContent=nf(LV.conns,0)+" koneksi aktif";
-  $("#lPeak").textContent="puncak ↓ "+fmt(Math.max(...s.map(x=>x.down)))+"/s";
-  drawSpark(s);
+function dPeriod(sp,e){
+  const w=NET(e.nets.wifi),d=NET(e.nets.data),T=tot(w)+tot(d),ph=peakHour(e),du=e.daysUsed||0;
+  let h='<div><div class="big" style="font-size:clamp(44px,13vw,64px);margin:0 0 6px">'+fmtBig(T)+'</div>'+sBar(tot(w),tot(d))+netRows(tot(w),tot(d))+kv(t("dUpDown"),"↑ "+fmt(w.up+d.up)+" · ↓ "+fmt(w.down+d.down))+'</div>';
+  h+='<div class="itiles">'+
+    itile(t("iActive"),(e.activeMin>0?durMin(e.activeMin):"–"),e.activeMin>0&&T>0?esc(t("perActHour",fmt(T/(e.activeMin/60)))):"&nbsp;")+
+    (ph?itile(t("iHour"),pad(ph.h)+":00",esc(fmt(ph.b)),'data-open="hour" data-g="'+sp.g+'" data-key="'+esc(sp.key)+'" data-h="'+ph.h+'"'):itile(t("iHour"),"–","&nbsp;"))+
+    (sp.g!=="daily"&&e.peakDay?itile(t("iPeakDay"),esc(lblDay(e.peakDay.key)),esc(fmt(e.peakDay.total)),S.daily.some(x=>x.key===e.peakDay.key)?'data-open="period" data-g="daily" data-key="'+esc(e.peakDay.key)+'"':""):"")+
+    (sp.g!=="daily"&&du>0?itile(t("iAvgDay"),esc(fmt(T/du)),esc(t("daysWith",du,daysInRange(e)))):"")+
+    '</div>';
+  h+='<div><h3>'+esc(t("byHour"))+'</h3>'+hourStrip(e,{g:sp.g,key:sp.key})+'</div>';
+  const apps=((e.top&&e.top.proc)||[]),mx=Math.max(1,...apps.map(x=>x.wifi+x.data));
+  if(apps.length)h+='<div><h3>'+esc(t("dTopApps"))+'</h3>'+apps.slice(0,5).map(x=>itemRow(x,mx,"proc",sp.g,sp.key)).join("")+'</div>';
+  if(sp.g!=="daily"||sp.key!==sel||gran!=="daily")h+='<div class="btns"><button type="button" class="btn" data-open="sel" data-g="'+sp.g+'" data-key="'+esc(sp.key)+'">'+esc(t("dJump"))+'</button></div>';
+  return h;
 }
-function drawSpark(s){
-  const box=$("#lSpark");
-  if(s.length<2){box.innerHTML="";return}
-  const W=Math.max(240,box.clientWidth||320),H=64,P=3;
-  const mx=niceMax(Math.max(1,...s.map(x=>Math.max(x.up,x.down))));
-  const X=i=>P+i*(W-2*P)/(s.length-1), Y=v=>H-P-v/mx*(H-2*P);
-  const path=k=>s.map((x,i)=>(i?"L":"M")+X(i).toFixed(1)+","+Y(x[k]).toFixed(1)).join("");
-  box.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Grafik kecepatan beberapa menit terakhir: unduh (cyan) dan unggah (kuning)">'+
-    '<path d="'+path("down")+'L'+X(s.length-1).toFixed(1)+','+(H-P)+'L'+X(0).toFixed(1)+','+(H-P)+'Z" fill="var(--neon-c)" opacity=".12"/>'+
-    '<path d="'+path("down")+'" fill="none" stroke="var(--neon-c)" stroke-width="2" stroke-linejoin="round"/>'+
-    '<path d="'+path("up")+'" fill="none" stroke="var(--neon-y)" stroke-width="1.5" stroke-linejoin="round" opacity=".9"/></svg>';
+function dItem(sp,e){
+  const list=(e.top&&e.top[sp.dim])||[], idx=list.findIndex(x=>x.name===sp.name);
+  if(idx<0)return '<div class="empty">'+esc(t("dNotInTop"))+'</div>';
+  const it=list[idx], tt=it.wifi+it.data, PT=etot(e), share=PT>0?tt/PT*100:0;
+  const series=S[sp.g], vals=series.map(x=>{const f=((x.top&&x.top[sp.dim])||[]).find(y=>y.name===sp.name);return f?f.wifi+f.data:0});
+  const mx=Math.max(1,...vals), nz=vals.filter(v=>v>0), bi=vals.indexOf(Math.max(...vals));
+  let h='<div><div class="big" style="font-size:clamp(44px,13vw,64px);margin:0 0 6px">'+fmtBig(tt)+'</div>'+sBar(it.wifi,it.data)+netRows(it.wifi,it.data)+
+    kv(t("dShare"),nf(share,share>=10?0:1)+"%")+kv(t("dRank"),"#"+(idx+1)+" / "+t("dTop8",list.length))+'</div>';
+  h+='<div><h3>'+esc(t("dTrend"))+'</h3><div class="trend">'+series.map((x,i)=>
+    '<button type="button" class="'+(x.key===sp.key?"on":"")+'" data-open="sel" data-g="'+sp.g+'" data-key="'+esc(x.key)+'" title="'+esc(labelG(sp.g,x))+' · '+fmt(vals[i])+'" aria-label="'+esc(labelG(sp.g,x))+': '+fmt(vals[i])+'"><span style="height:'+(vals[i]>0?Math.max(4,vals[i]/mx*100):0)+'%"></span></button>').join("")+'</div>'+
+    kv(t("dBest"),esc(labelG(sp.g,series[bi]))+" · "+fmt(vals[bi]))+(nz.length?kv(t("dAvgP"),fmt(nz.reduce((a,c)=>a+c,0)/nz.length)):"")+
+    '<div class="note" style="margin-top:6px">'+esc(t("dTop8note"))+'</div></div>';
+  return h;
 }
+function dHour(sp,e){
+  const H=e.hours&&e.hours.length===24?e.hours:null; if(!H)return '<div class="empty">'+esc(t("noHours"))+'</div>';
+  const b=H[sp.h], T=etot(e), am=e.actHours&&e.actHours.length===24?e.actHours[sp.h]:0;
+  return '<div><div class="big" style="font-size:clamp(44px,13vw,64px);margin:0 0 6px">'+fmtBig(b)+'</div>'+
+    kv(t("dDayShare"),nf(T>0?b/T*100:0,1)+"%")+kv(t("dActMin"),am>0?durMin(am):"–")+(am>0&&b>0?kv("",esc(t("dRate",fmt(b/am)))):"")+'</div>'+
+    '<div><h3>'+esc(t("byHour"))+'</h3>'+hourStrip(e,{g:sp.g,key:sp.key})+'</div>';
+}
+$("#dClose").onclick=()=>dlg.close();
+$("#dBack").onclick=()=>{if(DT&&DT.from){DT=DT.from;renderDetail()}};
+dlg.addEventListener("click",ev=>{if(ev.target===dlg)dlg.close()});
+dlg.addEventListener("close",()=>{DT=null});
+
+const reduce=()=>matchMedia("(prefers-reduced-motion:reduce)").matches;
+const toPeriod=()=>$("#period").scrollIntoView({behavior:reduce()?"auto":"smooth",block:"start"});
+document.addEventListener("click",ev=>{
+  const el=ev.target.closest("[data-open]");if(!el||!S)return;
+  const o=el.dataset, from=dlg.open?DT:null;
+  if(o.open==="period")openDetail({t:"period",g:o.g,key:o.key,from});
+  else if(o.open==="item")openDetail({t:"item",dim:o.dim,name:o.name,g:o.g,key:o.key,from});
+  else if(o.open==="hour")openDetail({t:"hour",g:o.g,key:o.key,h:+o.h,from});
+  else if(o.open==="sel"){gran=o.g;sel=o.key;if(dlg.open)dlg.close();render();toPeriod()}
+});
+document.addEventListener("keydown",ev=>{if(ev.key==="Enter"&&ev.target.matches&&ev.target.matches("tr[data-open]"))ev.target.click()});
 
 /* ---------- impor cadangan ---------- */
-const IMP_HELP={
-  fill:"Hanya menambah hari yang belum ada di database sekarang. Aman: tidak ada angka yang ditimpa atau dobel.",
-  add:"Menjumlahkan angka per hari dengan database sekarang. Cocok untuk menggabung dua perangkat; kalau periodenya tumpang tindih, angka jadi dobel.",
-  replace:"Mengganti SEMUA data dengan isi file. Database sekarang dicadangkan otomatis dulu di folder data."};
-const impHelp=()=>{$("#impHelp").textContent=IMP_HELP[$("#impMode").value]};
-$("#impMode").onchange=impHelp;impHelp();
+const impHelp=()=>{$("#impHelp").textContent=t({fill:"hFill",add:"hAdd",replace:"hReplace"}[$("#impMode").value])};
+$("#impMode").onchange=impHelp;
 $("#impBtn").onclick=async()=>{
   const f=$("#impFile").files[0], m=$("#impMode").value, out=$("#impMsg");
-  if(!f){out.textContent="Pilih file .json dulu.";return}
-  if(m==="replace"&&!confirm("Ganti SEMUA data dengan isi file ini? Database sekarang dicadangkan otomatis dulu."))return;
-  out.textContent="Mengimpor…";
+  if(!f){out.textContent=t("impPick");return}
+  if(m==="replace"&&!confirm(t("impConfirm")))return;
+  out.textContent=t("impRun");
   try{
     const r=await fetch("/api/import?mode="+m,{method:"POST",headers:{"X-Hikari":"1","Content-Type":"application/json"},body:f});
     const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||("HTTP "+r.status));
-    out.textContent="Selesai: "+j.added+" hari baru, "+j.merged+" digabung, "+j.skipped+" dilewati. Total sekarang "+j.days+" hari."+(j.backup?" Cadangan data lama: "+j.backup:"");
+    out.textContent=t("impDone",j.added,j.merged,j.skipped,j.days)+(j.backup?t("impBak",j.backup):"");
     $("#impFile").value="";load();
-  }catch(e){out.textContent="Gagal: "+e.message}
+  }catch(e){out.textContent=t("impFail",e.message)}
 };
 
 /* ---------- interaksi ---------- */
-document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{gran=t.dataset.g;sel=null;if(S)render()}));
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{gran=b.dataset.g;sel=null;if(S)render()}));
 $("#vChart").onclick=()=>setView("chart");$("#vTable").onclick=()=>setView("table");
 function setView(v){view=v;$("#chartBox").hidden=v!=="chart";$("#tableBox").hidden=v!=="table";
   $("#vChart").setAttribute("aria-pressed",v==="chart");$("#vTable").setAttribute("aria-pressed",v==="table");if(S)render()}
@@ -551,15 +854,16 @@ let rz;addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(()=>S&&rend
 let booted=false;
 const _render=render;
 render=function(){
-  if(!booted&&!matchMedia("(prefers-reduced-motion:reduce)").matches&&S){
-    booted=true;const el=$("#hTotal");_render();const T=el.textContent;const t0=performance.now();
-    const target=(()=>{const s=S[gran],e=s[s.length-1];return tot(NET(e.nets.wifi))+tot(NET(e.nets.data))})();
-    (function step(t){const k=Math.min(1,(t-t0)/650),e=1-Math.pow(1-k,3);el.innerHTML=fmtBig(target*e);if(k<1)requestAnimationFrame(step);else el.innerHTML=fmtBig(target)})(t0);
+  if(!booted&&!reduce()&&S){
+    booted=true;const el=$("#hTotal");_render();const t0=performance.now();
+    const target=(()=>{const s=S[gran];return etot(s[s.length-1])})();
+    (function step(ts){const k=Math.min(1,(ts-t0)/650),ea=1-Math.pow(1-k,3);el.innerHTML=fmtBig(target*ea);if(k<1)requestAnimationFrame(step);else el.innerHTML=fmtBig(target)})(t0);
   }else{booted=true;_render()}
 };
+applyStatic();setChip("down","connecting");
 load();setInterval(()=>{if(!document.hidden)load()},10000);
-document.addEventListener("visibilitychange",()=>{if(!document.hidden){load();loadLive()}});
-loadLive();setInterval(()=>{if(!document.hidden)loadLive()},2000);
+loadDevice();setInterval(()=>{if(!document.hidden)loadDevice()},30000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){load();loadDevice()}});
 </script>
 </body>
 </html>

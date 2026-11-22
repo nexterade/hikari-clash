@@ -281,6 +281,19 @@ func parseImport(r io.Reader) (*File, error) {
 		if d.Dims == nil {
 			d.Dims = map[string]map[string]*Ctr{}
 		}
+		if (len(d.Hrs) != 0 && len(d.Hrs) != 24) || (len(d.Act) != 0 && len(d.Act) != 24) {
+			return nil, fmt.Errorf("data per jam pada %s rusak (harus 24 slot)", k)
+		}
+		for _, v := range d.Hrs {
+			if v < 0 {
+				return nil, fmt.Errorf("data per jam pada %s rusak", k)
+			}
+		}
+		for _, v := range d.Act {
+			if v < 0 || v > 60 {
+				return nil, fmt.Errorf("menit aktif pada %s rusak", k)
+			}
+		}
 		for dim, m := range d.Dims {
 			for key, c := range m {
 				// kunci wajib "net|nama": kode lain memotong di tanda "|"
@@ -303,6 +316,18 @@ func parseImport(r io.Reader) (*File, error) {
 }
 
 func mergeDay(dst, src *Day) {
+	if len(src.Hrs) == 24 {
+		dst.ensureHours()
+		for i := 0; i < 24; i++ {
+			dst.Hrs[i] += src.Hrs[i]
+		}
+	}
+	if len(src.Act) == 24 {
+		dst.ensureHours()
+		for i := 0; i < 24; i++ {
+			dst.Act[i] += src.Act[i]
+		}
+	}
 	for n, c := range src.Nets {
 		dst.net(n).add(c.Up, c.Down, c.Conns)
 	}

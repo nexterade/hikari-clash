@@ -9,7 +9,9 @@ Collector statistik trafik untuk Mihomo. Dia memantau `/connections` dari extern
 - **Periode:** 30 hari terakhir (harian), 12 minggu (Senin–Minggu), 12 bulan, plus total sejak collector pertama jalan.
 - **WiFi vs Data seluler**, dipisah berdasarkan IP sumber koneksi (lihat [Klasifikasi](#klasifikasi-wifi-vs-data)).
 - **Top 8 per periode** untuk tiap dimensi: aplikasi (`proc`), group proxy terakhir di chain, dan jalur keluar (**Direct / Proxy / Reject / DNS**).
-- **Kecepatan live** (unduh/unggah beberapa menit terakhir) dan jumlah koneksi aktif.
+- **Wawasan pemakaian** per tab (harian/mingguan/bulanan): waktu aktif (menit/jam), jam tersibuk, grafik per jam, app & rute teratas, hari terboros. Semua bisa diklik untuk detail.
+- **Info perangkat:** alamat IP, uptime collector & HP, penyimpanan `/data` (endpoint `/api/device`).
+- **Bahasa:** tombol EN/ID di header (default English, pilihan disimpan di browser).
 - **Batas data (kuota):** isi batas paket (GB), tanggal reset (1–28), dan yang dihitung (data / wifi / semua). Halaman menampilkan sisa, jatah per hari, dan perkiraan total akhir periode.
 - Rekap: hari terboros, jumlah hari beruntun ada trafik.
 - **Ekspor** CSV / JSON dan **impor** cadangan dari halaman laporan.
@@ -99,7 +101,8 @@ hikari-stats -data stats.json -import backup.json -mode fill   # fill | add | re
 |---|---|---|
 | `/` | GET | Halaman laporan |
 | `/api/summary` | GET | Ringkasan harian/mingguan/bulanan + status collector |
-| `/api/live` | GET | Kecepatan & jumlah koneksi terakhir |
+| `/api/live` | GET | Kecepatan & jumlah koneksi terakhir (belum dipakai halaman) |
+| `/api/device` | GET | IP lokal, uptime collector/HP, penyimpanan |
 | `/api/export.csv` · `/api/export.json` | GET | Ekspor data |
 | `/api/health` | GET | `ok` |
 | `/api/import?mode=` | POST | Impor cadangan |

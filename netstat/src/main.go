@@ -41,6 +41,36 @@ func (c *Ctr) add(up, down, conns int64) { c.Up += up; c.Down += down; c.Conns +
 type Day struct {
 	Nets map[string]*Ctr            `json:"nets"`
 	Dims map[string]map[string]*Ctr `json:"dims"` // dim -> "net|name" -> ctr
+	Hrs  []int64                    `json:"hrs,omitempty"` // byte per jam (24 slot, semua jaringan); kosong di data lama
+	Act  []int32                    `json:"act,omitempty"` // menit aktif per jam (24 slot)
+}
+
+// activeMinBytes: satu polling dengan trafik >= nilai ini menandai menit itu "aktif".
+// Di bawahnya dianggap keepalive/DNS latar belakang.
+const activeMinBytes = 4096
+
+func (d *Day) ensureHours() {
+	if len(d.Hrs) != 24 {
+		n := make([]int64, 24)
+		copy(n, d.Hrs)
+		d.Hrs = n
+	}
+	if len(d.Act) != 24 {
+		n := make([]int32, 24)
+		copy(n, d.Act)
+		d.Act = n
+	}
+}
+
+func (d *Day) addHour(h int, bytes int64, newMin bool) {
+	if h < 0 || h > 23 {
+		return
+	}
+	d.ensureHours()
+	d.Hrs[h] += bytes
+	if newMin {
+		d.Act[h]++
+	}
 }
 
 func newDay() *Day {
@@ -261,6 +291,7 @@ type Poller struct {
 	lastFetch   time.Time
 	share       map[string]float64 // rasio byte per net (rata-rata bergerak), buat bagi sisa kalau nggak ada koneksi terlihat
 	live        Live               // sampel kecepatan beberapa menit terakhir (buat kartu "kecepatan sekarang")
+	actMin      int64              // menit (unix/60) terakhir yang sudah dihitung "aktif"
 }
 
 func exitKind(chains []string) string {
@@ -469,6 +500,18 @@ func (p *Poller) poll(now time.Time) {
 	}
 	for n, a := range attrib {
 		p.share[n] += float64(a.up + a.down)
+	}
+	// sebaran per jam + menit aktif (dari delta counter global, sama seperti kecepatan live)
+	if !first && p.haveG {
+		if dt := (r.UploadTotal - p.gUp) + (r.DownloadTotal - p.gDown); dt > 0 {
+			newMin := false
+			if dt >= activeMinBytes {
+				if m := now.Unix() / 60; m != p.actMin {
+					p.actMin, newMin = m, true
+				}
+			}
+			day.addHour(now.In(p.store.loc).Hour(), dt, newMin)
+		}
 	}
 	p.last = cur
 	p.gUp, p.gDown, p.haveG = r.UploadTotal, r.DownloadTotal, true

@@ -19,6 +19,12 @@ type Entry struct {
 	Nets   map[string]Ctr  `json:"nets"`
 	Top    map[string][]Tp `json:"top"`
 	Active bool            `json:"active"` // periode berjalan
+
+	Hours     []int64 `json:"hours,omitempty"`    // byte per jam (24 slot) dijumlah seluruh periode
+	ActHours  []int   `json:"actHours,omitempty"` // menit aktif per jam (24 slot)
+	ActiveMin int     `json:"activeMin"`          // total menit aktif
+	DaysUsed  int     `json:"daysUsed"`           // jumlah hari yang ada trafik
+	PeakDay   *Record `json:"peakDay,omitempty"`  // hari terboros dalam periode
 }
 
 type Tp struct {
@@ -82,6 +88,7 @@ func newMux(s *Store, cls *Classifier, st *Status, loc *time.Location, live *Liv
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "ok") })
 	registerExtra(mux, s, st, loc, live)
+	registerDevice(mux, s, cls, st)
 	return mux
 }
 
@@ -105,6 +112,29 @@ func buildSummary(s *Store, cls *Classifier, st *Status, loc *time.Location, now
 			dd := s.f.Days[d.Format("2006-01-02")]
 			if dd == nil {
 				continue
+			}
+			if dt := dayTotal(dd); dt > 0 {
+				e.DaysUsed++
+				if e.PeakDay == nil || dt > e.PeakDay.Total {
+					e.PeakDay = &Record{Key: d.Format("2006-01-02"), Label: dayLabel(d), Total: dt}
+				}
+			}
+			if len(dd.Hrs) == 24 {
+				if e.Hours == nil {
+					e.Hours = make([]int64, 24)
+				}
+				for i, v := range dd.Hrs {
+					e.Hours[i] += v
+				}
+			}
+			if len(dd.Act) == 24 {
+				if e.ActHours == nil {
+					e.ActHours = make([]int, 24)
+				}
+				for i, v := range dd.Act {
+					e.ActHours[i] += int(v)
+					e.ActiveMin += int(v)
+				}
 			}
 			for n, c := range dd.Nets {
 				x := e.Nets[n]
