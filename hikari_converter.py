@@ -45,6 +45,7 @@ TEMPLATE_DIR = os.path.join(SCRIPT_DIR, "template")
 TEMPLATE_PATH = os.path.join(TEMPLATE_DIR, "template.yaml")  # working copy (boleh diedit lewat menu)
 TEMPLATE_GLOB = "config_v*.yaml"                             # master di template/; dipakai kalau template.yaml belum ada
 SNIFFER_TEMPLATE = os.path.join(TEMPLATE_DIR, "sniffer_only.yaml")   # config pengintai: tanpa node, semua DIRECT (menu Misc > Sniffer Only)
+BUGTEST_DIR = os.path.join(BASE_DIR, "bugtest")                     # hasil Uji Bug: hasil/bugtest/<tanggal_jam>/custom-*.yaml + report.txt
 SNIFFER_OUT_DIR = os.path.join(BASE_DIR, "sniffer")                 # hasil/sniffer/<platform>/config.yaml + cache CIDR CDN
 SNIFFER_ASN_URL = "https://github.com/xishang0128/geoip/releases/download/latest/GeoLite2-ASN.mmdb"
 
@@ -1173,6 +1174,252 @@ def setup_full_config(proxies, target_name, platform, provider_mode="template", 
 
 
 # =====================================================================
+#  Feature: Uji Bug / Custom (SNI · Host · Address ...) — logika di bugtest.py
+# =====================================================================
+BUG_FIELD_MENU = [("sni", "SNI", "server_name TLS — mis. bug.example.com"),
+                  ("host", "Host", "header Host ws/h2 — mis. bug.example.com"),
+                  ("server", "Address", "domain/IP server pengganti"),
+                  ("port", "Port", "mis. 443 8443"),
+                  ("path", "Path", "mis. /ws /vless (grpc: service name)"),
+                  ("alpn", "ALPN", "mis. h2,http/1.1 atau http/1.1"),
+                  ("fp", "Fingerprint", "chrome firefox safari ios android edge random")]
+
+
+def _bug_progress(mode, done, total):
+    if sys.stdout.isatty():
+        label = {"tcp": "TCP/TLS", "mihomo": "Mihomo", "v2ray": "V2Ray/Xray"}.get(mode, mode)
+        sys.stdout.write(f"\r  {C.DIM}uji {label}: {done}/{total}{C.RESET}   "); sys.stdout.flush()
+        if done >= total:
+            sys.stdout.write("\r" + " " * 40 + "\r")
+
+
+def _bug_pick_nodes(nodes):
+    """Index node yang diuji (Enter = semua) atau None kalau input salah."""
+    if len(nodes) == 1:
+        return [0]
+    print(f"  {C.DIM}Node yang bisa diuji:{C.RESET}")
+    for i, n in enumerate(nodes, 1):
+        print(f"  {C.CYAN}[{i}]{C.RESET} {truncate(str(n.get('name')), 24):<24} "
+              f"{C.DIM}{str(n.get('type', '?')).upper():<6} {truncate(str(n.get('server')), 18)}{C.RESET}")
+    raw = ask(f"{C.YELLOW}Node yang diuji (Enter = semua, atau 1,3) ❯{C.RESET} ").strip()
+    if not raw:
+        return list(range(len(nodes)))
+    try:
+        idx = sorted({int(x) - 1 for x in raw.replace(" ", "").split(",") if x})
+    except ValueError:
+        err("Input tidak valid."); return None
+    if not idx or any(not 0 <= i < len(nodes) for i in idx):
+        err("Nomor di luar daftar."); return None
+    return idx
+
+
+def _bug_pick_fields():
+    print(); section("Yang mau diuji")
+    for i, (_, label, hint) in enumerate(BUG_FIELD_MENU, 1):
+        print(f"  {C.CYAN}[{i}]{C.RESET} {label:<12} {C.DIM}{hint}{C.RESET}")
+    print(sep(50))
+    raw = ask(f"{C.YELLOW}Pilih (mis. 1,2,3 — Enter = SNI+Host+Address) ❯{C.RESET} ").strip() or "1,2,3"
+    try:
+        nums = sorted({int(x) for x in raw.replace(" ", "").split(",") if x})
+    except ValueError:
+        err("Input tidak valid."); return None
+    if not nums or any(not 1 <= n <= len(BUG_FIELD_MENU) for n in nums):
+        err("Nomor di luar daftar."); return None
+    return [BUG_FIELD_MENU[n - 1][0] for n in nums]
+
+
+def _bug_collect_candidates(bt, fields):
+    """Minta kandidat per field. Return {field: [nilai]} atau None kalau dibatalkan / kosong semua."""
+    cands = {}
+    labels = {f: (l, h) for f, l, h in BUG_FIELD_MENU}
+    for f in fields:
+        label, hint = labels[f]
+        print(); section(f"Kandidat {label}")
+        lines = _collect_lines([f"Paste daftar {label}, banyak sekaligus.",
+                                hint,
+                                "Pisah baris/spasi/koma. '@file.txt' = dari file.",
+                                "Enter kosong = selesai. 'batal' = batalkan uji."])
+        if lines is None:
+            return None
+        text, problems = bt.read_candidate_lines(lines)
+        for pr in problems:
+            warn(f"file tidak terbaca — {pr}")
+        good, bad = bt.parse_candidates(f, text)
+        if bad:
+            warn(f"{len(bad)} token dilewati (tidak valid): {truncate(', '.join(map(str, bad[:6])), 44)}")
+        if good:
+            ok(f"{len(good)} kandidat {label}")
+            cands[f] = good
+        else:
+            print(f"  {C.DIM}{label}: kosong, dilewati.{C.RESET}")
+    if not cands:
+        err("Tidak ada kandidat yang valid."); return None
+    return cands
+
+
+def _bug_choose_modes(bt):
+    """Pilih mode + siapkan core. Return (modes, opts) atau None."""
+    print(); section("Mode Tes")
+    mih = bt.find_mihomo()
+    v2core, v2flavor = bt.find_v2ray()
+    print(f"  {C.CYAN}[1]{C.RESET} TCP/TLS     {C.DIM}cepat, tanpa core (WS: cek balasan HTTP 101){C.RESET}")
+    print(f"  {C.CYAN}[2]{C.RESET} Mihomo      {C.DIM}tes sungguhan lewat core — "
+          f"{'ditemukan' if mih else 'belum ada, bisa diunduh otomatis'}{C.RESET}")
+    print(f"  {C.CYAN}[3]{C.RESET} V2Ray/Xray  {C.DIM}tes sungguhan lewat core — "
+          f"{(v2flavor + ' ditemukan') if v2core else 'tidak ditemukan'}{C.RESET}")
+    print(f"  {C.DIM}Boleh lebih dari satu (mis. 1,2): varian harus lolos semua mode, urut dari yang termurah.{C.RESET}")
+    print(sep(50))
+    raw = ask(f"{C.YELLOW}Pilih mode (Enter = 2) ❯{C.RESET} ").strip() or "2"
+    try:
+        nums = sorted({int(x) for x in raw.replace(" ", "").split(",") if x})
+    except ValueError:
+        err("Input tidak valid."); return None
+    if not nums or any(n not in (1, 2, 3) for n in nums):
+        err("Pilihan tidak valid."); return None
+    modes = [bt.MODES[n - 1] for n in nums]
+    opts = {}
+    if "mihomo" in modes:
+        if not mih:
+            if ask(f"  Core Mihomo belum ada. Unduh otomatis dari GitHub? (Y/n) ❯ ").strip().lower() == "n":
+                return None
+            mih = bt.download_mihomo()
+            if not mih:
+                err("Core Mihomo tidak tersedia (unduhan gagal). Pakai mode TCP/TLS, atau taruh binary di ./bin/mihomo."); return None
+        opts["mihomo_core"] = mih
+    if "v2ray" in modes:
+        if not v2core:
+            err("Core xray/v2ray tidak ditemukan. Taruh binary 'xray' (atau 'v2ray' >= 5) di PATH atau ./bin/, "
+                "atau set HIKARI_XRAY=/path/ke/xray.")
+            return None
+        opts["v2ray_core"], opts["v2ray_flavor"] = v2core, v2flavor
+    raw = ask(f"{C.YELLOW}Timeout per tes, detik (Enter = 5) ❯{C.RESET} ").strip()
+    opts["timeout"] = float(raw) if raw.replace(".", "", 1).isdigit() and float(raw) > 0 else 5.0
+    return modes, opts
+
+
+def _bug_show_results(bt, variants, modes, limit=12):
+    print(); section("Hasil Uji")
+    names = {}
+    for v in variants:
+        names.setdefault(v["base"], v["base_name"])
+    for bi in sorted(names):
+        base = next((v for v in variants if v["base"] == bi and v["kind"] == "base"), None)
+        print(f"  {C.BOLD}{truncate(names[bi], 40)}{C.RESET}")
+        if base:
+            if base["ok"]:
+                print(f"    config asli : {C.GREEN}✓ OK{C.RESET} {C.DIM}{base['ms'] or ''}{'ms' if base['ms'] else ''}{C.RESET}")
+            else:
+                print(f"    config asli : {C.RED}✗ gagal{C.RESET} {C.DIM}{truncate(base['reason'], 30)}{C.RESET}")
+        for kind in list(bt.FIELDS) + ["combo"]:
+            rows = [v for v in variants if v["base"] == bi and v["kind"] == kind]
+            if not rows:
+                continue
+            good = sorted((v for v in rows if v["ok"]), key=lambda v: (v["ms"] or 10 ** 9, v["id"]))
+            label = bt.FIELD_LABEL.get(kind, "Gabungan")
+            col = C.GREEN if good else C.RED
+            print(f"    {label:<11} : {col}{len(good)}/{len(rows)} lolos{C.RESET}")
+            for v in good[:limit]:
+                print(f"      {C.GREEN}✓{C.RESET} {truncate(bt.describe_fields(v), 34):<34} {C.DIM}{(str(v['ms']) + 'ms') if v['ms'] else '':>7}{C.RESET}")
+            if len(good) > limit:
+                print(f"      {C.DIM}... +{len(good) - limit} lainnya (lihat file hasil){C.RESET}")
+    total_ok = len(bt.passing(variants))
+    n_tested = sum(1 for v in variants if v["kind"] != "base")
+    print(f"\n  {C.GREEN}{total_ok} varian lolos{C.RESET} dari {n_tested} diuji")
+    if any(v["kind"] == "base" and not v["ok"] for v in variants) and total_ok == 0:
+        print(f"  {C.DIM}Config asli juga gagal — server/UUID mungkin mati atau jaringan ini memblokirnya; "
+              f"varian ikut gagal karena itu.{C.RESET}")
+
+
+def feature_bugtest(nodes):
+    """Uji kandidat SNI/Host/Address/... untuk `nodes` (list dict node Clash).
+    Return None (batal / tidak ada yang dipakai) atau {"nodes": [varian lolos], "drop": {index node asli yang diganti}, "desc": [str]}."""
+    bt = _import_tool("bugtest")
+    if not bt:
+        pause(); return None
+    clear_screen(); banner(); section("Uji Bug / Custom Config")
+    print(f"  {C.DIM}Uji banyak SNI / Host / Address sekaligus pada node ini: apakah masih bisa konek.")
+    print(f"  Yang lolos jadi node varian + file YAML siap dipakai di mihomo/v2ray.{C.RESET}\n")
+    picked = _bug_pick_nodes(nodes)
+    if picked is None:
+        time.sleep(1.2); return None
+    tested = [nodes[i] for i in picked]
+    fields = _bug_pick_fields()
+    if fields is None:
+        time.sleep(1.2); return None
+    cands = _bug_collect_candidates(bt, fields)
+    if cands is None:
+        time.sleep(1.2); return None
+    chosen = _bug_choose_modes(bt)
+    if chosen is None:
+        pause(); return None
+    modes, opts = chosen
+
+    variants, skipped = bt.build_variants(tested, cands)
+    for _, name, field, why in skipped:
+        warn(f"{truncate(name, 24)}: {bt.FIELD_LABEL[field]} dilewati — {why}")
+    n_var = sum(1 for v in variants if v["kind"] != "base")
+    if not n_var:
+        err("Tidak ada varian yang bisa dibuat (semua kandidat sama dengan config asli atau tidak berlaku)."); pause(); return None
+    print(f"\n  {len(tested)} node · {n_var} varian + {len(tested)} config asli · mode "
+          f"{' + '.join(bt.MODE_LABEL[m] for m in modes)}")
+    if n_var > 400:
+        warn("Jumlah tes besar — bisa lama. Ctrl+C untuk menghentikan.")
+    if ask(f"{C.YELLOW}Mulai? (Y/n) ❯{C.RESET} ").strip().lower() == "n":
+        return None
+
+    print()
+    try:
+        bt.test_variants(variants, modes, opts, progress=_bug_progress)
+        if bt.tcp_intercepted(variants):
+            warn("Hampir semua TCP connect <3 ms: koneksi dijawab Box/Nikki/VPN lokal. Matikan dulu atau pakai mode Mihomo/V2Ray.")
+        combos = bt.make_combos(variants)
+        if combos and ask(f"\n{C.YELLOW}Uji juga gabungan terbaik tiap field ({len(combos)} node)? (Y/n) ❯{C.RESET} ").strip().lower() != "n":
+            bt.test_variants(combos, modes, opts, progress=_bug_progress)
+            variants += combos
+    except RuntimeError as e:
+        err(f"Uji gagal: {e}"); pause(); return None
+    except KeyboardInterrupt:
+        print(); warn("Uji dihentikan."); pause(); return None
+
+    _bug_show_results(bt, variants, modes)
+    ok_v = bt.passing(variants)
+    out_dir = os.path.join(BUGTEST_DIR, time.strftime("%d%m%Y_%H%M%S"))
+    try:
+        files = bt.write_outputs(variants, modes, out_dir, lambda ns: dump_yaml({"proxies": ns}), skipped,
+                                 {"when": time.strftime("%Y-%m-%d %H:%M:%S"), "test_url": bt.DEFAULT_TEST_URL})
+        uris = []                                   # link vless/vmess/trojan untuk klien v2ray (v2rayNG, NekoBox, dst.)
+        for v in ok_v:
+            try:
+                u = build_uri_from_proxy(v["node"])
+            except Exception:
+                u = None
+            if u:
+                uris.append(u)
+        if uris:
+            with open(os.path.join(out_dir, "bug-ok-uri.txt"), "w", encoding="utf-8") as f:
+                f.write("\n".join(uris) + "\n")
+            files.insert(-1, ("bug-ok-uri.txt", len(uris)))
+        print(f"\n  {C.GREEN}✓{C.RESET} Hasil tersimpan di:\n    {C.BOLD}{C.CYAN}{out_dir}/{C.RESET}")
+        for fn, n in files:
+            print(f"    {C.DIM}├── {fn}{f'  ({n} node)' if n else ''}{C.RESET}")
+    except OSError as e:
+        warn(f"File hasil tidak bisa ditulis ({e.strerror or e}) — varian tetap bisa dipakai di bawah.")
+
+    if not ok_v:
+        pause(); return None
+    print(); section("Pakai varian yang lolos")
+    print(f"  {C.CYAN}[1]{C.RESET} Tambahkan {len(ok_v)} varian ke daftar node {C.DIM}(node asli tetap){C.RESET}")
+    print(f"  {C.CYAN}[2]{C.RESET} Ganti node asli yang punya varian lolos dengan varian-nya")
+    print(f"  {C.CYAN}[3]{C.RESET} Jangan dipakai {C.DIM}(cukup file hasil di atas){C.RESET}")
+    pick = ask(f"{C.YELLOW}Pilih (Enter = 1) ❯{C.RESET} ").strip() or "1"
+    if pick not in ("1", "2"):
+        return None
+    drop = {picked[v["base"]] for v in ok_v} if pick == "2" else set()
+    return {"nodes": [bt.clean_node(v["node"]) for v in ok_v], "drop": drop,
+            "desc": [bt.describe_fields(v) for v in ok_v]}
+
+
+# =====================================================================
 #  Feature: URI -> Clash
 # =====================================================================
 def _collect_lines(prompt_lines):
@@ -1203,6 +1450,7 @@ def feature_convert_to_clash():
     if not lines:
         err("Tidak ada input."); time.sleep(1.2); return
 
+    extra = []          # [(node, deskripsi)] varian lolos dari Uji Bug (aksi [U]); ikut diproses saat [L]
     while True:
         valid, invalid = [], []
         for i, ln in enumerate(lines):
@@ -1216,13 +1464,17 @@ def feature_convert_to_clash():
                 invalid.append((i, ln.strip(), str(e)))
 
         clear_screen(); banner()
-        section(f"Preview Input ({len(valid)} Valid, {len(invalid)} Gagal)")
-        if valid:
+        section(f"Preview Input ({len(valid)} Valid, {len(invalid)} Gagal" + (f", +{len(extra)} Varian" if extra else "") + ")")
+        if valid or extra:
             print(f"  {C.BOLD}{'No':<4} | {'Tipe':<7} | {'Nama Node':<20} | {'Server'}{C.RESET}")
             print(f"  {C.GRAY}{'-'*4}-+-{'-'*7}-+-{'-'*20}-+-{'-'*15}{C.RESET}")
             for idx, p in enumerate(valid, 1):
                 print(f"  {C.CYAN}{idx:<4}{C.RESET} | {p['type'].upper():<7} | "
                       f"{truncate(str(p['name']), 20):<20} | {C.DIM}{truncate(str(p['server']), 15)}{C.RESET}")
+            for k, (p, desc) in enumerate(extra, len(valid) + 1):
+                print(f"  {C.CYAN}{k:<4}{C.RESET} | {C.MAGENTA}{'VARIAN':<7}{C.RESET} | "
+                      f"{truncate(str(p['name']), 20):<20} | {C.DIM}{truncate(str(p['server']), 15)}{C.RESET}")
+                print(f"  {C.DIM}{'':<4}   ↳ {truncate(desc, 40)}{C.RESET}")
         for i, ln, reason in invalid:
             print(f"  {C.RED}✗ baris {i+1}{C.RESET} {C.DIM}{truncate(ln, 28)}{C.RESET} → {reason}")
 
@@ -1230,15 +1482,24 @@ def feature_convert_to_clash():
         section("Aksi")
         print(f"  {C.YELLOW}[T]{C.RESET} Tambah node lain")
         print(f"  {C.YELLOW}[H]{C.RESET} Hapus node (nomor, mis: 1 atau 1,3)")
+        print(f"  {C.CYAN}[U]{C.RESET} Uji bug / custom SNI · Host · Address {C.DIM}(banyak sekaligus){C.RESET}")
         print(f"  {C.GREEN}[L]{C.RESET} Lanjut Proses")
         print(f"  {C.RED}[B]{C.RESET} Batal / Kembali ke Menu")
         print(sep(50))
         aksi = ask(f"{C.YELLOW}Pilih Aksi ❯{C.RESET} ").strip().lower()
 
         if aksi == "l":
-            if valid:
+            if valid or extra:
                 break
             warn("Belum ada node valid."); time.sleep(1.2)
+        elif aksi == "u":
+            if not valid:
+                warn("Belum ada node valid untuk diuji."); time.sleep(1.2); continue
+            res = feature_bugtest(valid)
+            if res:
+                gone = {valid[i]["_orig_idx"] for i in res["drop"]}
+                lines = [ln for i, ln in enumerate(lines) if i not in gone]
+                extra += list(zip(res["nodes"], res["desc"]))
         elif aksi == "b":
             return
         elif aksi == "t":
@@ -1255,12 +1516,14 @@ def feature_convert_to_clash():
                 err("Input tidak valid."); time.sleep(1.2); continue
             gone = {valid[n - 1]["_orig_idx"] for n in nums if 1 <= n <= len(valid)}
             lines = [ln for i, ln in enumerate(lines) if i not in gone]
-            if not any(ln.strip() for ln in lines):
+            gone_x = {n - len(valid) - 1 for n in nums if len(valid) < n <= len(valid) + len(extra)}
+            extra = [e for i, e in enumerate(extra) if i not in gone_x]
+            if not any(ln.strip() for ln in lines) and not extra:
                 err("Semua tautan dihapus. Kembali ke menu."); time.sleep(1.2); return
         else:
             err("Aksi tidak dikenal."); time.sleep(0.8)
 
-    proxies = [{k: v for k, v in p.items() if k != "_orig_idx"} for p in valid]
+    proxies = [{k: v for k, v in p.items() if k != "_orig_idx"} for p in valid] + [dict(p) for p, _ in extra]
     n_emoji = apply_emoji(proxies)
     _generate_and_report(proxies, n_emoji)
 
@@ -1423,9 +1686,26 @@ def feature_regenerate():
     if not (pick.isdigit() and 1 <= int(pick) <= len(sources)):
         err("Pilihan tidak valid."); time.sleep(1.0); return
     label, fn, pid, name, nodes = sources[int(pick) - 1]
-    print(f"\n  {C.DIM}{len(nodes)} node dari {label}. Enter = tetap di platform/provider yang sama; "
-          f"pilih platform lain untuk menyalin node ke sana.{C.RESET}")
-    _generate_and_report([dict(n) for n in nodes], 0, default_plat=pid, default_target=name,
+    work = [dict(n) for n in nodes]
+    while True:
+        print(f"\n  {C.DIM}{len(work)} node dari {label}. Enter = tetap di platform/provider yang sama; "
+              f"pilih platform lain untuk menyalin node ke sana.{C.RESET}")
+        print(f"  {C.CYAN}[U]{C.RESET} Uji bug / custom SNI · Host · Address dulu   "
+              f"{C.GREEN}[L]{C.RESET} Lanjut   {C.RED}[B]{C.RESET} Batal")
+        aksi = ask(f"{C.YELLOW}Pilih (Enter = L) ❯{C.RESET} ").strip().lower()
+        if aksi in ("", "l"):
+            break
+        if aksi == "b":
+            return
+        if aksi == "u":
+            res = feature_bugtest(work)
+            if res:
+                work = [n for i, n in enumerate(work) if i not in res["drop"]] + res["nodes"]
+                clear_screen(); banner(); section("Regenerate dari Node Tersimpan")
+                ok(f"{len(res['nodes'])} varian ditambahkan" + (f", {len(res['drop'])} node asli diganti" if res["drop"] else ""))
+        else:
+            err("Aksi tidak dikenal."); time.sleep(0.8)
+    _generate_and_report(work, 0, default_plat=pid, default_target=name,
                          source_path=fn, node_label="node dipakai ulang")
 
 

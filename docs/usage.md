@@ -22,8 +22,8 @@ python hikari_converter.py
 ## Alur Convert (URI ➜ Clash)
 
 1. **Paste** link (`vless://` / `vmess://` / `trojan://`), satu per baris. Enter 2× untuk selesai.
-2. **Preview**: lihat daftar node. Aksi: `[T]` tambah · `[H]` hapus (mis. `1,3`) · `[L]` lanjut · `[B]` batal.
-   Baris yang gagal ditampilkan beserta alasannya (UUID kosong, transport belum didukung, dll).
+2. **Preview**: lihat daftar node. Aksi: `[T]` tambah · `[H]` hapus (mis. `1,3`) · `[U]` **uji bug/custom SNI·Host·Address** (banyak sekaligus, mode TCP/Mihomo/V2Ray — lihat [bugtest.md](bugtest.md)) · `[L]` lanjut · `[B]` batal.
+   Baris yang gagal ditampilkan beserta alasannya (UUID kosong, transport belum didukung, dll). Varian yang lolos uji muncul sebagai baris `VARIAN` dan ikut diproses saat `[L]`.
 3. **Pilih platform**: `B` Box · `N` Nikki · `O` OpenClash.
 4. **Pilih provider**: `active.yaml` atau `trial.yaml`. Jika sudah berisi node, pilih **Ganti** atau **Tambahkan**.
 5. **Mode rule-provider**: ikuti template (auto-update GitHub) atau **Offline** (file lokal saja).
@@ -37,6 +37,7 @@ Menu `1 → 3`. Kamu mengubah template, DNS, profil ISP, emoji, atau secret dan 
 - **`[1]…[n]`** — pilih satu sumber (mis. `nikki/active.yaml`, lengkap dengan jumlah node & waktu ubah). Enter = tetap di platform/provider yang sama, jadi file node-nya **tidak** ditanya timpa/tambah. Pilih platform lain untuk menyalin node ke sana (format node sama di semua platform).
 - **`[A]`** — bangun ulang semua sumber sekaligus dengan pilihan baku: rule-provider & secret ikut template, profil ISP dari `settings.json`.
 - Nama node dipakai apa adanya (emoji tidak ditambah lagi), dan node di provider lain tidak disentuh.
+- Setelah memilih satu sumber ada aksi **`[U]` Uji bug / custom** (SNI · Host · Address) sebelum `[L]` Lanjut — varian yang lolos ditambahkan (atau mengganti node asli) lalu ikut ditulis ke provider. Lihat [bugtest.md](bugtest.md).
 
 ## Free node (☘️ FREE NODE)
 
