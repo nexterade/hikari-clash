@@ -76,7 +76,7 @@ class SnifferTemplate(unittest.TestCase):
         for r in rules:
             if r.endswith(("🔶 Cloudflare", "🟧 CloudFront", "🏠 LAN", "🧭 DNS")):
                 self.assertLess(rules.index(r), wifi, r)        # label CDN/DNS/LAN tidak boleh tertutup WIFI
-        self.assertIn("# template-version: sniffer-1.1", self.tpl)
+        self.assertIn("# template-version: sniffer-1.2", self.tpl)
 
     def test_wifi_label_survives_on_all_platforms(self):
         for plat in h.PLATFORMS:
@@ -89,6 +89,175 @@ class SnifferTemplate(unittest.TestCase):
         self.assertNotIn("proxy-server-nameserver", dns)
         self.assertNotIn("112.215.203.254", self.tpl)
         self.assertFalse(dns["respect-rules"])
+
+
+class SnifferDnsDetect(unittest.TestCase):
+    SAMPLE = (
+        "NetworkAgentInfo{ LinkProperties{InterfaceName: rmnet_data2 LinkAddresses: [ 10.1.2.3/30 ] "
+        "DnsAddresses: [ /112.215.203.254,/112.215.198.254,/2404:8000::1 ] Domains: null MTU: 1500} }\n"
+        "NetworkAgentInfo{ LinkProperties{InterfaceName: wlan0 LinkAddresses: [ 192.168.1.5/24 ] "
+        "DnsAddresses: [ /192.168.1.1,/8.8.8.8 ] Domains: null} }\n"
+        "NetworkAgentInfo{ LinkProperties{InterfaceName: ccmni1 DnsAddresses: [ /10.20.30.40 ] Domains: null} }\n")
+
+    def test_parse_keeps_ipv4_and_private_only_on_mobile(self):
+        got = dict(h.parse_dns_addresses(self.SAMPLE))
+        self.assertEqual(got["rmnet_data2"], ["112.215.203.254", "112.215.198.254"])   # IPv6 dibuang
+        self.assertEqual(got["wlan0"], ["8.8.8.8"])                                    # DNS router (privat) dibuang
+        self.assertEqual(got["ccmni1"], ["10.20.30.40"])                               # DNS internal operator dipertahankan
+        self.assertEqual(h.parse_dns_addresses(""), [])
+        self.assertEqual(h.parse_dns_addresses(None), [])
+
+    def test_detect_prefers_mobile_and_falls_back_without_root(self):
+        class R:
+            def __init__(self, rc, out): self.returncode, self.stdout = rc, out
+        calls = []
+
+        def fake(cmd, **kw):
+            calls.append(cmd[0])
+            return R(1, "") if cmd[0] == "su" else R(0, self.SAMPLE)               # su gagal -> dumpsys biasa
+        res = h.detect_system_dns(fake)
+        self.assertEqual(calls, ["su", "dumpsys"])
+        self.assertTrue(res[0][0].startswith(("rmnet", "ccmni")))
+
+    def test_detect_returns_empty_when_unreadable(self):
+        def boom(cmd, **kw): raise OSError("tidak ada")
+        self.assertEqual(h.detect_system_dns(boom), [])
+
+    def test_only_xl_preset_has_verified_ips(self):
+        verified = {pid: ips for pid, _, ips, ok in h.OPERATOR_DNS_PRESETS if ok}
+        self.assertEqual(verified, {"xl": h.ISP_PROFILES["xl"]["ips"]})
+        for pid, _, ips, ok in h.OPERATOR_DNS_PRESETS:
+            if not ok:
+                self.assertEqual(ips, [], pid)                                         # tidak boleh menebak IP operator lain
+
+
+class SnifferOperatorIpFlag(unittest.TestCase):
+    def test_operator_hosted_hosts_flagged_and_listed(self):
+        base = {"network": "TCP", "dst_port": "443", "host": "", "base_domain": "scdn.co", "geoip": "id", "cdn": "-",
+                "chains": "L > DIRECT", "process": "com.spotify.music", "upload": 10, "download": 5000}
+        rows = [dict(base, dst_ip="112.215.212.72", sniff_host="i.scdn.co", asn="24203 PT XL Axiata"),
+                dict(base, dst_ip="199.232.114.251", sniff_host="open.spotifycdn.com", asn="54113 Fastly, Inc.")]
+        md = sn.render_markdown(rows)
+        self.assertIn("IP operator (cache lokal?)", md)
+        blk = md.split("### Host di IP milik operator")[1].split("```")[1]
+        self.assertIn("i.scdn.co", blk)
+        self.assertNotIn("open.spotifycdn.com", blk)
+        self.assertNotIn("Host di IP milik operator", sn.render_markdown(rows[1:]))
+
+
+class SnifferMarkdown(unittest.TestCase):
+    def _row(self, **kw):
+        base = {"no": 1, "network": "TCP", "source": "10.0.0.2:1", "dst_ip": "1.1.1.1", "dst_port": "443", "host": "",
+                "sniff_host": "a.example.com", "subdomain": "a", "base_domain": "example.com", "geoip": "sg",
+                "asn": "1 Foo", "cdn": "-", "chains": "L > DIRECT", "process": "com.app", "uid": 1,
+                "upload": 100, "download": 1000}
+        base.update(kw)
+        return base
+
+    def test_merge_similar_and_drop_zero_download(self):
+        rows = [self._row(dst_ip="1.1.1.1", upload=100, download=1000),
+                self._row(dst_ip="1.1.1.2", upload=50, download=500),
+                self._row(dst_ip="1.1.1.3", upload=999, download=0),           # tidak ada balasan -> dibuang
+                self._row(sniff_host="b.example.com", download=2048)]
+        groups, total, dropped = sn.aggregate_ok(rows)
+        self.assertEqual((total, dropped, len(groups)), (4, 1, 2))
+        a = next(g for g in groups if g["name"] == "a.example.com")
+        self.assertEqual((a["conns"], a["up"], a["down"]), (2, 150, 1500))
+        self.assertEqual(a["ips"], ["1.1.1.1", "1.1.1.2"])
+        self.assertEqual(groups[0]["name"], "b.example.com")                   # urut trafik terbesar
+
+    def test_separate_by_protocol_port_chain_and_app(self):
+        rows = [self._row(), self._row(network="UDP"), self._row(dst_port="8443"), self._row(chains="X > DIRECT"),
+                self._row(process="com.other")]
+        self.assertEqual(len(sn.aggregate_ok(rows)[0]), 5)
+        self.assertIn("UDP/QUIC", {g["proto"] for g in sn.aggregate_ok(rows)[0]})
+
+    def test_render_has_tables_candidates_and_notes(self):
+        rows = [self._row(), self._row(sniff_host="", host="dns.example.com", download=10),
+                self._row(sniff_host="", host="", dst_ip="9.9.9.9", dst_port="80", download=5),
+                self._row(sniff_host="x|y.example.com", download=0)]
+        md = sn.render_markdown(rows, source="uji.json")
+        self.assertIn("menerima data: **3**", md)
+        self.assertIn("| # | Host (SNI) |", md)
+        self.assertIn("## Aplikasi: `com.app`", md)
+        self.assertIn("a.example.com:443", md)
+        self.assertIn("+.example.com", md)
+        self.assertIn("tanpa SNI", md)
+        self.assertIn("host dari DNS, bukan SNI", md)
+        self.assertIn("HTTP polos", md)
+        sni_block = md.split("### SNI")[1].split("```")[1]
+        self.assertIn("a.example.com", sni_block)
+        self.assertNotIn("dns.example.com", sni_block)                          # host DNS bukan SNI
+        self.assertNotIn("x|y", md)                                             # baris download 0 tidak ikut
+
+    def test_pipe_in_host_is_escaped_and_empty_report(self):
+        md = sn.render_markdown([self._row(sniff_host="a|b.example.com")])
+        self.assertIn("a\\|b.example.com", md)
+        empty = sn.render_markdown([self._row(download=0)])
+        self.assertIn("Tidak ada koneksi yang menerima data", empty)
+
+    def test_export_cli_roundtrip_json_and_csv(self):
+        rows = [self._row(), self._row(sniff_host="zero.example.com", download=0)]
+        with tempfile.TemporaryDirectory() as d:
+            pj = sn.export_json(rows, os.path.join(d, "k.json"))
+            pc = sn.export_csv(rows, os.path.join(d, "k.csv"))
+            for src in (pj, pc):
+                out = os.path.join(d, os.path.basename(src) + ".md")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(sn.main(["laporan", src, out]), 0)
+                md = open(out, encoding="utf-8").read()
+                self.assertIn("a.example.com", md)
+                self.assertNotIn("zero.example.com", md)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sn.main([]), 2)
+                self.assertEqual(sn.main(["laporan", os.path.join(d, "tidak-ada.json")]), 1)
+
+
+class SnifferOperatorDns(unittest.TestCase):
+    """Aplikasi provider macet saat Box aktif (hipotesis DNS): domain provider boleh diarahkan ke DNS operator."""
+
+    def test_default_has_no_policy(self):
+        cfg, _ = h.build_sniffer_config("box")
+        self.assertNotIn("nameserver-policy", cfg["dns"])
+        self.assertEqual(cfg["dns"]["enhanced-mode"], "redir-host")
+
+    def test_operator_dns_adds_policy_for_provider_domains(self):
+        for plat in h.PLATFORMS:
+            cfg, notes = h.build_sniffer_config(plat, operator_dns=["112.215.203.254", "118.98.44.10"])
+            pol = cfg["dns"]["nameserver-policy"]
+            self.assertEqual(set(pol), {"+." + d for d in h.OPERATOR_DOMAINS}, plat)
+            for v in pol.values():
+                self.assertEqual(v, ["112.215.203.254", "118.98.44.10"])
+            self.assertTrue(any("DNS operator" in n for n in notes), plat)
+            self.assertEqual(h.validate_config(cfg, plat), [], plat)
+            self.assertEqual(cfg["dns"]["nameserver"], ["https://1.1.1.1/dns-query", "https://dns.google/dns-query"])
+
+    def test_operator_scope_all_replaces_doh_for_every_domain(self):
+        for plat in h.PLATFORMS:
+            cfg, notes = h.build_sniffer_config(plat, operator_dns=["112.215.203.254"], operator_scope="all")
+            self.assertEqual(cfg["dns"]["nameserver"], ["112.215.203.254"], plat)
+            self.assertNotIn("nameserver-policy", cfg["dns"], plat)
+            self.assertEqual(cfg["dns"]["enhanced-mode"], "redir-host", plat)
+            self.assertTrue(any("SEMUA domain" in n for n in notes), plat)
+            # satu-satunya peringatan yang wajar: DNS polos ke ISP (memang itu tujuannya)
+            issues = h.validate_config(cfg, plat)
+            self.assertEqual([lvl for lvl, _ in issues], ["WARN"], plat)
+            self.assertIn("112.215.203.254", issues[0][1], plat)
+        cfg, _ = h.build_sniffer_config("box", operator_scope="all")            # tanpa IP: tidak ada yang berubah
+        self.assertEqual(cfg["dns"]["nameserver"], ["https://1.1.1.1/dns-query", "https://dns.google/dns-query"])
+
+    def test_parse_operator_dns(self):
+        good, bad = h.parse_operator_dns("112.215.203.254, 118.98.44.10;foo 112.215.203.254")
+        self.assertEqual(good, ["112.215.203.254", "118.98.44.10"])
+        self.assertEqual(bad, ["foo"])
+        self.assertEqual(h.parse_operator_dns(""), ([], []))
+
+    def test_written_yaml_roundtrips(self):
+        with tempfile.TemporaryDirectory() as d:
+            path, issues, _ = h.write_sniffer_config("box", out_root=d, operator_dns=["112.215.203.254"])
+            self.assertEqual(issues, [])
+            cfg = yaml.safe_load(h.read_text(path))
+            self.assertEqual(cfg["dns"]["nameserver-policy"]["+.byu.id"], ["112.215.203.254"])
 
 
 class SnifferBuild(unittest.TestCase):

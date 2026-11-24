@@ -8,6 +8,7 @@ URI <-> Clash (Mihomo) converter + generator config untuk Box / Nikki / OpenClas
 import base64
 import copy
 import glob
+import ipaddress
 import json
 import os
 import random
@@ -1292,8 +1293,16 @@ def _bug_choose_modes(bt):
                 "atau set HIKARI_XRAY=/path/ke/xray.")
             return None
         opts["v2ray_core"], opts["v2ray_flavor"] = v2core, v2flavor
-    raw = ask(f"{C.YELLOW}Timeout per tes, detik (Enter = 5) ❯{C.RESET} ").strip()
+    raw = ask(f"{C.YELLOW}Timeout per tes, detik (Enter = 5, maks 30) ❯{C.RESET} ").strip()
     opts["timeout"] = float(raw) if raw.replace(".", "", 1).isdigit() and float(raw) > 0 else 5.0
+    if opts["timeout"] > 30:
+        warn("Timeout dibatasi 30 detik: API Mihomo menolak nilai di atas 32 detik dengan error 'Body invalid'.")
+        opts["timeout"] = 30.0
+    if "tcp" in modes or "mihomo" in modes:
+        ips = _pick_operator_dns("bugtest")
+        if ips:
+            opts["dns_servers"] = ips
+            print(f"  {C.DIM}DNS operator {', '.join(ips)} dipakai untuk me-resolve address node & kandidat (TCP/TLS dan Mihomo).{C.RESET}")
     return modes, opts
 
 
@@ -2886,13 +2895,110 @@ def feature_misc_route():
 
 
 # ---------- Sniffer Only ----------
-def build_sniffer_config(platform, with_asn=False, secret_mode="template", template_path=None):
+# Domain aplikasi provider (MyXL, MyTelkomsel, by.U, myIM3, Tri, AXIS). Dipakai untuk dns.nameserver-policy opsional:
+# banyak aplikasi ini memeriksa nama host yang hanya di-resolve benar oleh DNS operator. Saat Box aktif, SEMUA DNS
+# dibelokkan ke core (DoH 1.1.1.1 / dns.google), jadi nama itu gagal/beda hasil dan aplikasi macet. Hipotesis, belum
+# diuji di perangkat: kalau tidak membantu, lihat bagian "Aplikasi provider tidak mau terbuka" di docs/sniffer.md.
+OPERATOR_DOMAINS = (
+    "xl.co.id", "xl.id", "xlaxiata.co.id", "xlaxiata.id", "xlsmart.co.id", "axis.co.id",
+    "telkomsel.com", "tsel.me", "tsel.id", "byu.id",
+    "indosatooredoo.com", "ioh.co.id", "tri.co.id",
+)
+
+
+def parse_operator_dns(text):
+    """'112.215.203.254, 118.98.44.10' -> (['112.215.203.254', '118.98.44.10'], ['salah']). Hanya IP polos yang diterima."""
+    good, bad = [], []
+    for tok in re.split(r"[\s,;]+", str(text or "").strip()):
+        if not tok:
+            continue
+        try:
+            ip = str(ipaddress.ip_address(tok))
+        except ValueError:
+            bad.append(tok)
+            continue
+        if ip not in good:
+            good.append(ip)
+    return good, bad
+
+
+# Preset DNS operator. Hanya XL yang terverifikasi (dipakai di profil ISP repo dan terbukti membuat paket Spotify
+# jalan: host CDN-nya di-resolve ke IP milik XL, AS24203). IP operator lain SENGAJA tidak ditebak: salah satu IP
+# membuat semua koneksi gagal resolve, dan DNS operator berbeda per wilayah. Pakai deteksi dari perangkat.
+OPERATOR_DNS_PRESETS = (
+    ("xl", "XL / AXIS", ISP_PROFILES["xl"]["ips"], True),
+    ("telkomsel", "Telkomsel / by.U", [], False),
+    ("indosat", "Indosat / IM3 / Tri", [], False),
+    ("smartfren", "Smartfren / XL Smart", [], False),
+)
+_MOBILE_IFACE = ("rmnet", "ccmni", "seth", "v4-rmnet", "pdp", "usb")
+
+
+def parse_dns_addresses(text):
+    """Keluaran `dumpsys connectivity` -> [(interface, [ipv4,...])] dari baris LinkProperties (DnsAddresses).
+    Antarmuka seluler (rmnet/ccmni/...) mempertahankan IP privat (DNS internal operator); WiFi dan lainnya hanya
+    IP publik, karena DNS WiFi biasanya router rumah (192.168.x) dan bukan DNS operator."""
+    found, seen = [], set()
+    for m in re.finditer(r"InterfaceName:\s*(\S+).*?DnsAddresses:\s*\[([^\]]*)\]", str(text or "")):
+        iface, ips = m.group(1), []
+        mobile = iface.lower().startswith(_MOBILE_IFACE)
+        for tok in re.split(r"[\s,]+", m.group(2)):
+            try:
+                ip = ipaddress.ip_address(tok.strip().lstrip("/"))
+            except ValueError:
+                continue
+            if ip.version != 4 or ip.is_loopback or ip.is_link_local or ip.is_unspecified:
+                continue
+            if ip.is_private and not mobile:
+                continue
+            if str(ip) not in ips:
+                ips.append(str(ip))
+        if ips and (iface, tuple(ips)) not in seen:
+            seen.add((iface, tuple(ips)))
+            found.append((iface, ips))
+    return found
+
+
+def detect_system_dns(run=None):
+    """DNS yang diberikan operator ke perangkat, lewat `su -c dumpsys connectivity` (butuh root) lalu `dumpsys`
+    biasa. Return [(interface, [ip,...])]; kosong kalau tidak bisa dibaca. Seluler diurutkan lebih dulu."""
+    run = run or subprocess.run
+    for cmd in (["su", "-c", "dumpsys connectivity"], ["dumpsys", "connectivity"]):
+        try:
+            r = run(cmd, capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if getattr(r, "returncode", 1) == 0 and "DnsAddresses" in (getattr(r, "stdout", "") or ""):
+            res = parse_dns_addresses(r.stdout)
+            return sorted(res, key=lambda x: not x[0].lower().startswith(_MOBILE_IFACE))
+    return []
+
+
+def build_sniffer_config(platform, with_asn=False, secret_mode="template", template_path=None, operator_dns=None,
+                         operator_scope="provider"):
     """Config pengintai dari template/sniffer_only.yaml, disesuaikan per platform. Return (cfg, notes).
     Tanpa profil ISP (kuota reguler) dan tanpa provider. geodata-mode dipaksa false: GeoIP di /connections
-    hanya terisi di mode mmdb."""
+    hanya terisi di mode mmdb. operator_dns (list IP, opsional): domain aplikasi provider di-resolve lewat
+    DNS operator itu (dns.nameserver-policy); domain lain tetap lewat DoH template. operator_scope="all":
+    SEMUA domain lewat DNS operator saja (dns.nameserver = IP itu, tanpa DoH). Untuk menguji dugaan bahwa paket
+    aplikasi (Spotify, Instagram, dsb) hanya gratis di IP yang dijawab DNS operator, bukan IP jawaban DoH publik."""
     cfg, notes = build_config(read_text(template_path or SNIFFER_TEMPLATE), platform,
                               secret_mode=secret_mode, isp="none")
     cfg["geodata-mode"] = False
+    if operator_dns:
+        ips, _ = parse_operator_dns(" ".join(operator_dns) if isinstance(operator_dns, (list, tuple)) else operator_dns)
+        if ips:
+            dns = cfg.setdefault("dns", {})
+            if operator_scope == "all":
+                dns["nameserver"] = list(ips)
+                dns.pop("nameserver-policy", None)
+                notes.append(f"SEMUA domain di-resolve lewat DNS operator {', '.join(ips)} (tanpa DoH). "
+                             "Kalau DNS itu tidak terjangkau (mis. pindah jaringan), semua koneksi akan gagal resolve")
+            else:
+                policy = dns.setdefault("nameserver-policy", {})
+                for d in OPERATOR_DOMAINS:
+                    policy["+." + d] = list(ips)
+                notes.append(f"DNS operator {', '.join(ips)} dipakai untuk {len(OPERATOR_DOMAINS)} domain aplikasi provider (nameserver-policy)")
     if with_asn:
         cfg.setdefault("geox-url", {})["asn"] = SNIFFER_ASN_URL
         rules = cfg.setdefault("rules", [])
@@ -2901,9 +3007,11 @@ def build_sniffer_config(platform, with_asn=False, secret_mode="template", templ
     return cfg, notes
 
 
-def write_sniffer_config(platform, with_asn=False, secret_mode="template", out_root=None):
+def write_sniffer_config(platform, with_asn=False, secret_mode="template", out_root=None, operator_dns=None,
+                         operator_scope="provider"):
     """Tulis hasil/sniffer/<platform>/config.yaml. Return (path, issues, notes)."""
-    cfg, notes = build_sniffer_config(platform, with_asn, secret_mode)
+    cfg, notes = build_sniffer_config(platform, with_asn, secret_mode, operator_dns=operator_dns,
+                                      operator_scope=operator_scope)
     out_dir = os.path.join(out_root or SNIFFER_OUT_DIR, platform)
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, "config.yaml")
@@ -2928,6 +3036,54 @@ def _pick_platform(default="b"):
     return {"b": "box", "n": "nikki", "o": "openclash"}.get(key)
 
 
+def _pick_operator_dns(context="sniffer"):
+    """Menu DNS operator (config sniffer atau Uji Bug). Return list IP (kosong = lewati)."""
+    if context == "bugtest":
+        print(f"\n  {C.DIM}Address node dan kandidat di-resolve lewat resolver sistem. Di jaringan operator, IP gratis (cache milik{C.RESET}")
+        print(f"  {C.DIM}operator) hanya dijawab DNS operator; DNS publik/DoH memberi IP lain sehingga uji bisa salah gagal.{C.RESET}")
+        print(f"  {C.DIM}Matikan Box saat uji: Box membelokkan semua DNS ke DoH publik.{C.RESET}\n")
+    else:
+        print(f"\n  {C.DIM}Aplikasi provider dan paket aplikasi (MyXL, by.U, Spotify, Instagram, dsb) bisa mati saat Box aktif: DNS-nya{C.RESET}")
+        print(f"  {C.DIM}dibelokkan ke DoH publik, padahal IP gratisnya (cache milik operator) hanya dijawab DNS operator.{C.RESET}\n")
+    print(f"  {C.BOLD}DNS operator{C.RESET}")
+    print(f"    [D] Deteksi dari perangkat (butuh root)")
+    for i, (_, label, ips, verified) in enumerate(OPERATOR_DNS_PRESETS, 1):
+        if ips:
+            print(f"    [{i}] {label:<22} {', '.join(ips)}  {C.DIM}(terverifikasi){C.RESET}")
+        else:
+            print(f"    [{i}] {label:<22} {C.DIM}IP belum terverifikasi → pakai [D] atau [M]{C.RESET}")
+    print(f"    [M] Isi manual    {C.DIM}Enter = lewati{C.RESET}")
+    while True:
+        ch = ask(f"{C.YELLOW}Pilih ❯{C.RESET} ").strip().lower()
+        if not ch:
+            return []
+        if ch == "d":
+            spinner("Membaca DNS perangkat", 0.4)
+            found = detect_system_dns()
+            if not found:
+                warn("Tidak terbaca (butuh root / izin su untuk Termux). Pakai [M] atau pilih preset."); continue
+            for i, (iface, ips) in enumerate(found, 1):
+                kind = "seluler" if iface.lower().startswith(_MOBILE_IFACE) else "lainnya"
+                print(f"    {i}) {iface:<14} {', '.join(ips)}  {C.DIM}({kind}){C.RESET}")
+            pick = ask(f"{C.YELLOW}Nomor (Enter = 1, 0 = batal) ❯{C.RESET} ").strip()
+            if pick == "0":
+                continue
+            idx = int(pick) - 1 if pick.isdigit() and 1 <= int(pick) <= len(found) else 0
+            return found[idx][1]
+        if ch == "m":
+            raw = ask(f"{C.YELLOW}IP DNS (spasi/koma) ❯{C.RESET} ").strip()
+            ips, bad = parse_operator_dns(raw)
+            if bad or not ips:
+                err(f"Bukan IP yang valid: {', '.join(bad) or raw}"); continue
+            return ips
+        if ch.isdigit() and 1 <= int(ch) <= len(OPERATOR_DNS_PRESETS):
+            ips = OPERATOR_DNS_PRESETS[int(ch) - 1][2]
+            if ips:
+                return list(ips)
+            warn("Preset ini belum punya IP terverifikasi. Pakai [D] atau [M]."); continue
+        err("Pilihan tidak dikenal.")
+
+
 def _sniffer_generate():
     clear_screen(); banner("MISC"); section("Sniffer Only — Generate Config")
     if not os.path.isfile(SNIFFER_TEMPLATE):
@@ -2939,9 +3095,17 @@ def _sniffer_generate():
     print(f"\n  {C.DIM}ASN = nama pemilik IP (mis. AS13335 Cloudflare). Butuh GeoLite2-ASN.mmdb yang diunduh core saat start.{C.RESET}")
     with_asn = ask(f"{C.YELLOW}Aktifkan ASN? (y/N) ❯{C.RESET} ").strip().lower() == "y"
     rnd = ask(f"{C.YELLOW}Secret acak? (y/N, N = 'hikari') ❯{C.RESET} ").strip().lower() == "y"
+    op_ips = _pick_operator_dns()
+    scope = "provider"
+    if op_ips:
+        print(f"\n  {C.DIM}Cakupan DNS operator: [1] hanya domain provider   [2] SEMUA domain, tanpa DoH{C.RESET}")
+        print(f"  {C.DIM}[2] dibutuhkan untuk paket aplikasi (Spotify, Instagram, dsb): CDN-nya hanya dijawab DNS operator.{C.RESET}")
+        print(f"  {C.DIM}Risiko [2]: kalau DNS itu tidak terjangkau (pindah jaringan), semua koneksi gagal resolve.{C.RESET}")
+        scope = "provider" if ask(f"{C.YELLOW}Cakupan (1/2, Enter = 2) ❯{C.RESET} ").strip() == "1" else "all"
     spinner("Membangun config", 0.4)
     try:
-        path, issues, notes = write_sniffer_config(plat, with_asn, "random" if rnd else "template")
+        path, issues, notes = write_sniffer_config(plat, with_asn, "random" if rnd else "template",
+                                                   operator_dns=op_ips or None, operator_scope=scope)
     except Exception as e:
         err(f"Gagal membuat config: {type(e).__name__}: {e}"); pause(); return
     ok(f"Config {PLATFORMS[plat]['label']} → {os.path.relpath(path, SCRIPT_DIR)}")
@@ -3016,7 +3180,9 @@ def _sniffer_inspect():
         try:
             p1 = sn.export_csv(rows, os.path.join(SNIFFER_OUT_DIR, f"koneksi_{stamp}.csv"))
             p2 = sn.export_json(rows, os.path.join(SNIFFER_OUT_DIR, f"koneksi_{stamp}.json"))
+            p3 = sn.export_markdown(rows, os.path.join(SNIFFER_OUT_DIR, f"koneksi_{stamp}.md"), source=f"sesi {stamp}")
             ok(f"{os.path.relpath(p1, SCRIPT_DIR)}"); ok(f"{os.path.relpath(p2, SCRIPT_DIR)}")
+            ok(f"{os.path.relpath(p3, SCRIPT_DIR)}  {C.DIM}(hanya yang menerima data, digabung){C.RESET}")
         except OSError as e:
             err(f"Gagal menyimpan: {e}")
     pause()

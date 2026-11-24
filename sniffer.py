@@ -17,6 +17,7 @@ import csv
 import ipaddress
 import json
 import os
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -295,6 +296,195 @@ def export_json(rows, path):
     return path
 
 
+# ---------- laporan markdown (hanya koneksi yang MENERIMA data) ----------
+def _md(text):
+    return str(text if text not in (None, "") else "-").replace("|", "\\|").replace("\n", " ")
+
+
+def _app_of(row):
+    return str(row.get("process") or row.get("uid") or "(tidak diketahui)")
+
+
+def aggregate_ok(rows, min_download=1):
+    """Gabungkan koneksi serupa (aplikasi + protokol + port + host + chain) yang MENERIMA data.
+    Koneksi dengan download < min_download dibuang (handshake tanpa balasan, diblokir, dsb).
+    Return (groups, total, dibuang); groups terurut dari trafik terbesar."""
+    groups, total, dropped = {}, 0, 0
+    for r in rows:
+        total += 1
+        if int(r.get("download") or 0) < min_download:
+            dropped += 1
+            continue
+        sniff, host, ip = r.get("sniff_host") or "", r.get("host") or "", r.get("dst_ip") or ""
+        if sniff:
+            name, kind = sniff, "SNI"
+        elif host:
+            name, kind = host, "DNS"
+        else:
+            name, kind = ip or "?", "IP"
+        port = str(r.get("dst_port") or "")
+        net = str(r.get("network") or "").upper()
+        proto = "UDP/QUIC" if net == "UDP" and port in ("443", "8443") else net
+        key = (_app_of(r), proto, port, name, r.get("chains") or "")
+        g = groups.get(key)
+        if g is None:
+            g = groups[key] = {"app": key[0], "proto": proto, "port": port, "name": name, "chains": key[4],
+                               "kinds": set(), "conns": 0, "up": 0, "down": 0, "ips": [], "asn": [], "geo": [],
+                               "cdn": [], "base": ""}
+        g["kinds"].add(kind)
+        g["conns"] += 1
+        g["up"] += int(r.get("upload") or 0)
+        g["down"] += int(r.get("download") or 0)
+        for field, val in (("ips", ip), ("asn", r.get("asn")), ("geo", r.get("geoip")), ("cdn", r.get("cdn"))):
+            if val and val != "-" and val not in g[field]:
+                g[field].append(val)
+        if kind != "IP" and not g["base"]:
+            g["base"] = r.get("base_domain") or name
+    out = list(groups.values())
+    for g in out:
+        g["kind"] = "SNI" if "SNI" in g["kinds"] else ("DNS" if "DNS" in g["kinds"] else "IP")
+    out.sort(key=lambda g: (-(g["up"] + g["down"]), g["name"]))
+    return out, total, dropped
+
+
+# Nama pemilik IP (kolom ASN) milik operator seluler. Host yang di-resolve ke IP seperti ini biasanya cache lokal
+# operator yang dijawab DNS operator (terlihat di log Spotify: scdn.co/spotifycdn.com -> AS24203 PT XL Axiata).
+OPERATOR_ASN_HINTS = ("xl axiata", "xlsmart", "telkomsel", "telekomunikasi selular", "indosat", "hutchison", "smartfren")
+
+
+def is_operator_ip(g):
+    return any(h in str(a).lower() for a in g.get("asn", []) for h in OPERATOR_ASN_HINTS)
+
+
+def _notes(g):
+    n = []
+    if is_operator_ip(g):
+        n.append("IP operator (cache lokal?)")
+    if g["port"] == "80":
+        n.append("HTTP polos")
+    if g["down"] < 1024:
+        n.append("respons kecil")
+    if g["kind"] == "DNS":
+        n.append("host dari DNS, bukan SNI")
+    elif g["kind"] == "IP":
+        n.append("tanpa SNI")
+    return ", ".join(n)
+
+
+def _ips(g, top=3):
+    shown = g["ips"][:top]
+    extra = len(g["ips"]) - len(shown)
+    return ", ".join(shown) + (f" +{extra}" if extra > 0 else "")
+
+
+def render_markdown(rows, source="", min_download=1):
+    rows = list(rows)
+    groups, total, dropped = aggregate_ok(rows, min_download)
+    ok_conns = total - dropped
+    up, down = sum(g["up"] for g in groups), sum(g["down"] for g in groups)
+    hosts = {g["name"] for g in groups if g["kind"] != "IP"}
+    L = ["# Hasil sniffer — koneksi yang menerima data", ""]
+    L.append(f"> Dibuat {time.strftime('%Y-%m-%d %H:%M:%S')}" + (f" · sumber: {_md(source)}" if source else ""))
+    L += ["", f"- Total koneksi terekam: **{total}** · menerima data: **{ok_conns}** · dibuang (download 0 B): **{dropped}**",
+          f"- Hasil gabungan: **{len(groups)}** baris · host unik: **{len(hosts)}**",
+          f"- Trafik: ↑ {human_bytes(up)} · ↓ {human_bytes(down)} · total {human_bytes(up + down)}", ""]
+    if not groups:
+        L += ["_Tidak ada koneksi yang menerima data pada rekaman ini._", ""]
+        return "\n".join(L)
+
+    by_app = {}
+    for g in groups:
+        by_app.setdefault(g["app"], []).append(g)
+    for app, items in sorted(by_app.items(), key=lambda kv: -sum(g["up"] + g["down"] for g in kv[1])):
+        L += [f"## Aplikasi: `{_md(app)}`", "",
+              "| # | Host (SNI) | Port | Proto | Konek | IP | ASN · Geo | Chain | ↑ Up | ↓ Down | Total | Catatan |",
+              "|--:|---|--:|---|--:|---|---|---|--:|--:|--:|---|"]
+        for i, g in enumerate(items, 1):
+            asn_geo = " · ".join(x for x in (", ".join(g["asn"]), ",".join(g["geo"]), ", ".join(g["cdn"])) if x)
+            L.append(f"| {i} | {_md(g['name'])} | {_md(g['port'])} | {g['proto']} | {g['conns']} | {_md(_ips(g))} | "
+                     f"{_md(asn_geo)} | {_md(g['chains'])} | {human_bytes(g['up'])} | {human_bytes(g['down'])} | "
+                     f"{human_bytes(g['up'] + g['down'])} | {_md(_notes(g))} |")
+        L.append("")
+
+    base = {}
+    for g in groups:
+        if g["kind"] == "IP":
+            continue
+        b = base.setdefault(g["base"] or g["name"], {"hosts": set(), "conns": 0, "up": 0, "down": 0})
+        b["hosts"].add(g["name"]); b["conns"] += g["conns"]; b["up"] += g["up"]; b["down"] += g["down"]
+    if base:
+        L += ["## Per domain dasar", "", "| Domain dasar | Host unik | Konek | ↑ Up | ↓ Down | Total |", "|---|--:|--:|--:|--:|--:|"]
+        for name, b in sorted(base.items(), key=lambda kv: -(kv[1]["up"] + kv[1]["down"])):
+            L.append(f"| {_md(name)} | {len(b['hosts'])} | {b['conns']} | {human_bytes(b['up'])} | "
+                     f"{human_bytes(b['down'])} | {human_bytes(b['up'] + b['down'])} |")
+        L.append("")
+
+    sni = list(dict.fromkeys(g["name"] for g in groups if g["kind"] == "SNI"))
+    addr = list(dict.fromkeys(
+        f"{g['name']}:{g['port']}" + (" # udp" if g["proto"] != "TCP" else "") if g["port"] else g["name"]
+        for g in groups))
+    wild = ["+." + b for b in base]
+    op_hosts = list(dict.fromkeys(g["name"] for g in groups if g["kind"] != "IP" and is_operator_ip(g)))
+    op_block = []
+    if op_hosts:
+        op_block = [f"### Host di IP milik operator — {len(op_hosts)}", "",
+                    "Di-resolve ke IP operator (cache lokal); biasanya hanya terjawab lewat DNS operator dan paling mungkin jalur gratis.",
+                    "", "```text", *op_hosts, "```", ""]
+    L += ["## Kandidat SNI / Address", "",
+          "Hanya yang **membalas data** saat direkam. Urut dari trafik terbesar.", "",
+          f"### SNI (host hasil sniff) — {len(sni)}", "", "```text", *sni, "```", "",
+          f"### Address (host:port) — {len(addr)}", "", "```text", *addr, "```", "",
+          f"### Wildcard domain (format rule-set Mihomo) — {len(wild)}", "", "```text", *wild, "```", "",
+          *op_block,
+          "> Catatan: \"kandidat\" artinya host itu membalas data, bukan jaminan gratis atau bisa dipakai sebagai bug-host. "
+          "Bukti paling kuat hanya kalau rekaman diambil di SIM **tanpa kuota reguler**; uji ulang tiap host sebelum dipakai. "
+          "Koneksi dengan \"respons kecil\" atau \"HTTP polos\" bisa berupa redirect/halaman operator, jadi jangan langsung dipercaya.", ""]
+    return "\n".join(L)
+
+
+def export_markdown(rows, path, source="", min_download=1):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(render_markdown(rows, source, min_download))
+    return path
+
+
+def rows_from_file(path):
+    """Baca rekaman hasil ekspor (JSON atau CSV) kembali menjadi list row."""
+    try:
+        if path.lower().endswith(".csv"):
+            with open(path, "r", encoding="utf-8", newline="") as f:
+                rows = list(csv.DictReader(f))
+            for r in rows:
+                for k in ("upload", "download"):
+                    r[k] = int(float(r.get(k) or 0))
+            return rows
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError) as e:
+        raise SnifferError(f"Tidak bisa membaca {path}: {e}")
+    if not isinstance(data, list):
+        raise SnifferError(f"{path}: isi harus berupa daftar koneksi (hasil ekspor sniffer)")
+    return data
+
+
+def main(argv=None):
+    """python3 sniffer.py laporan koneksi_XXXX.json [laporan.md]  -> tabel markdown dari rekaman lama."""
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if len(argv) < 2 or argv[0] != "laporan":
+        print("Pemakaian: python3 sniffer.py laporan <koneksi.json|koneksi.csv> [keluaran.md]")
+        return 2
+    src = argv[1]
+    out = argv[2] if len(argv) > 2 else os.path.splitext(src)[0] + ".md"
+    try:
+        path = export_markdown(rows_from_file(src), out, source=os.path.basename(src))
+    except SnifferError as e:
+        print(e)
+        return 1
+    print(f"Tersimpan: {path}")
+    return 0
+
+
 # ---------- controller ----------
 def controller_url(addr):
     """'0.0.0.0:9090' / ':9090' / '[::]:9090' -> 'http://127.0.0.1:9090' (alamat bind bukan alamat tujuan)."""
@@ -375,3 +565,7 @@ def _write_cidr(path, cidrs, label, source):
         f.write(f"# {label} — sumber: {source}\n# diunduh {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write("\n".join(cidrs) + "\n")
     os.replace(tmp, path)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

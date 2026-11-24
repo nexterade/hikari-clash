@@ -1054,13 +1054,40 @@ def free_port():
         return s.getsockname()[1]
 
 
+# API /proxies/<n>/delay mem-parsing parameter timeout sebagai int16 (maks 32767). Lebih besar -> HTTP 400
+# "Body invalid" untuk SEMUA node (termasuk config asli yang sehat), jadi nilai dipotong di sini.
+MIHOMO_DELAY_MAX_MS = 30000
+
+
+def clamp_delay_timeout(timeout_ms):
+    try:
+        t = int(timeout_ms)
+    except (TypeError, ValueError):
+        t = 5000
+    return max(1, min(t, MIHOMO_DELAY_MAX_MS))
+
+
+def mihomo_probe_config(plist, port, dns_servers=None):
+    """YAML config sementara untuk URL-test. dns_servers (list IP, opsional): server proxy di-resolve lewat DNS itu;
+    tanpa ini mihomo memakai resolver sistem (di Termux/Android bisa kosong atau dibelokkan Box)."""
+    cfg = {"log-level": "error", "allow-lan": False, "unified-delay": True,
+           "external-controller": f"127.0.0.1:{port}", "proxies": plist}
+    ips = [str(x) for x in (dns_servers or [])]
+    if ips:
+        cfg["dns"] = {"enable": True, "ipv6": False, "enhanced-mode": "normal",
+                      "default-nameserver": list(ips), "nameserver": list(ips),
+                      "proxy-server-nameserver": list(ips)}
+    return to_yaml(cfg)
+
+
 def mihomo_delays(core, proxies, test_url, timeout_ms, workers, base=None, live=None,
-                  verify_url=None, max_ping=0, tick=None):
+                  verify_url=None, max_ping=0, tick=None, dns_servers=None):
     """Satu batch URL-test lewat mihomo. proxies: {id: dict}. base: {id: index node asal} (penolakan satu
     node ikut menolak semua varian-nya). Node lolos hanya kalau delay > 0 di test_url DAN (bila verify_url)
     di URL kedua juga, dengan rata-rata <= max_ping (0 = tanpa batas).
     Return (ok {id: ms}, gagal {id: (jenis, pesan)}, ditolak {id: pesan});
     jenis: urltest | unstable | slow. tick(ok: bool) dipanggil tiap node selesai."""
+    timeout_ms = clamp_delay_timeout(timeout_ms)
     work = tempfile.mkdtemp(prefix="sub2yaml_")
     proc = None
     try:
@@ -1075,9 +1102,7 @@ def mihomo_delays(core, proxies, test_url, timeout_ms, workers, base=None, live=
                 q = dict(proxies[i])
                 q["name"] = f"p{i}"
                 plist.append(q)
-            return to_yaml({"log-level": "error", "allow-lan": False, "unified-delay": True,
-                            "external-controller": f"127.0.0.1:{port}",
-                            "proxies": plist})
+            return mihomo_probe_config(plist, port, dns_servers)
 
         # Satu proxy invalid bikin mihomo menolak seluruh config -> buang satu-satu.
         for _ in range(500):

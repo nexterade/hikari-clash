@@ -24,6 +24,7 @@ import copy
 import ipaddress
 import json
 import os
+import random
 import re
 import shutil
 import socket
@@ -356,10 +357,79 @@ def _tls_ctx(alpn=None):
     return ctx
 
 
+DNS_SERVERS = []        # IP DNS operator (opsional) untuk mode TCP/TLS; kosong = resolver sistem
+
+
+def set_dns_servers(servers):
+    DNS_SERVERS[:] = [str(x) for x in (servers or [])]
+
+
+def _skip_dns_name(data, pos):
+    while True:
+        n = data[pos]
+        if n == 0:
+            return pos + 1
+        if n & 0xC0 == 0xC0:
+            return pos + 2
+        pos += 1 + n
+
+
+def build_dns_query(host, qid):
+    labels = str(host).rstrip(".").encode("idna").split(b".")
+    if any(not l or len(l) > 63 for l in labels):
+        raise ValueError("nama host tidak valid")
+    return (struct.pack(">HHHHHH", qid, 0x0100, 1, 0, 0, 0) + b"".join(bytes([len(l)]) + l for l in labels)
+            + b"\x00" + struct.pack(">HH", 1, 1))
+
+
+def parse_dns_a(data):
+    """Jawaban DNS (UDP) -> list IPv4 dari record A. Raise OSError kalau rcode != 0 atau tidak ada record A."""
+    if len(data) < 12:
+        raise OSError("jawaban DNS terlalu pendek")
+    _id, flags, qd, an, _ns, _ar = struct.unpack(">HHHHHH", data[:12])
+    if flags & 0xF:
+        raise OSError({3: "NXDOMAIN", 2: "SERVFAIL", 5: "REFUSED"}.get(flags & 0xF, f"rcode {flags & 0xF}"))
+    pos = 12
+    for _ in range(qd):
+        pos = _skip_dns_name(data, pos) + 4
+    ips = []
+    for _ in range(an):
+        pos = _skip_dns_name(data, pos)
+        typ, _cls, _ttl, rdlen = struct.unpack(">HHIH", data[pos:pos + 10])
+        pos += 10
+        if typ == 1 and rdlen == 4:
+            ips.append(socket.inet_ntoa(data[pos:pos + 4]))
+        pos += rdlen
+    if not ips:
+        raise OSError("tidak ada record A")
+    return ips
+
+
+def dns_query_a(host, server, timeout=3.0, port=53):
+    """Tanya satu server DNS lewat UDP (tanpa dnspython). Return list IPv4."""
+    qid = random.randrange(0x10000)
+    pkt = build_dns_query(host, qid)
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.settimeout(timeout)
+        s.sendto(pkt, (server, port))
+        while True:
+            data, _ = s.recvfrom(4096)
+            if len(data) >= 12 and struct.unpack(">H", data[:2])[0] == qid:
+                return parse_dns_a(data)
+
+
 def _resolve(host, port):
     host = str(host).strip("[]")
     if is_ip(host):
         return host
+    if DNS_SERVERS:
+        last = None
+        for srv in list(DNS_SERVERS):
+            try:
+                return dns_query_a(host, srv)[0]
+            except (OSError, ValueError, struct.error, IndexError, UnicodeError) as e:
+                last = f"{srv}: {getattr(e, 'strerror', None) or e}"
+        raise OSError(f"DNS operator gagal ({last})")
     infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     infos.sort(key=lambda i: i[0] != socket.AF_INET)
     return infos[0][4][0]
@@ -533,7 +603,8 @@ def download_mihomo():
     return _sub2yaml().download_core()
 
 
-def run_mihomo(variants, core, test_url=DEFAULT_TEST_URL, timeout_ms=5000, workers=16, progress=None):
+def run_mihomo(variants, core, test_url=DEFAULT_TEST_URL, timeout_ms=5000, workers=16, progress=None,
+               dns_servers=None):
     """Isi v['res']['mihomo']. Raise RuntimeError kalau core gagal total (bukan kalau node gagal)."""
     s2y = _sub2yaml()
     proxies = {v["id"]: clean_node(v["node"]) for v in variants}
@@ -544,7 +615,8 @@ def run_mihomo(variants, core, test_url=DEFAULT_TEST_URL, timeout_ms=5000, worke
         if progress:
             progress("mihomo", done[0], len(variants))
 
-    ok, fails, rejected = s2y.mihomo_delays(core, proxies, test_url, timeout_ms, workers, tick=tick)
+    ok, fails, rejected = s2y.mihomo_delays(core, proxies, test_url, timeout_ms, workers, tick=tick,
+                                            dns_servers=dns_servers)
     for v in variants:
         i = v["id"]
         if i in ok:
@@ -873,6 +945,14 @@ def test_variants(variants, modes, opts=None, progress=None):
     timeout = float(opts.get("timeout", 5.0))
     url = opts.get("test_url") or DEFAULT_TEST_URL
     alive = list(variants)
+    set_dns_servers(opts.get("dns_servers"))
+    try:
+        return _test_variants(variants, modes, opts, progress, timeout, url, alive)
+    finally:
+        set_dns_servers(None)
+
+
+def _test_variants(variants, modes, opts, progress, timeout, url, alive):
     for m in modes:
         if not alive:
             break
@@ -881,7 +961,8 @@ def test_variants(variants, modes, opts=None, progress=None):
         elif m == "mihomo":
             if not opts.get("mihomo_core"):
                 raise RuntimeError("core Mihomo tidak tersedia")
-            run_mihomo(alive, opts["mihomo_core"], url, int(timeout * 1000), opts.get("workers", 16), progress)
+            extra = {"dns_servers": opts["dns_servers"]} if opts.get("dns_servers") else {}
+            run_mihomo(alive, opts["mihomo_core"], url, int(timeout * 1000), opts.get("workers", 16), progress, **extra)
         elif m == "v2ray":
             if not opts.get("v2ray_core"):
                 raise RuntimeError("core Xray/V2Ray tidak tersedia")

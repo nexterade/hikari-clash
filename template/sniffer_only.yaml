@@ -1,6 +1,6 @@
 # =====================================================
-# HIKARI /.CLASH — Sniffer Only v1.1  (Box / Nikki / OpenClash)
-# template-version: sniffer-1.1
+# HIKARI /.CLASH — Sniffer Only v1.2  (Box / Nikki / OpenClash)
+# template-version: sniffer-1.2
 # Core : Mihomo (Meta) >= 1.19
 #
 # Tujuan : MENGINTIP koneksi, bukan menerowongnya. Dipakai dari menu
@@ -37,6 +37,20 @@
 #     router/hotspot kalau perlu, atau aktifkan ipv6 (+ dns.ipv6) bila Box/Nikki-mu mencegat IPv6.
 #   - DNS: pengisian host dari DNS (redir-host) hanya jalan kalau client memakai DNS core (1053 / hijack
 #     Nikki, OpenClash, Box). Client dengan DNS sendiri (DoH/Private DNS) tampil sebagai host sniff atau IP murni.
+#
+# Aplikasi provider (MyXL, MyTelkomsel, by.U, myIM3) tidak mau terbuka saat core aktif (v1.2) :
+#   Semua rule di sini DIRECT, jadi rule/sniffer jarang jadi penyebab. Penyebab yang paling mungkin (HIPOTESIS,
+#   belum diuji di perangkat):
+#   1) DNS (TERBUKTI di kartu XL: Spotify jalan setelah nameserver diganti DNS XL). Box membelokkan SEMUA DNS ke
+#      core (1053), dan core hanya memakai DoH 1.1.1.1 / dns.google. IP gratis paket aplikasi adalah cache milik
+#      operator (mis. host scdn.co/spotifycdn.com -> 112.215.x.x, AS24203 PT XL Axiata) yang HANYA dijawab DNS
+#      operator; lewat DoH publik aplikasi dapat IP lain (Fastly/Google) dan macet. Saat Box mati DNS operator
+#      dipakai lagi, makanya normal.
+#      Perbaikan: menu Sniffer Only > Generate Config > DNS operator (deteksi dari perangkat / preset / manual),
+#      cakupan [2] SEMUA domain. Atau manual: ganti isi nameserver di bagian dns dengan IP DNS operatormu.
+#   2) Deteksi VPN. Kalau Box memakai mode tun/mixed, Android menandai jaringan sebagai VPN dan banyak aplikasi
+#      provider menolak jalan. Pakai mode tproxy/redirect di settings Box (tun di template ini sengaja mati).
+#   3) Terakhir, kecualikan paket aplikasinya di Box (proxy_mode blacklist). Aplikasi itu tak akan terintip.
 #
 # Batasan (jujur) :
 #   - Cloudflare dikenali dari daftar CIDR resmi (cloudflare.com/ips-v4 & ips-v6)
@@ -113,6 +127,9 @@ dns:
   nameserver:
     - https://1.1.1.1/dns-query
     - https://dns.google/dns-query
+  # nameserver-policy:                 # opsional: domain provider lewat DNS operator (isi IP DNS operatormu)
+  #   "+.xl.co.id": [<ip-dns-xl>]       # isi IP DNS operatormu; versi otomatis ada di menu Generate Config
+  #   "+.telkomsel.com": [<ip-dns-telkomsel>]
 
 proxy-groups:
   - name: 🏠 LAN

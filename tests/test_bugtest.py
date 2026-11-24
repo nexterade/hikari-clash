@@ -713,7 +713,7 @@ class MenuFlow(unittest.TestCase):
 
     # paste URI -> [U] -> host+address -> TCP -> tambahkan -> [L] -> generate Box
     FLOW_PREFIX = ["u", "2,3", "cdn1.example cdn2.example, bad.example", "", "localhost 127.0.0.2", "",
-                   "1", "", ""]                                   # mode TCP, timeout default, mulai
+                   "1", "", "", ""]                               # mode TCP, timeout default, DNS operator (lewati), mulai
 
     def test_convert_flow_adds_variants_and_writes_outputs(self):
         inputs = [self.uri, ""] + self.FLOW_PREFIX + ["", "1", "l", "b", "1", "", "", ""]
@@ -770,7 +770,7 @@ class MenuFlow(unittest.TestCase):
         _, _, _, error = h.setup_full_config([h.convert_line(self.uri)], "active.yaml", "box")
         self.assertIsNone(error)
         # pilih sumber 1 -> [U] -> Host saja -> TCP -> tambahkan -> [L] -> platform/target Enter -> sisanya default
-        inputs = ["1", "u", "2", "cdn1.example cdn2.example bad.example", "", "1", "", "", "1", "l", "", "", "", "", ""]
+        inputs = ["1", "u", "2", "cdn1.example cdn2.example bad.example", "", "1", "", "", "", "1", "l", "", "", "", "", ""]
         out = self.run_flow(h.feature_regenerate, inputs)
         self.assertIn("2 varian ditambahkan", out)
         self.assertEqual(len(self.active_names()), 3)
@@ -811,3 +811,160 @@ class Outputs(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+FAKE_MIHOMO_API = r'''#!{py}
+import http.server, json, re, sys, urllib.parse
+args = sys.argv[1:]
+cfg_path = args[args.index("-f") + 1]
+if "-t" in args:
+    sys.exit(0)
+cfg = open(cfg_path, encoding="utf-8").read()
+port = int(re.search(r"external-controller: 127.0.0.1:(\d+)", cfg).group(1))
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_GET(self):
+        u = urllib.parse.urlparse(self.path)
+        if u.path == "/version":
+            body = b'{{"version": "fake"}}'
+        else:
+            q = urllib.parse.parse_qs(u.query)
+            json.dump({{"timeout": q.get("timeout", [""])[0], "config": cfg}}, open("{log}", "w"))
+            body = b'{{"delay": 123}}'
+        self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()
+'''
+
+
+class MihomoTimeoutAndDns(unittest.TestCase):
+    """Log nyata: timeout 40 dtk -> 40000 ms -> API mihomo (int16) menolak 'Body invalid' untuk SEMUA node."""
+
+    def test_timeout_is_clamped_below_int16(self):
+        import sub2yaml as s2y
+        import nodetest as nt
+        self.assertEqual(s2y.clamp_delay_timeout(40000), 30000)
+        self.assertEqual(s2y.clamp_delay_timeout(5000), 5000)
+        self.assertEqual(s2y.clamp_delay_timeout("bukan angka"), 5000)
+        self.assertEqual(s2y.clamp_delay_timeout(0), 1)
+        self.assertLess(s2y.MIHOMO_DELAY_MAX_MS, 32768)
+        self.assertEqual(nt.MIHOMO_DELAY_MAX_MS, s2y.MIHOMO_DELAY_MAX_MS)
+
+    def test_mihomo_delays_sends_clamped_timeout_and_dns_to_core(self):
+        import sub2yaml as s2y
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, "calls.json")
+            core = os.path.join(d, "mihomo")
+            with open(core, "w") as f:
+                f.write(FAKE_MIHOMO_API.format(py=sys.executable, log=log))
+            os.chmod(core, os.stat(core).st_mode | stat.S_IEXEC)
+            ok, fails, rej = s2y.mihomo_delays(core, {1: {"type": "vless", "server": "1.2.3.4", "port": 443}},
+                                               "http://www.gstatic.com/generate_204", 40000, 1,
+                                               dns_servers=["112.215.203.254"])
+            calls = json.load(open(log, encoding="utf-8"))
+        self.assertEqual(ok, {1: 123})
+        self.assertEqual(calls["timeout"], "30000")                          # 40000 ms dipotong ke 30000
+        self.assertIn("proxy-server-nameserver", calls["config"])
+        self.assertIn("112.215.203.254", calls["config"])
+
+    def test_probe_config_without_dns_has_no_dns_block(self):
+        import yaml
+        import sub2yaml as s2y
+        cfg = yaml.safe_load(s2y.mihomo_probe_config([{"name": "p1", "type": "vless"}], 9090))
+        self.assertNotIn("dns", cfg)
+        self.assertEqual(cfg["external-controller"], "127.0.0.1:9090")
+
+    def test_probe_config_with_operator_dns(self):
+        import yaml
+        import sub2yaml as s2y
+        cfg = yaml.safe_load(s2y.mihomo_probe_config([{"name": "p1", "type": "vless"}], 9090,
+                                                     ["112.215.203.254", "118.98.44.10"]))
+        d = cfg["dns"]
+        self.assertTrue(d["enable"])
+        for k in ("default-nameserver", "nameserver", "proxy-server-nameserver"):
+            self.assertEqual(d[k], ["112.215.203.254", "118.98.44.10"], k)
+        self.assertEqual(d["enhanced-mode"], "normal")
+
+
+class OperatorDnsResolver(unittest.TestCase):
+    def tearDown(self):
+        b.set_dns_servers(None)
+
+    def _server(self, answer_ip="112.215.212.72", rcode=0):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(("127.0.0.1", 0))
+        seen = []
+
+        def run():
+            sock.settimeout(5)
+            try:
+                data, addr = sock.recvfrom(512)
+            except OSError:
+                return
+            seen.append(data)
+            import struct as st
+            qend = 12
+            while data[qend] != 0:
+                qend += 1 + data[qend]
+            question = data[12:qend + 5]
+            if rcode:
+                resp = st.pack(">HHHHHH", st.unpack(">H", data[:2])[0], 0x8180 | rcode, 1, 0, 0, 0) + question
+            else:
+                resp = (st.pack(">HHHHHH", st.unpack(">H", data[:2])[0], 0x8180, 1, 1, 0, 0) + question +
+                        b"\xc0\x0c" + st.pack(">HHIH", 1, 1, 60, 4) + socket.inet_aton(answer_ip))
+            sock.sendto(resp, addr)
+        th = threading.Thread(target=run, daemon=True)
+        th.start()
+        return sock, th, seen
+
+    def test_dns_query_a_roundtrip(self):
+        sock, th, seen = self._server()
+        try:
+            ips = b.dns_query_a("i.scdn.co", "127.0.0.1", timeout=3, port=sock.getsockname()[1])
+        finally:
+            th.join(2); sock.close()
+        self.assertEqual(ips, ["112.215.212.72"])
+        self.assertIn(b"\x01i\x04scdn\x02co\x00", seen[0])
+
+    def test_nxdomain_raises(self):
+        sock, th, _ = self._server(rcode=3)
+        try:
+            with self.assertRaises(OSError) as cm:
+                b.dns_query_a("nope.example", "127.0.0.1", timeout=3, port=sock.getsockname()[1])
+        finally:
+            th.join(2); sock.close()
+        self.assertIn("NXDOMAIN", str(cm.exception))
+
+    def test_invalid_names_rejected(self):
+        for bad in ("", "a..b", "x" * 64 + ".com"):
+            with self.assertRaises(ValueError):
+                b.build_dns_query(bad, 1)
+
+    def test_resolve_uses_operator_dns_when_set_and_ip_passthrough(self):
+        self.assertEqual(b._resolve("1.2.3.4", 443), "1.2.3.4")           # IP tidak diresolve
+        b.set_dns_servers(["127.0.0.1"])
+        # port 53 lokal tidak ada server -> gagal dengan pesan jelas, TIDAK jatuh diam-diam ke resolver sistem
+        with self.assertRaises(OSError) as cm:
+            b._resolve("host.example", 443)
+        self.assertIn("DNS operator gagal", str(cm.exception))
+
+    def test_tcp_probe_reports_operator_dns_failure(self):
+        b.set_dns_servers(["127.0.0.1"])
+        res = b.tcp_probe({"type": "vless", "server": "host.example", "port": 443}, timeout=1)
+        self.assertFalse(res["ok"])
+        self.assertIn("DNS gagal", res["detail"])
+        self.assertIn("DNS operator", res["detail"])
+
+    def test_test_variants_sets_and_resets_dns_servers(self):
+        seen = {}
+        orig = b.run_tcp
+        b.run_tcp = lambda alive, *a, **k: seen.update(dns=list(b.DNS_SERVERS))
+        try:
+            b.test_variants([], ["tcp"], {"dns_servers": ["10.0.0.1"]})
+            v = [{"id": 1, "res": {}, "node": {"server": "1.2.3.4", "port": 1}, "kind": "base", "base": 0,
+                  "base_name": "n", "fields": {}}]
+            b.test_variants(v, ["tcp"], {"dns_servers": ["10.0.0.1"]})
+        finally:
+            b.run_tcp = orig
+        self.assertEqual(seen.get("dns"), ["10.0.0.1"])
+        self.assertEqual(b.DNS_SERVERS, [])                              # selalu dikembalikan
+

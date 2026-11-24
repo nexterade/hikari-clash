@@ -44,6 +44,12 @@ Penting: matikan Box/Nikki/VPN saat menguji. Kalau hampir semua TCP connect ≤ 
 | `bug-ok-uri.txt` | Link `vless://` / `vmess://` / `trojan://` untuk klien v2ray (v2rayNG, NekoBox, …) |
 | `report.txt` | Semua varian: ✓/✗ + alasan, status config asli, field yang dilewati |
 
+## Timeout dan DNS operator
+
+- **Timeout maksimal 30 detik.** API Mihomo mem-parsing parameter timeout sebagai bilangan 16-bit, jadi nilai di atas sekitar 32 detik ditolak dengan error `Body invalid` untuk **semua** node, termasuk config asli yang sehat (dugaan penyebab hasil "0/52 lolos, config asli gagal: urltest: Body invalid" saat timeout diisi 40 detik; belum diuji dengan core asli). Nilai yang lebih besar otomatis dipotong ke 30 detik.
+- **DNS operator.** Mode TCP/TLS dan Mihomo menanyakan DNS operator (deteksi dari perangkat `[D]`, preset XL / AXIS, atau manual). Di jaringan operator, IP gratis (cache milik operator) hanya dijawab DNS operator; DNS publik memberi IP lain sehingga uji bisa salah gagal. Mode TCP/TLS memakai klien DNS UDP bawaan; mode Mihomo menambahkan blok `dns` (nameserver, default-nameserver, proxy-server-nameserver) ke config sementara. Kalau DNS operator tidak menjawab, hasilnya `DNS gagal (DNS operator gagal ...)`, bukan diam-diam jatuh ke DNS sistem. Mode V2Ray/Xray belum memakai DNS ini.
+- **Matikan Box saat uji.** Box membelokkan semua DNS ke DoH publik sehingga pilihan DNS operator di atas tidak berpengaruh.
+
 ## Batasan
 
 - Core asli (mihomo/xray) **belum dites di lingkungan pengembangan** — tes otomatis memakai server WS/TLS/SOCKS5 lokal dan core palsu. Konfigurasi Xray dibangun sesuai dokumentasi (`allowInsecure` dipakai untuk skip-verify; sudah ditandai *deprecated* di Xray, bila core barumu menolaknya hasilnya muncul sebagai "ditolak core").

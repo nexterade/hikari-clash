@@ -209,8 +209,12 @@ def api_list_nodes(base, secret="", timeout=5.0):
     return out
 
 
+MIHOMO_DELAY_MAX_MS = 30000     # API delay mem-parsing timeout sebagai int16; lebih besar -> HTTP 400 "Body invalid"
+
+
 def api_delay(base, secret, name, url="http://www.gstatic.com/generate_204", timeout_ms=5000):
     """Return (delay_ms | None, pesan_error)."""
+    timeout_ms = max(1, min(int(timeout_ms), MIHOMO_DELAY_MAX_MS))
     q = urllib.parse.urlencode({"url": url, "timeout": timeout_ms})
     path = "/proxies/" + urllib.parse.quote(name, safe="") + "/delay?" + q
     try:
