@@ -766,6 +766,44 @@ class MenuFlow(unittest.TestCase):
         self.run_flow(h.feature_convert_to_clash, inputs)
         self.assertEqual(len(self.active_names()), 4)
 
+    def test_lazy_flow_end_to_end(self):
+        """[U] -> L (Lazy) -> bug -> TCP: metode yang cocok tampil per metode & tersimpan di file hasil."""
+        srv = WsServer(good_host={"localhost"})
+        self.addCleanup(srv.close)
+        for name, val in (("_resolve", lambda host, port=0: "127.0.0.1"), ("LAZY_PLAIN_PORTS", (srv.port,))):
+            self.addCleanup(setattr, b, name, getattr(b, name))
+            setattr(b, name, val)
+        uri = (f"vless://11111111-2222-3333-4444-555555555555@127.0.0.1:{srv.port}"
+               f"?security=none&type=ws&host=localhost&path=%2Fws#LAZY")
+        inputs = [uri, "", "u", "l", "bug.example", "", "", str(srv.port), "1", "", "", "", "3", "b"]
+        out = self.run_flow(h.feature_convert_to_clash, inputs)
+        self.assertIn("Lazy", out)
+        self.assertIn("2/6 lolos", out)                                  # http-direct + http-bug-addr
+        self.assertIn("per metode", out)
+        self.assertIn("✓ http-direct", out)
+        self.assertIn("✗ http-host-ip", out)
+        self.assertNotIn("gabungan terbaik", out)                        # Lazy tidak punya langkah gabungan
+        d = self.bug_dir()
+        for f in ("custom-lazy.yaml", "bug-ok.yaml", "bug-ok-uri.txt", "report.txt"):
+            self.assertTrue(os.path.isfile(os.path.join(d, f)), f)
+        with open(os.path.join(d, "report.txt"), encoding="utf-8") as f:
+            self.assertIn("=== Ringkasan metode Lazy ===", f.read())
+        with open(os.path.join(d, "bug-ok-uri.txt"), encoding="utf-8") as f:
+            uris = f.read().split()
+        self.assertEqual(len(uris), 2)
+        self.assertTrue(all(u.startswith("vless://") for u in uris))
+
+    def test_pick_fields_accepts_lazy_shortcut(self):
+        for raw in ("l", "L", "lazy"):
+            it = iter([raw])
+            old = builtins.input
+            builtins.input = lambda prompt="": next(it)
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(h._bug_pick_fields(), ["lazy"])
+            finally:
+                builtins.input = old
+
     def test_regenerate_flow_with_bugtest(self):
         _, _, _, error = h.setup_full_config([h.convert_line(self.uri)], "active.yaml", "box")
         self.assertIsNone(error)
@@ -968,3 +1006,446 @@ class OperatorDnsResolver(unittest.TestCase):
         self.assertEqual(seen.get("dns"), ["10.0.0.1"])
         self.assertEqual(b.DNS_SERVERS, [])                              # selalu dikembalikan
 
+
+# ---------------------------------------------------------------- Phantom (PhantomNG)
+PH_NODE = {"name": "PH", "type": "vless", "server": "127.0.0.1", "port": 1, "uuid": "u", "tls": True,
+           "servername": "srv.example", "network": "ws",
+           "ws-opts": {"path": "/ws", "headers": {"Host": "srv.example"}}}
+
+
+def make_san_cert(d, *dns):
+    key, crt = os.path.join(d, "ks.pem"), os.path.join(d, "cs.pem")
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", key, "-out", crt,
+                    "-days", "2", "-subj", "/CN=" + dns[0], "-addext",
+                    "subjectAltName=" + ",".join("DNS:" + n for n in dns)], check=True, capture_output=True)
+    return crt, key
+
+
+class PhantomSni(unittest.TestCase):
+    def test_parse_and_build(self):
+        self.assertEqual(b.parse_phantom_sni("phantom:srv.example:bug.example:rand"),
+                         {"server": "srv.example", "bug": "bug.example", "mode": "rand"})
+        self.assertEqual(b.parse_phantom_sni("Phantom:srv.example:bug.example:auto")["mode"], "auto")
+        self.assertEqual(b.parse_phantom_sni("phantom:srv.example:bug.example")["mode"], "")
+        for bad in ("", "srv.example", "phantom:srv.example", "phantom:a.b:c.d:zzz", "phantom:a.b:c.d:rand:x",
+                    "phantom:1.2.3.4:bug.example", "phantom:srv.example:1.2.3.4", "phantom:nodot:bug.example"):
+            self.assertIsNone(b.parse_phantom_sni(bad), bad)
+        self.assertEqual(b.build_phantom_sni("s.example", "b.example"), "phantom:s.example:b.example:rand")
+        self.assertEqual(b.build_phantom_sni("s.example", "b.example", ""), "phantom:s.example:b.example")
+
+    def test_candidates_reject_ip(self):
+        good, bad = b.parse_candidates("phantom", "a.example 1.2.3.4, B.example https://c.example/x")
+        self.assertEqual(good, ["a.example", "b.example", "c.example"])
+        self.assertEqual(bad, ["1.2.3.4"])
+
+    def test_normalize_from_converter_uri(self):
+        u = ("vless://uuid@1.2.3.4:443?encryption=none&security=tls&type=ws&path=%2Fvless"
+             "&sni=phantom%3Asrv.example.com%3Abug.example.com%3Arand&host=srv.example.com#t")
+        n = b.normalize_phantom(h.convert_line(u))
+        self.assertEqual(n["servername"], "bug.example.com")
+        self.assertEqual(n["ws-opts"]["headers"]["Host"], "srv.example.com")
+        self.assertTrue(n["skip-cert-verify"])
+        self.assertEqual(n[b.PH], {"server": "srv.example.com", "mode": "rand"})
+        # tanpa parameter host: converter mengisi Host dengan string phantom -> harus diganti domain server
+        u2 = u.replace("&host=srv.example.com", "")
+        raw = h.convert_line(u2)
+        self.assertTrue(raw["ws-opts"]["headers"]["Host"].startswith("phantom:"))
+        self.assertEqual(b.normalize_phantom(raw)["ws-opts"]["headers"]["Host"], "srv.example.com")
+        # trojan memakai kunci 'sni'
+        t = {"name": "t", "type": "trojan", "server": "1.1.1.1", "port": 443, "password": "p",
+             "sni": "phantom:srv.example.com:bug.example.com", "network": "tcp"}
+        nt = b.normalize_phantom(t)
+        self.assertEqual((nt["sni"], nt[b.PH]["server"], nt[b.PH]["mode"]), ("bug.example.com", "srv.example.com", ""))
+        # node biasa tidak disentuh; node asli tidak diubah
+        self.assertNotIn(b.PH, b.normalize_phantom(PH_NODE))
+        self.assertTrue(raw["servername"].startswith("phantom:"))
+
+    def test_build_variants_normalizes_base(self):
+        t = {"name": "t", "type": "vless", "server": "1.1.1.1", "port": 443, "uuid": "u", "tls": True,
+             "servername": "phantom:srv.example.com:bug.example.com:rand", "network": "ws",
+             "ws-opts": {"path": "/", "headers": {"Host": "srv.example.com"}}}
+        vs, _ = b.build_variants([t], {})
+        self.assertEqual(vs[0]["node"]["servername"], "bug.example.com")
+        self.assertEqual(vs[0]["node"][b.PH]["server"], "srv.example.com")
+
+
+class PhantomVariant(unittest.TestCase):
+    def test_apply(self):
+        q, why = b.apply_variant(PH_NODE, "phantom", "bug.example")
+        self.assertIsNone(why)
+        self.assertEqual(q["servername"], "bug.example")
+        self.assertEqual(q["ws-opts"]["headers"]["Host"], "srv.example")
+        self.assertTrue(q["skip-cert-verify"])
+        self.assertEqual(q[b.PH], {"server": "srv.example", "mode": "rand"})
+        self.assertNotIn(b.PH, b.clean_node(q))                          # tidak bocor ke YAML
+        self.assertNotIn(b.PH, PH_NODE)                                  # node asli utuh
+        # varian sama dengan asli (SNI sudah bug itu & sudah Phantom) -> SAME
+        self.assertEqual(b.apply_variant(q, "phantom", "bug.example")[1][0], b.SAME)
+        # field lain mempertahankan metadata Phantom
+        self.assertEqual(b.apply_variant(q, "port", 8443)[0][b.PH]["server"], "srv.example")
+        self.assertEqual(b.apply_variant(q, "path", "/x")[0][b.PH]["server"], "srv.example")
+
+    def test_server_from_host_then_sni_then_address(self):
+        n = dict(PH_NODE, **{"ws-opts": {"path": "/", "headers": {"Host": "h.example"}}})
+        self.assertEqual(b.apply_variant(n, "phantom", "b.example")[0][b.PH]["server"], "h.example")
+        n = dict(tcp_node(server="addr.example", servername="sni.example"))
+        q = b.apply_variant(n, "phantom", "b.example")[0]
+        self.assertEqual(q[b.PH]["server"], "sni.example")               # tcp: tidak ada Host
+        n = dict(tcp_node(server="addr.example", servername="1.2.3.4"))
+        self.assertEqual(b.apply_variant(n, "phantom", "b.example")[0][b.PH]["server"], "addr.example")
+
+    def test_not_applicable(self):
+        self.assertEqual(b.apply_variant(dict(PH_NODE, tls=False), "phantom", "b.example")[1][0], b.NA)
+        self.assertEqual(b.apply_variant(dict(PH_NODE, **{"reality-opts": {"public-key": "k"}}), "phantom", "b.example")[1][0], b.NA)
+        ip_only = tcp_node(server="1.2.3.4", servername="")
+        why = b.apply_variant(ip_only, "phantom", "b.example")[1]
+        self.assertEqual(why[0], b.NA); self.assertIn("domain server", why[1])
+        vs, skipped = b.build_variants([ip_only], {"phantom": ["a.example", "b.example"]})
+        self.assertEqual([s[2] for s in skipped], ["phantom"])
+        self.assertEqual(len(vs), 1)                                     # hanya config asli
+
+    def test_variant_naming(self):
+        vs, _ = b.build_variants([PH_NODE], {"phantom": ["b.example"]})
+        v = vs[1]
+        self.assertEqual((v["kind"], v["node"]["name"]), ("phantom", "PH [phantom:b.example]"))
+        self.assertEqual(b.describe_fields(v), "phantom=b.example")
+
+    def test_combo_phantom_supersedes_sni_and_keeps_server(self):
+        vs, _ = b.build_variants([PH_NODE], {"sni": ["a.example"], "host": ["h.example"], "phantom": ["b.example"]})
+        for v in vs:
+            v["ok"], v["ms"] = True, 10
+        combos = b.make_combos(vs)
+        self.assertEqual(len(combos), 1)
+        c = combos[0]
+        self.assertEqual(sorted(c["fields"]), ["host", "phantom"])        # sni dibuang
+        self.assertEqual(c["node"]["servername"], "b.example")
+        self.assertEqual(c["node"]["ws-opts"]["headers"]["Host"], "h.example")
+        self.assertEqual(c["node"][b.PH]["server"], "srv.example")        # bukan h.example
+
+    def test_xray_outbound_verifies_by_name(self):
+        q = b.apply_variant(PH_NODE, "phantom", "bug.example")[0]
+        ts = b.node_to_xray_outbound(q, "t")["streamSettings"]["tlsSettings"]
+        self.assertEqual(ts, {"serverName": "bug.example", "verifyPeerCertByName": "srv.example"})
+        plain = b.node_to_xray_outbound(b.apply_variant(PH_NODE, "sni", "x.example")[0], "t")
+        self.assertEqual(plain["streamSettings"]["tlsSettings"]["allowInsecure"], True)   # non-Phantom tak berubah
+
+    def test_mihomo_node_has_no_meta_and_skips_verify(self):
+        q = b.apply_variant(PH_NODE, "phantom", "bug.example")[0]
+        m = b.clean_node(q)
+        self.assertNotIn(b.PH, m)
+        self.assertTrue(m["skip-cert-verify"])
+        self.assertEqual(m["servername"], "bug.example")
+
+    def test_export_node_and_uri_roundtrip(self):
+        q = b.apply_variant(PH_NODE, "phantom", "bug.example")[0]
+        e = b.phantom_export_node(q)
+        self.assertEqual(e["servername"], "phantom:srv.example:bug.example:rand")
+        self.assertFalse(e["skip-cert-verify"])
+        self.assertIsNone(b.phantom_export_node(PH_NODE))
+        uri = h.build_uri_from_proxy(e)
+        self.assertIn("phantom", uri)
+        self.assertNotIn("allowInsecure", uri)
+        back = b.normalize_phantom(h.convert_line(uri))
+        self.assertEqual(back["servername"], "bug.example")
+        self.assertEqual(back[b.PH], {"server": "srv.example", "mode": "rand"})
+
+    def test_menu_has_phantom_last_and_defaults_unchanged(self):
+        self.assertEqual(h.BUG_FIELD_MENU[-1][0], "phantom")
+        self.assertEqual([f for f, _, _ in h.BUG_FIELD_MENU[:3]], ["sni", "host", "server"])   # default menu "1,2,3"
+        self.assertEqual([f for f, _, _ in h.BUG_FIELD_MENU], list(b.FIELDS))
+
+
+@unittest.skipUnless(shutil.which("openssl"), "openssl tidak ada")
+class PhantomTcpVerify(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.crt, self.key = make_san_cert(self._tmp.name, "srv.example", "*.wild.example")
+        self.srv = WsServer(good_host=("srv.example", "other.example", "x.wild.example"),
+                            tls_ctx=server_tls_ctx(self.crt, self.key, {"bug.example", "srv.example"}))
+        self.addCleanup(self.srv.close)
+        self._ca = b.CA_FILE
+        b.CA_FILE = self.crt
+        self.addCleanup(setattr, b, "CA_FILE", self._ca)
+        self.node = dict(PH_NODE, port=self.srv.port)
+
+    def test_cert_matches_server_name(self):
+        q = b.apply_variant(self.node, "phantom", "bug.example")[0]
+        r = b.tcp_probe(q, 3)
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(r["detail"], "WS 101 OK · cert ✓ srv.example")
+
+    def test_cert_mismatch_with_server_name_fails(self):
+        n = dict(self.node, **{"ws-opts": {"path": "/ws", "headers": {"Host": "other.example"}}})
+        q = b.apply_variant(n, "phantom", "bug.example")[0]
+        r = b.tcp_probe(q, 3)
+        self.assertFalse(r["ok"])
+        self.assertIn("sertifikat tidak cocok dengan other.example", r["detail"])
+        self.assertIn("srv.example", r["detail"])
+        self.assertTrue(b.tcp_probe(q, 3, phantom_verify=False)["ok"])     # verifikasi bisa dimatikan
+
+    def test_wildcard_san(self):
+        n = dict(self.node, **{"ws-opts": {"path": "/ws", "headers": {"Host": "x.wild.example"}}})
+        q = b.apply_variant(n, "phantom", "bug.example")[0]
+        self.assertTrue(b.tcp_probe(q, 3)["ok"])
+        self.assertTrue(b.cert_matches({"subjectAltName": (("DNS", "*.wild.example"),)}, "a.wild.example"))
+        self.assertFalse(b.cert_matches({"subjectAltName": (("DNS", "*.wild.example"),)}, "a.b.wild.example"))
+        self.assertFalse(b.cert_matches({"subjectAltName": (("DNS", "*.wild.example"),)}, "wild.example"))
+        self.assertTrue(b.cert_matches({"subject": ((("commonName", "cn.example"),),)}, "cn.example"))
+
+    def test_untrusted_cert_fails(self):
+        other_crt, _ = make_san_cert(self._tmp.name, "zzz.example")
+        b.CA_FILE = other_crt                                               # CA yang tidak menandatangani server
+        q = b.apply_variant(self.node, "phantom", "bug.example")[0]
+        r = b.tcp_probe(q, 3)
+        self.assertFalse(r["ok"])
+        self.assertIn("sertifikat tidak valid", r["detail"])
+
+    def test_no_ca_available_skips_verification_with_note(self):
+        b.CA_FILE = os.path.join(self._tmp.name, "tidak-ada.pem")
+        q = b.apply_variant(self.node, "phantom", "bug.example")[0]
+        r = b.tcp_probe(q, 3)
+        self.assertTrue(r["ok"], r)
+        self.assertIn("sertifikat tidak diverifikasi", r["detail"])
+
+    def test_non_phantom_variant_never_verifies(self):
+        q = b.apply_variant(self.node, "sni", "bug.example")[0]
+        self.assertEqual(b.tcp_probe(q, 3)["detail"], "WS 101 OK")
+
+    def test_unknown_bug_rejected_by_server_sni(self):
+        q = b.apply_variant(self.node, "phantom", "blocked.example")[0]
+        r = b.tcp_probe(q, 3)
+        self.assertFalse(r["ok"]); self.assertIn("TLS gagal", r["detail"])
+
+    def test_full_run_outputs(self):
+        vs, _ = b.build_variants([self.node], {"phantom": ["bug.example", "blocked.example"]})
+        b.test_variants(vs, ["tcp"], {"timeout": 3})
+        self.assertEqual([v["ok"] for v in vs], [True, True, False])        # asli (SNI srv.example), bug, blocked
+        out = os.path.join(self._tmp.name, "out")
+        files = dict(b.write_outputs(vs, ["tcp"], out, lambda ns: json.dumps(ns)))
+        self.assertEqual(files.get("custom-phantom.yaml"), 1)
+        with open(os.path.join(out, "custom-phantom.yaml"), encoding="utf-8") as f:
+            body = f.read()
+        self.assertNotIn("_phantom", body)
+        self.assertIn("bug.example", body)
+        with open(os.path.join(out, "report.txt"), encoding="utf-8") as f:
+            rep = f.read()
+        self.assertIn("catatan Phantom", rep)
+        self.assertIn("-- Phantom: 1/2 lolos", rep)
+
+
+
+# ---------------------------------------------------------------- Mode Lazy
+LZ_NODE = {"name": "karin", "type": "vless", "server": "servervpn.com", "port": 443, "uuid": "u", "tls": True,
+           "servername": "servervpn.com", "network": "ws",
+           "ws-opts": {"path": "/ws", "headers": {"Host": "servervpn.com"}}}
+
+
+def lazy_tuples(vs):
+    """{(address, port, host, sni)} semua varian lazy ('' = tidak dipakai)."""
+    out = set()
+    for v in vs:
+        if v["kind"] == "lazy":
+            lz = v["fields"]["lazy"]
+            out.add((lz["addr"], lz["port"], lz["host"], lz["sni"]))
+    return out
+
+
+def lazy_methods(vs):
+    return {v["fields"]["lazy"]["method"] for v in vs if v["kind"] == "lazy"}
+
+
+class LazyBuild(unittest.TestCase):
+    def setUp(self):
+        self._ra = b._resolve_all
+        b._resolve_all = lambda host: ["13.35.1.58"]
+        self.addCleanup(setattr, b, "_resolve_all", self._ra)
+
+    def test_covers_the_user_examples(self):
+        vs, skipped = b.build_lazy_variants([LZ_NODE], ["instagram.com"])
+        self.assertEqual(skipped, [])
+        S, B, IP = "servervpn.com", "instagram.com", "13.35.1.58"
+        t = lazy_tuples(vs)
+        for want in [(S, 443, S, B), (S, 80, S, ""),            # server asli + bug di SNI (port 80: SNI tidak dipakai)
+                     (B, 443, S, S), (B, 80, S, ""),            # address = bug
+                     (IP, 443, S, S), (IP, 80, S, ""),          # address = IP edge
+                     (S, 443, IP, IP),                          # host & SNI = IP
+                     (S, 443, S, IP)]:                          # SNI = IP
+            self.assertIn(want, t)
+
+    def test_cloudfront_example_with_ip_address(self):
+        cf = "servervpn.cloudfront.net"
+        n = dict(LZ_NODE, server="13.35.1.58", servername=cf, **{"ws-opts": {"path": "/ws", "headers": {"Host": cf}}})
+        vs, skipped = b.build_lazy_variants([n], [])
+        self.assertEqual(skipped, [])
+        t = lazy_tuples(vs)
+        self.assertIn((cf, 443, "13.35.1.58", "13.35.1.58"), t)  # address=cloudfront host=IP sni=IP
+        self.assertIn((cf, 443, cf, "13.35.1.58"), t)            # sni=IP
+        self.assertIn(("13.35.1.58", 80, cf, ""), t)             # IP edge, port 80
+        self.assertNotIn(("13.35.1.58", 443, cf, cf), t)         # = config asli -> tidak diuji ulang
+
+    def test_variant_shape(self):
+        orig = json.dumps(LZ_NODE, sort_keys=True)
+        vs, _ = b.build_lazy_variants([LZ_NODE], ["instagram.com", "x.example"])
+        self.assertEqual(json.dumps(LZ_NODE, sort_keys=True), orig)          # node asli utuh
+        self.assertEqual(vs[0]["kind"], "base")
+        names = [v["node"]["name"] for v in vs]
+        self.assertEqual(len(names), len(set(names)))                          # nama unik (wajib di Clash)
+        v = next(v for v in vs if v["node"]["name"] == "karin [bug-sni:instagram.com:443]")
+        self.assertEqual(v["node"]["servername"], "instagram.com")
+        self.assertTrue(v["node"]["skip-cert-verify"])
+        self.assertEqual(v["node"]["ws-opts"]["headers"]["Host"], "servervpn.com")
+        self.assertEqual(b.describe_fields(v), "bug-sni servervpn.com:443 host=servervpn.com sni=instagram.com")
+        for v in vs:
+            self.assertFalse([k for k in v["node"] if str(k).startswith("_")])  # tanpa metadata internal
+
+    def test_plain_port_drops_tls_fields_and_merges_sni_variants(self):
+        n = dict(LZ_NODE, alpn=["h2"], **{"client-fingerprint": "chrome"})
+        vs, _ = b.build_lazy_variants([n], ["a.example", "b.example"], ports=[80])
+        plain = [v for v in vs if v["kind"] == "lazy"]
+        self.assertTrue(plain)
+        for v in plain:
+            q = v["node"]
+            self.assertFalse(q["tls"])
+            for k in ("servername", "sni", "skip-cert-verify", "alpn", "client-fingerprint"):
+                self.assertNotIn(k, q)
+            self.assertTrue(v["fields"]["lazy"]["method"].startswith("http-"))
+        self.assertEqual(len(lazy_tuples(vs)), len(plain))                      # tidak ada duplikat efektif
+        self.assertEqual(sum(1 for v in plain if v["fields"]["lazy"]["method"] == "http-host-bug"), 2)   # per bug
+
+    def test_bug_free_methods_only_when_no_bugs(self):
+        vs, _ = b.build_lazy_variants([LZ_NODE], [])
+        self.assertEqual(lazy_methods(vs), {"ip-edge", "host-ip", "sni-ip", "http-direct", "http-ip-edge", "http-host-ip"})
+
+    def test_ip_methods_skipped_when_no_ip_known(self):
+        b._resolve_all = lambda host: (_ for _ in ()).throw(OSError("NXDOMAIN"))
+        vs, skipped = b.build_lazy_variants([LZ_NODE], ["x.example"])
+        self.assertTrue(any("IP edge" in s[3] and "NXDOMAIN" in s[3] for s in skipped), skipped)
+        self.assertFalse({m for m in lazy_methods(vs)} & {"ip-edge", "host-ip", "sni-ip", "ip-bug-sni", "wildcard-ip"})
+        self.assertIn("bug-sni", lazy_methods(vs))
+        vs, skipped = b.build_lazy_variants([LZ_NODE], ["x.example"], extra_ips=["104.18.43.252"])
+        self.assertEqual(skipped, [])
+        self.assertIn("ip-edge", lazy_methods(vs))
+        self.assertIn(("104.18.43.252", 443, "servervpn.com", "servervpn.com"), lazy_tuples(vs))
+
+    def test_resolved_ips_limited_and_deduped(self):
+        b._resolve_all = lambda host: ["1.1.1.1", "2.2.2.2", "3.3.3.3", "1.1.1.1"]
+        ips, note = b.lazy_edge_ips({"server": "9.9.9.9"}, "s.example", extra=["2.2.2.2", "4.4.4.4"])
+        self.assertEqual(ips, ["9.9.9.9", "1.1.1.1", "2.2.2.2", "4.4.4.4"])    # IP node, 2 hasil resolve, tambahan
+        self.assertEqual(note, "")
+
+    def test_grpc_ignores_host_so_host_only_methods_collapse(self):
+        g = {"name": "g", "type": "vless", "server": "servervpn.com", "port": 443, "uuid": "u", "tls": True,
+             "servername": "servervpn.com", "network": "grpc", "grpc-opts": {"grpc-service-name": "x"}}
+        vs, _ = b.build_lazy_variants([g], ["instagram.com"])
+        m = lazy_methods(vs)
+        self.assertNotIn("host-bug", m)            # = config asli
+        self.assertNotIn("host-bug-sni", m)        # = bug-sni (Host tak dipakai grpc)
+        self.assertIn("bug-sni", m)
+        self.assertFalse(any(v["fields"]["lazy"]["tls"] is False for v in vs if v["kind"] == "lazy"))   # grpc tak bisa tanpa TLS
+        self.assertTrue(all(v["fields"]["lazy"]["host"] == "" for v in vs if v["kind"] == "lazy"))
+
+    def test_trojan_uses_sni_key_and_no_plain(self):
+        t = {"name": "t", "type": "trojan", "server": "servervpn.com", "port": 443, "password": "p",
+             "sni": "servervpn.com", "network": "ws", "ws-opts": {"path": "/", "headers": {"Host": "servervpn.com"}}}
+        vs, _ = b.build_lazy_variants([t], ["instagram.com"])
+        v = next(v for v in vs if v["fields"].get("lazy", {}).get("method") == "bug-sni")
+        self.assertEqual(v["node"]["sni"], "instagram.com")
+        self.assertNotIn("servername", v["node"])
+        self.assertNotIn("tls", v["node"])
+        self.assertFalse(any(not v["fields"]["lazy"]["tls"] for v in vs if v["kind"] == "lazy"))
+
+    def test_unsupported_nodes_are_skipped_with_reason(self):
+        ss = {"name": "ss", "type": "ss", "server": "a.example", "port": 1, "cipher": "aes-128-gcm", "password": "p"}
+        rl = dict(LZ_NODE, name="rl", **{"reality-opts": {"public-key": "k"}})
+        ip_only = {"name": "ip", "type": "vless", "server": "1.2.3.4", "port": 443, "uuid": "u", "tls": True, "network": "tcp"}
+        vs, skipped = b.build_lazy_variants([ss, rl, ip_only], ["x.example"])
+        self.assertEqual([s[1] for s in skipped], ["ss", "rl", "ip"])
+        self.assertTrue(all(s[2] == "lazy" for s in skipped))
+        self.assertIn("tipe ss", skipped[0][3]); self.assertIn("Reality", skipped[1][3]); self.assertIn("domain server", skipped[2][3])
+        self.assertEqual([v["kind"] for v in vs], ["base"] * 3)
+
+    def test_phantom_link_node_is_normalized_first(self):
+        n = dict(LZ_NODE, servername="phantom:servervpn.com:old.example:rand")
+        vs, _ = b.build_lazy_variants([n], ["instagram.com"])
+        self.assertIn("bug-sni", lazy_methods(vs))
+        self.assertNotIn("phantom:", json.dumps([v["node"] for v in vs]))
+
+    def test_custom_ports_and_tls_classification(self):
+        self.assertTrue(b.port_is_tls(443)); self.assertTrue(b.port_is_tls(8443)); self.assertTrue(b.port_is_tls(31337))
+        self.assertFalse(b.port_is_tls(80)); self.assertFalse(b.port_is_tls(8080))
+        vs, _ = b.build_lazy_variants([LZ_NODE], ["x.example"], ports=[8443, 8080])
+        by_port = {v["fields"]["lazy"]["port"]: v["fields"]["lazy"]["tls"] for v in vs if v["kind"] == "lazy"}
+        self.assertEqual(by_port, {8443: True, 8080: False})
+
+    def test_candidate_parsers_for_bug_and_ip(self):
+        self.assertEqual(b.parse_candidates("bug", "a.example 1.2.3.4 https://B.example/x"), (["a.example", "b.example"], ["1.2.3.4"]))
+        self.assertEqual(b.parse_candidates("ip", "1.2.3.4, a.example 5.6.7.8"), (["1.2.3.4", "5.6.7.8"], ["a.example"]))
+
+    def test_summary_and_report(self):
+        vs, _ = b.build_lazy_variants([LZ_NODE], ["instagram.com", "x.example"])
+        for v in vs:
+            v["ok"] = v["kind"] == "base" or v["fields"]["lazy"]["method"] in ("bug-sni", "http-direct")
+            v["ms"] = 100 if v["ok"] else None
+            v["reason"] = "" if v["ok"] else "x"
+        sm = {r["method"]: r for r in b.lazy_summary(vs)}
+        self.assertEqual((sm["bug-sni"]["ok"], sm["bug-sni"]["tested"], sm["bug-sni"]["best"]), (2, 2, 100))
+        self.assertEqual((sm["bug-addr"]["ok"], sm["bug-addr"]["tested"]), (0, 2))
+        self.assertEqual(sm["bug-sni"]["pattern"], "addr=S host=S sni=B")
+        self.assertEqual([r["method"] for r in b.lazy_summary(vs)][:2], ["bug-sni", "bug-addr"])   # urutan tabel metode
+        rep = b.report_text(vs, ["tcp"])
+        self.assertIn("-- Lazy:", rep)
+        self.assertIn("=== Ringkasan metode Lazy ===", rep)
+        self.assertIn("✓ bug-sni", rep); self.assertIn("✗ bug-addr", rep)
+        self.assertEqual(b.passing(vs)[0]["kind"], "lazy")
+        with tempfile.TemporaryDirectory() as d:
+            files = dict(b.write_outputs(vs, ["tcp"], d, lambda ns: json.dumps(ns)))
+            self.assertEqual(files["custom-lazy.yaml"], 3)           # bug-sni x2 + http-direct
+            self.assertNotIn("_", "".join(k for n in json.load(open(os.path.join(d, "custom-lazy.yaml"))) for k in n if k.startswith("_")))
+
+    def test_no_combo_for_lazy(self):
+        vs, _ = b.build_lazy_variants([LZ_NODE], ["x.example"])
+        for v in vs:
+            v["ok"], v["ms"] = True, 5
+        self.assertEqual(b.make_combos(vs), [])
+
+
+@unittest.skipUnless(shutil.which("openssl"), "openssl tidak ada")
+class LazyRun(unittest.TestCase):
+    """Server lokal: hanya kombinasi yang benar-benar diterima server yang lolos."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        for name, val in (("_resolve", lambda host, port=0: "127.0.0.1"), ("_resolve_all", lambda host: [])):
+            self.addCleanup(setattr, b, name, getattr(b, name))
+            setattr(b, name, val)
+
+    def test_tls_ws_finds_the_working_methods(self):
+        crt, key = make_cert(self._tmp.name)
+        srv = WsServer(good_host={"srv.example"}, tls_ctx=server_tls_ctx(crt, key, {"srv.example", "bug.example"}))
+        self.addCleanup(srv.close)
+        node = {"name": "N", "type": "vless", "server": "127.0.0.1", "port": srv.port, "uuid": "u", "tls": True,
+                "servername": "srv.example", "network": "ws", "ws-opts": {"path": "/ws", "headers": {"Host": "srv.example"}}}
+        vs, _ = b.build_lazy_variants([node], ["bug.example"], ports=[srv.port])
+        b.test_variants(vs, ["tcp"], {"timeout": 3})
+        self.assertTrue(vs[0]["ok"])                                          # config asli
+        ok = {v["fields"]["lazy"]["method"] for v in vs if v["kind"] == "lazy" and v["ok"]}
+        bad = {v["fields"]["lazy"]["method"] for v in vs if v["kind"] == "lazy" and not v["ok"]}
+        self.assertEqual(ok, {"bug-sni", "bug-addr", "bug-addr-sni", "ip-bug-sni"})
+        self.assertEqual(bad, {"host-ip", "sni-ip", "wildcard", "wildcard-ip", "host-bug", "host-bug-sni"})
+        why = {v["fields"]["lazy"]["method"]: v["reason"] for v in vs if v["kind"] == "lazy" and not v["ok"]}
+        self.assertIn("TLS gagal", why["sni-ip"])                              # tanpa SNI ditolak server
+        self.assertIn("403", why["host-bug"])                                  # Host salah ditolak CDN
+
+    def test_plain_ws_ports(self):
+        srv = WsServer(good_host={"srv.example"})
+        self.addCleanup(srv.close)
+        self.addCleanup(setattr, b, "LAZY_PLAIN_PORTS", b.LAZY_PLAIN_PORTS)
+        b.LAZY_PLAIN_PORTS = (srv.port,)
+        node = {"name": "N", "type": "vless", "server": "127.0.0.1", "port": srv.port, "uuid": "u", "tls": False,
+                "network": "ws", "ws-opts": {"path": "/ws", "headers": {"Host": "srv.example"}}}
+        vs, _ = b.build_lazy_variants([node], ["bug.example"], ports=[srv.port])
+        b.test_variants(vs, ["tcp"], {"timeout": 3})
+        ok = {v["fields"]["lazy"]["method"] for v in vs if v["kind"] == "lazy" and v["ok"]}
+        self.assertEqual(ok, {"http-direct", "http-bug-addr"})

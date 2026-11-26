@@ -1183,7 +1183,8 @@ BUG_FIELD_MENU = [("sni", "SNI", "server_name TLS — mis. bug.example.com"),
                   ("port", "Port", "mis. 443 8443"),
                   ("path", "Path", "mis. /ws /vless (grpc: service name)"),
                   ("alpn", "ALPN", "mis. h2,http/1.1 atau http/1.1"),
-                  ("fp", "Fingerprint", "chrome firefox safari ios android edge random")]
+                  ("fp", "Fingerprint", "chrome firefox safari ios android edge random"),
+                  ("phantom", "Phantom", "domain bug untuk PhantomNG — SNI phantom:<server>:<bug>, Host = server")]
 
 
 def _bug_progress(mode, done, total):
@@ -1218,8 +1219,11 @@ def _bug_pick_fields():
     print(); section("Yang mau diuji")
     for i, (_, label, hint) in enumerate(BUG_FIELD_MENU, 1):
         print(f"  {C.CYAN}[{i}]{C.RESET} {label:<12} {C.DIM}{hint}{C.RESET}")
+    print(f"  {C.CYAN}[L]{C.RESET} {'Lazy':<12} {C.DIM}otomatis: coba semua metode address/port/host/SNI dari bug{C.RESET}")
     print(sep(50))
-    raw = ask(f"{C.YELLOW}Pilih (mis. 1,2,3 — Enter = SNI+Host+Address) ❯{C.RESET} ").strip() or "1,2,3"
+    raw = ask(f"{C.YELLOW}Pilih (mis. 1,2,3 — Enter = SNI+Host+Address, L = Lazy) ❯{C.RESET} ").strip() or "1,2,3"
+    if raw.lower() in ("l", "lazy"):
+        return ["lazy"]
     try:
         nums = sorted({int(x) for x in raw.replace(" ", "").split(",") if x})
     except ValueError:
@@ -1256,6 +1260,36 @@ def _bug_collect_candidates(bt, fields):
     if not cands:
         err("Tidak ada kandidat yang valid."); return None
     return cands
+
+
+def _bug_collect_lazy(bt):
+    """Mode Lazy: minta bug, IP edge tambahan (opsional) dan port. Return {"bugs", "ips", "ports"} atau None (batal)."""
+    got = {}
+    for key, title, label, intro in (
+            ("bug", "Bug (Lazy)", "bug", ["Paste domain bug, banyak sekaligus (mis. instagram.com).",
+                                          "Pisah baris/spasi/koma. '@file.txt' = dari file.",
+                                          "Enter kosong = selesai. 'batal' = batalkan uji."]),
+            ("ip", "IP edge tambahan (opsional)", "IP edge", ["IP edge CDN, mis. 13.35.1.58 104.18.43.252.",
+                                                              "IP node & hasil resolve domain server ikut dicoba otomatis.",
+                                                              "Enter kosong = lewati."])):
+        print(); section(title)
+        lines = _collect_lines(intro)
+        if lines is None:
+            return None
+        text, problems = bt.read_candidate_lines(lines)
+        for pr in problems:
+            warn(f"file tidak terbaca — {pr}")
+        good, bad = bt.parse_candidates(key, text)
+        if bad:
+            warn(f"{len(bad)} token dilewati (tidak valid): {truncate(', '.join(map(str, bad[:6])), 44)}")
+        if good:
+            ok(f"{len(good)} {label}")
+        got[key] = good
+    if not got["bug"]:
+        warn("Tanpa bug: hanya metode yang tidak butuh bug yang dicoba.")
+    raw = ask(f"{C.YELLOW}Port (Enter = {','.join(map(str, bt.DEFAULT_LAZY_PORTS))}) ❯{C.RESET} ").strip()
+    ports = bt.parse_candidates("port", raw)[0] if raw else []
+    return {"bugs": got["bug"], "ips": got["ip"], "ports": ports or list(bt.DEFAULT_LAZY_PORTS)}
 
 
 def _bug_choose_modes(bt):
@@ -1306,6 +1340,24 @@ def _bug_choose_modes(bt):
     return modes, opts
 
 
+def _bug_show_lazy(bt, rows, limit=5):
+    """Hasil mode Lazy untuk satu node: metode/kombinasi tercepat yang lolos + tabel per metode (muat di layar sempit)."""
+    good = sorted((v for v in rows if v["ok"]), key=lambda v: (v["ms"] or 10 ** 9, v["id"]))
+    print(f"    {'Lazy':<11} : {C.GREEN if good else C.RED}{len(good)}/{len(rows)} lolos{C.RESET}")
+    for v in good[:limit]:
+        lz = v["fields"]["lazy"]
+        print(f"      {C.GREEN}✓{C.RESET} {lz['method']} · port {lz['port']} {C.DIM}{(str(v['ms']) + 'ms') if v['ms'] else ''}{C.RESET}")
+        print(f"        {C.DIM}address {truncate(lz['addr'], 30)}{C.RESET}")
+        print(f"        {C.DIM}host    {truncate(lz['host'] or '-', 30)}{C.RESET}")
+        print(f"        {C.DIM}sni     {truncate(lz['sni'] or '-', 30)}{C.RESET}")
+    if len(good) > limit:
+        print(f"      {C.DIM}... +{len(good) - limit} lainnya (lihat file hasil){C.RESET}")
+    print(f"      {C.DIM}per metode (S=server B=bug IP=IP edge W=bug.server):{C.RESET}")
+    for r in bt.lazy_summary(rows):
+        mark = f"{C.GREEN}✓{C.RESET}" if r["ok"] else f"{C.RED}✗{C.RESET}"
+        print(f"      {mark} {r['method']:<18} {C.DIM}{r['ok']}/{r['tested']}{C.RESET}")
+
+
 def _bug_show_results(bt, variants, modes, limit=12):
     print(); section("Hasil Uji")
     names = {}
@@ -1319,9 +1371,12 @@ def _bug_show_results(bt, variants, modes, limit=12):
                 print(f"    config asli : {C.GREEN}✓ OK{C.RESET} {C.DIM}{base['ms'] or ''}{'ms' if base['ms'] else ''}{C.RESET}")
             else:
                 print(f"    config asli : {C.RED}✗ gagal{C.RESET} {C.DIM}{truncate(base['reason'], 30)}{C.RESET}")
-        for kind in list(bt.FIELDS) + ["combo"]:
+        for kind in bt.RESULT_KINDS:
             rows = [v for v in variants if v["base"] == bi and v["kind"] == kind]
             if not rows:
+                continue
+            if kind == "lazy":
+                _bug_show_lazy(bt, rows)
                 continue
             good = sorted((v for v in rows if v["ok"]), key=lambda v: (v["ms"] or 10 ** 9, v["id"]))
             label = bt.FIELD_LABEL.get(kind, "Gabungan")
@@ -1355,15 +1410,26 @@ def feature_bugtest(nodes):
     fields = _bug_pick_fields()
     if fields is None:
         time.sleep(1.2); return None
-    cands = _bug_collect_candidates(bt, fields)
-    if cands is None:
-        time.sleep(1.2); return None
+    lazy = fields == ["lazy"]
+    lz = cands = None
+    if lazy:
+        lz = _bug_collect_lazy(bt)
+        if lz is None:
+            time.sleep(1.2); return None
+    else:
+        cands = _bug_collect_candidates(bt, fields)
+        if cands is None:
+            time.sleep(1.2); return None
     chosen = _bug_choose_modes(bt)
     if chosen is None:
         pause(); return None
     modes, opts = chosen
 
-    variants, skipped = bt.build_variants(tested, cands)
+    if lazy:
+        print(f"\n  {C.DIM}Menyusun metode (me-resolve IP edge dari domain server)...{C.RESET}")
+        variants, skipped = bt.build_lazy_variants(tested, lz["bugs"], lz["ports"], lz["ips"], opts)
+    else:
+        variants, skipped = bt.build_variants(tested, cands)
     for _, name, field, why in skipped:
         warn(f"{truncate(name, 24)}: {bt.FIELD_LABEL[field]} dilewati — {why}")
     n_var = sum(1 for v in variants if v["kind"] != "base")
@@ -1381,7 +1447,7 @@ def feature_bugtest(nodes):
         bt.test_variants(variants, modes, opts, progress=_bug_progress)
         if bt.tcp_intercepted(variants):
             warn("Hampir semua TCP connect <3 ms: koneksi dijawab Box/Nikki/VPN lokal. Matikan dulu atau pakai mode Mihomo/V2Ray.")
-        combos = bt.make_combos(variants)
+        combos = [] if lazy else bt.make_combos(variants)
         if combos and ask(f"\n{C.YELLOW}Uji juga gabungan terbaik tiap field ({len(combos)} node)? (Y/n) ❯{C.RESET} ").strip().lower() != "n":
             bt.test_variants(combos, modes, opts, progress=_bug_progress)
             variants += combos
@@ -1408,6 +1474,19 @@ def feature_bugtest(nodes):
             with open(os.path.join(out_dir, "bug-ok-uri.txt"), "w", encoding="utf-8") as f:
                 f.write("\n".join(uris) + "\n")
             files.insert(-1, ("bug-ok-uri.txt", len(uris)))
+        ph_uris = []                                # varian Phantom: link khusus PhantomNG (sni=phantom:<server>:<bug>[:rand])
+        for v in ok_v:
+            pn = bt.phantom_export_node(v["node"])
+            try:
+                u = build_uri_from_proxy(pn) if pn else None
+            except Exception:
+                u = None
+            if u:
+                ph_uris.append(u)
+        if ph_uris:
+            with open(os.path.join(out_dir, "bug-ok-phantom-uri.txt"), "w", encoding="utf-8") as f:
+                f.write("\n".join(ph_uris) + "\n")
+            files.insert(-1, ("bug-ok-phantom-uri.txt", len(ph_uris)))
         print(f"\n  {C.GREEN}✓{C.RESET} Hasil tersimpan di:\n    {C.BOLD}{C.CYAN}{out_dir}/{C.RESET}")
         for fn, n in files:
             print(f"    {C.DIM}├── {fn}{f'  ({n} node)' if n else ''}{C.RESET}")

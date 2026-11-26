@@ -6,11 +6,14 @@
 hikari-clash/
 ├── hikari_converter.py          # Script utama (menu & generator)
 ├── banner.py                    # Banner Hikari /.CLASH
+├── VERSION                      # Versi aplikasi (SemVer, satu baris) — terpisah dari versi template
+├── CHANGELOG.md                 # Riwayat perubahan per versi aplikasi
+├── CLAUDE.md                    # Aturan kerja untuk Claude/kontributor (termasuk version bump semantik)
 ├── mrs_codec.py                 # Codec rule-set .mrs ⇄ .yaml/.txt   (menu 5)
 ├── sub2yaml.py                  # Subscription (base64) ➜ YAML Clash, dites & diurut; hasilnya diimpor ke ☘️ FREE NODE (menu 1 → 4)
 ├── src/                         # Sumber subscription untuk sub2yaml: barry-far.txt, 0xRadikal.txt, roosterkid.txt (update lewat menu [8] sub2yaml)
 ├── bin/                         # (otomatis, tidak di-commit) core mihomo hasil unduh sub2yaml; di /sdcard dipasang di ~/.hikari-clash/bin
-├── bugtest.py                   # Uji Bug / Custom: tes banyak SNI·Host·Address (TCP/Mihomo/V2Ray)   (menu 1 → [U])
+├── bugtest.py                   # Uji Bug / Custom: tes banyak SNI·Host·Address, Phantom, mode Lazy (TCP/Mihomo/V2Ray)   (menu 1 → [U])
 ├── nodetest.py                  # Tester node proxy                  (menu 5)
 ├── routetest.py                 # Tester route domain/IP             (menu 5)
 ├── sniffer.py                   # Inspector koneksi (Sniffer Only)   (menu 5)
@@ -45,7 +48,7 @@ hikari-clash/
     ├── full_config_box/
     ├── full_config_nikki/
     ├── full_config_openclash/
-    ├── bugtest/<tanggal_jam>/   # hasil Uji Bug: custom-*.yaml, bug-ok.yaml, bug-ok-uri.txt, report.txt
+    ├── bugtest/<tanggal_jam>/   # hasil Uji Bug: custom-*.yaml (termasuk custom-lazy / custom-phantom), bug-ok.yaml, bug-ok-uri.txt, bug-ok-phantom-uri.txt, report.txt
     └── rules/                   # hasil Rule-Provider Converter (menu 5)
 ```
 

@@ -16,6 +16,12 @@ dari yang termurah sehingga yang sudah gagal tidak ikut ke mode berikutnya):
   v2ray   URL-test sungguhan lewat core Xray / V2Ray (>=5): satu proses, satu inbound SOCKS per varian,
           lalu HTTP GET lewat SOCKS5.
 
+Field "phantom" (PhantomNG / PhantomTLS): kandidat = domain bug. Tiap varian memakai SNI = bug murni dan
+Host = domain server (diambil dari Host, lalu SNI, lalu Address node asli), sedangkan sertifikat tetap harus
+cocok dengan domain server. Node yang SNI-nya sudah berbentuk 'phantom:<server>:<bug>[:rand|:auto]' (hasil paste
+link PhantomNG) dinormalkan otomatis. Mode TCP/TLS dan V2Ray/Xray memverifikasi sertifikat terhadap domain
+server (Xray: verifyPeerCertByName); mode Mihomo tidak bisa (hanya skip-cert-verify).
+
 Modul ini tidak mengimpor hikari_converter (supaya tidak melingkar); penulisan YAML dipasok pemanggil.
 """
 
@@ -43,14 +49,17 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODES = ("tcp", "mihomo", "v2ray")
 MODE_LABEL = {"tcp": "TCP/TLS", "mihomo": "Mihomo", "v2ray": "V2Ray/Xray"}
 
-FIELDS = ("sni", "host", "server", "port", "path", "alpn", "fp")        # urutan tampil & urutan apply gabungan
+FIELDS = ("sni", "host", "server", "port", "path", "alpn", "fp", "phantom")   # urutan tampil & urutan apply gabungan
 FIELD_LABEL = {"sni": "SNI", "host": "Host", "server": "Address", "port": "Port",
-               "path": "Path", "alpn": "ALPN", "fp": "Fingerprint"}
+               "path": "Path", "alpn": "ALPN", "fp": "Fingerprint", "phantom": "Phantom"}
 FIELD_TAG = {"sni": "sni", "host": "host", "server": "addr", "port": "port",
-             "path": "path", "alpn": "alpn", "fp": "fp"}
+             "path": "path", "alpn": "alpn", "fp": "fp", "phantom": "phantom"}
 FIELD_FILE = {"sni": "custom-sni.yaml", "host": "custom-host.yaml", "server": "custom-address.yaml",
               "port": "custom-port.yaml", "path": "custom-path.yaml", "alpn": "custom-alpn.yaml",
-              "fp": "custom-fp.yaml", "combo": "custom-combined.yaml"}
+              "fp": "custom-fp.yaml", "phantom": "custom-phantom.yaml", "combo": "custom-combined.yaml"}
+FIELD_LABEL["lazy"] = "Lazy"                    # mode Lazy: kombinasi address+port+host+SNI otomatis (bukan field tunggal)
+FIELD_FILE["lazy"] = "custom-lazy.yaml"
+RESULT_KINDS = FIELDS + ("lazy", "combo")      # urutan tampil kelompok hasil (tanpa 'base')
 FINGERPRINTS = ("chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random", "randomized")
 
 DEFAULT_TEST_URL = "http://www.gstatic.com/generate_204"
@@ -119,7 +128,7 @@ def read_candidate_lines(lines, max_bytes=1_000_000):
 
 def parse_candidates(field, text):
     """Teks bebas -> (nilai_valid_unik_berurutan, [token_ditolak]). Komentar '# ...' diabaikan.
-    host-like (sni/host/server): pisah spasi/koma/titik-koma. alpn/path: pisah spasi/baris saja (koma bagian dari nilai)."""
+    host-like (sni/host/server/phantom): pisah spasi/koma/titik-koma. alpn/path: pisah spasi/baris saja (koma bagian dari nilai)."""
     text = re.sub(r"(?m)#.*$", "", text or "")
     if field in ("path", "alpn"):
         tokens = [t for t in re.split(r"[\s;]+", text) if t]
@@ -130,6 +139,14 @@ def parse_candidates(field, text):
         val = None
         if field in ("sni", "host", "server"):
             val = clean_host(tok)
+        elif field in ("phantom", "bug"):       # bug harus domain (SNI berisi IP tidak berguna)
+            val = clean_host(tok)
+            if val and is_ip(val):
+                val = None
+        elif field == "ip":                     # IP edge CDN (mode Lazy)
+            val = clean_host(tok)
+            if val and not is_ip(val):
+                val = None
         elif field == "port":
             val = int(tok) if tok.isdigit() and 1 <= int(tok) <= 65535 else None
         elif field == "path":
@@ -197,14 +214,89 @@ def _set_host(n, host):
     return True
 
 
-def clean_node(node):
-    return {k: copy.deepcopy(v) for k, v in node.items() if not str(k).startswith("_")}
+# ---------------------------------------------------------------------
+#  Phantom (PhantomNG): SNI 'phantom:<domain_server>:<domain_bug>[:rand|:auto]'
+#  Metadata disimpan di kunci '_phantom' pada node ({"server": domain_server, "mode": "rand"|"auto"|""}).
+#  Kunci berawalan '_' selalu dibuang di keluaran (clean_node) sehingga tidak bocor ke YAML Clash.
+# ---------------------------------------------------------------------
+PHANTOM_PREFIX = "phantom:"
+PHANTOM_MODES = ("rand", "auto")
+DEFAULT_PHANTOM_MODE = "rand"
+PH = "_phantom"
+
+
+def parse_phantom_sni(sni):
+    """'phantom:server.com:bug.com[:rand|:auto]' -> {"server", "bug", "mode"} atau None kalau bukan format Phantom valid."""
+    s = str(sni or "").strip()
+    if not s.lower().startswith(PHANTOM_PREFIX):
+        return None
+    parts = s[len(PHANTOM_PREFIX):].split(":")
+    mode = ""
+    if len(parts) == 3 and parts[2].strip().lower() in PHANTOM_MODES:
+        mode = parts.pop().strip().lower()
+    if len(parts) != 2:
+        return None
+    server, bug = clean_host(parts[0]), clean_host(parts[1])
+    if not server or not bug or is_ip(server) or is_ip(bug):
+        return None
+    return {"server": server, "bug": bug, "mode": mode}
+
+
+def build_phantom_sni(server, bug, mode=DEFAULT_PHANTOM_MODE):
+    return f"{PHANTOM_PREFIX}{server}:{bug}" + (f":{mode}" if mode else "")
+
+
+def clean_node(node, keep_meta=False):
+    """Salinan node tanpa kunci internal ('_...'). keep_meta=True mempertahankan metadata Phantom ('_phantom')."""
+    return {k: copy.deepcopy(v) for k, v in node.items() if not str(k).startswith("_") or (keep_meta and k == PH)}
+
+
+def _phantom_server(q):
+    """Domain server untuk Phantom: Host (ws/h2/http), lalu SNI, lalu Address — yang pertama berupa domain biasa."""
+    for c in (_get_host(q), _get_sni(q), q.get("server")):
+        c = str(c or "").strip().lower()
+        if c and not is_ip(c) and not parse_phantom_sni(c) and clean_host(c):
+            return c
+    return ""
+
+
+def normalize_phantom(node):
+    """Node yang SNI-nya berformat 'phantom:<server>:<bug>[:mode]' (mis. hasil paste link PhantomNG) -> node setara:
+    SNI = bug murni, Host = domain server (bila kosong / ikut berisi string phantom), skip-cert-verify true (untuk
+    Mihomo), plus metadata '_phantom' supaya mode TCP/TLS & Xray tetap memverifikasi sertifikat terhadap domain server.
+    Node lain dikembalikan apa adanya (salinan)."""
+    q = clean_node(node, keep_meta=True)
+    ph = parse_phantom_sni(_get_sni(q)) if _is_tls(q) else None
+    if not ph:
+        return q
+    q.pop("servername", None)
+    q.pop("sni", None)
+    q[_sni_key(q)] = ph["bug"]
+    if _net(q) in ("ws", "h2", "http"):
+        cur = _get_host(q)
+        if not cur or parse_phantom_sni(cur):
+            _set_host(q, ph["server"])
+    q["skip-cert-verify"] = True
+    q[PH] = {"server": ph["server"], "mode": ph["mode"]}
+    return q
+
+
+def phantom_export_node(node):
+    """Varian Phantom -> node untuk link PhantomNG: SNI 'phantom:<server>:<bug>[:mode]', verifikasi sertifikat aktif
+    (tanpa allowInsecure). None kalau node bukan Phantom."""
+    ph = node.get(PH)
+    if not ph:
+        return None
+    q = clean_node(node)
+    q[_sni_key(q)] = build_phantom_sni(ph["server"], _get_sni(q), ph.get("mode", ""))
+    q["skip-cert-verify"] = False
+    return q
 
 
 def apply_variant(node, field, value):
     """Return (node_baru, None) atau (None, (SAME|NA, alasan)). Node asli tidak diubah.
     Mengganti Address: SNI & Host asli dikunci dulu (kalau belum ada) supaya tidak ikut berubah ke Address baru."""
-    q = clean_node(node)
+    q = clean_node(node, keep_meta=True)
     tls = _is_tls(q)
     net = _net(q)
     if field == "server":
@@ -260,6 +352,22 @@ def apply_variant(node, field, value):
         if str(q.get("client-fingerprint") or "").lower() == value:
             return None, (SAME, "sama dengan config asli")
         q["client-fingerprint"] = value
+    elif field == "phantom":
+        if not tls:
+            return None, (NA, "node tanpa TLS")
+        if q.get("reality-opts"):
+            return None, (NA, "Reality tidak dipakai bersama Phantom")
+        ph = q.get(PH) or {}
+        srv = ph.get("server") or _phantom_server(q)
+        if not srv:
+            return None, (NA, "tidak ada domain server (Host/SNI/Address kosong atau berupa IP)")
+        if str(value).lower() == _get_sni(q).lower() and ph.get("server") == srv:
+            return None, (SAME, "sama dengan config asli")
+        q[_sni_key(q)] = value                  # SNI = bug murni
+        if net in ("ws", "h2", "http"):
+            _set_host(q, srv)                   # Host = domain server
+        q["skip-cert-verify"] = True            # Mihomo tidak bisa verifikasi per-nama; mode TCP/Xray memakai _phantom
+        q[PH] = {"server": srv, "mode": ph.get("mode", DEFAULT_PHANTOM_MODE)}
     else:
         raise ValueError(f"field tidak dikenal: {field}")
     return q, None
@@ -274,6 +382,8 @@ def _variant(vid, bi, kind, fields, node, base_name, base_node):
         name = base_name
     elif kind == "combo":
         name = f"{base_name} [combo]"
+    elif kind == "lazy":
+        name = f"{base_name} [{fields['lazy']['tag']}]"
     else:
         name = f"{base_name} [{FIELD_TAG[kind]}:{_fmt_val(fields[kind])}]"
     node = dict(node)
@@ -285,6 +395,9 @@ def _variant(vid, bi, kind, fields, node, base_name, base_node):
 def describe_fields(v):
     if v["kind"] == "base":
         return "(config asli)"
+    if v["kind"] == "lazy":
+        lz = v["fields"]["lazy"]
+        return f"{lz['method']} {lz['addr']}:{lz['port']} host={lz['host'] or '-'} sni={lz['sni'] or '-'}"
     return " ".join(f"{FIELD_TAG[k]}={_fmt_val(v['fields'][k])}" for k in FIELDS if k in v["fields"])
 
 
@@ -294,7 +407,7 @@ def build_variants(nodes, candidates, include_base=True):
     variants, skipped, vid = [], [], 0
     for bi, node in enumerate(nodes):
         base_name = str(node.get("name") or f"node{bi + 1}")
-        base = clean_node(node)
+        base = normalize_phantom(node)
         if include_base:
             variants.append(_variant(vid, bi, "base", {}, base, base_name, base)); vid += 1
         for field in FIELDS:
@@ -321,11 +434,16 @@ def make_combos(variants, start_id=None):
                 best[v["base"]][v["kind"]] = v
     out = []
     for bi, per in sorted(best.items()):
+        if "phantom" in per:                    # Phantom sudah menentukan SNI sendiri: jangan ditimpa SNI biasa
+            per = {k: x for k, x in per.items() if k != "sni"}
         if len(per) < 2:
             continue
         any_v = next(iter(per.values()))
         node, fields = any_v["base_node"], {}
-        for f in FIELDS:
+        order = [f for f in FIELDS if f in per and f != "phantom"]
+        if "phantom" in per:                    # lebih dulu: domain server dibaca dari Host asli, sebelum Host kandidat dipasang
+            order.insert(0, "phantom")
+        for f in order:
             if f in per:
                 node, why = apply_variant(node, f, per[f]["fields"][f])
                 if node is None:
@@ -336,6 +454,207 @@ def make_combos(variants, start_id=None):
         v = _variant(vid, bi, "combo", fields, node, any_v["base_name"], any_v["base_node"]); vid += 1
         out.append(v)
     return out
+
+
+# =====================================================================
+#  Mode Lazy: coba semua metode (address / port / host / SNI) dari bug yang diinput
+# =====================================================================
+# Simbol: S = domain server (dari Host, lalu SNI, lalu Address node), B = bug, IP = IP edge CDN,
+#         W = <bug>.<server> (wildcard).  Tiap metode = (id, address, host, sni).
+LAZY_METHODS = (
+    ("bug-sni",      "S",  "S",  "B"),      # server asli, SNI = bug
+    ("bug-addr",     "B",  "S",  "S"),      # address = bug (satu CDN dengan server), Host & SNI = server
+    ("ip-edge",      "IP", "S",  "S"),      # address = IP edge CDN
+    ("host-ip",      "S",  "IP", "IP"),     # Host & SNI = IP
+    ("sni-ip",       "S",  "S",  "IP"),     # SNI = IP (praktis tanpa SNI)
+    ("bug-addr-sni", "B",  "S",  "B"),
+    ("ip-bug-sni",   "IP", "S",  "B"),
+    ("wildcard",     "S",  "W",  "W"),
+    ("wildcard-ip",  "IP", "W",  "W"),
+    ("host-bug",     "S",  "B",  "S"),      # injeksi Host
+    ("host-bug-sni", "S",  "B",  "B"),
+)
+# Port tanpa TLS: SNI tidak dipakai, jadi kombinasi (address, host) yang sama digabung dan diberi label sendiri.
+LAZY_PLAIN_LABEL = {("S", "S"): "http-direct", ("B", "S"): "http-bug-addr", ("IP", "S"): "http-ip-edge",
+                    ("S", "IP"): "http-host-ip", ("S", "W"): "http-wildcard", ("IP", "W"): "http-wildcard-ip",
+                    ("S", "B"): "http-host-bug"}
+LAZY_ORDER = [m[0] for m in LAZY_METHODS] + list(LAZY_PLAIN_LABEL.values())
+LAZY_PLAIN_PORTS = (80, 8080, 8880, 2052, 2082, 2086, 2095)     # port HTTP; port lain dianggap TLS
+DEFAULT_LAZY_PORTS = (443, 80)
+LAZY_MAX_IPS = 2        # IP edge yang di-resolve otomatis dari domain server (di luar IP node & IP tambahan)
+LAZY_TYPES = ("vless", "vmess", "trojan")
+HOST_NETS = ("ws", "h2", "http")
+
+
+def port_is_tls(port):
+    return int(port) not in LAZY_PLAIN_PORTS
+
+
+def lazy_pattern(label):
+    """Teks pola metode untuk tampilan: 'addr=S host=S sni=B'."""
+    for mid, a, h, s in LAZY_METHODS:
+        if mid == label:
+            return f"addr={a} host={h} sni={s}"
+    for (a, h), lab in LAZY_PLAIN_LABEL.items():
+        if lab == label:
+            return f"addr={a} host={h} (tanpa TLS)"
+    return ""
+
+
+def _resolve_all(host):
+    """Semua IPv4 dari host (DNS operator kalau diset). Raise OSError kalau gagal."""
+    host = str(host).strip("[]")
+    if is_ip(host):
+        return [host]
+    if DNS_SERVERS:
+        last = None
+        for srv in list(DNS_SERVERS):
+            try:
+                return dns_query_a(host, srv)
+            except (OSError, ValueError, struct.error, IndexError, UnicodeError) as e:
+                last = f"{srv}: {getattr(e, 'strerror', None) or e}"
+        raise OSError(f"DNS operator gagal ({last})")
+    out = []
+    for info in socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM):
+        if info[4][0] not in out:
+            out.append(info[4][0])
+    return out
+
+
+def lazy_edge_ips(base, server, extra=(), limit=LAZY_MAX_IPS):
+    """IP edge untuk metode berbasis IP: Address node (kalau IP) + hasil resolve domain server + IP tambahan.
+    Return (list_ip, catatan_error)."""
+    ips, note = [], ""
+
+    def add(ip):
+        if ip and ip not in ips:
+            ips.append(ip)
+
+    if is_ip(str(base.get("server") or "")):
+        add(str(base["server"]).strip("[]"))
+    try:
+        for ip in _resolve_all(server)[:limit]:
+            add(ip)
+    except (OSError, ValueError, UnicodeError) as e:
+        note = f"resolve {server} gagal ({getattr(e, 'strerror', None) or e})"
+    for ip in extra:
+        add(ip)
+    return ips, note
+
+
+def _lazy_node(base, addr, port, host, sni):
+    """Node varian untuk satu kombinasi. Return (node, None) atau (None, alasan)."""
+    q = clean_node(base)
+    t, net, tls = str(q.get("type", "")).lower(), _net(q), port_is_tls(port)
+    if not tls:
+        if t == "trojan":
+            return None, "trojan selalu TLS"
+        if net in ("grpc", "h2"):
+            return None, f"{net} butuh TLS"
+    q["server"], q["port"] = addr, int(port)
+    for k in ("servername", "sni"):
+        q.pop(k, None)
+    if tls:
+        if t != "trojan":
+            q["tls"] = True
+        q[_sni_key(q)] = sni
+        q["skip-cert-verify"] = True            # sertifikat server hampir pasti tidak cocok dengan SNI/Address kombinasi
+    else:
+        q["tls"] = False
+        for k in ("skip-cert-verify", "alpn", "client-fingerprint"):
+            q.pop(k, None)
+    if net in HOST_NETS:
+        _set_host(q, host)
+    return q, None
+
+
+def _lazy_sig(q):
+    """Tanda tangan efektif node (field yang tidak dipakai transport/port itu tidak ikut) untuk membuang duplikat."""
+    tls = _is_tls(q)
+    return (str(q.get("server")), int(q.get("port") or 0), tls, _get_sni(q) if tls else "",
+            _get_host(q) if _net(q) in HOST_NETS else "")
+
+
+def build_lazy_variants(nodes, bugs, ports=None, extra_ips=(), opts=None, include_base=True):
+    """Mode Lazy: untuk tiap node buat varian dari SEMUA metode (LAZY_METHODS x port x bug x IP edge).
+    bugs: list domain bug; ports: default (443, 80); extra_ips: IP edge tambahan; opts['dns_servers'] dipakai untuk
+    me-resolve IP edge. Return (variants, skipped) seperti build_variants (field 'lazy')."""
+    set_dns_servers((opts or {}).get("dns_servers"))
+    try:
+        return _build_lazy(nodes, list(bugs or []), [int(p) for p in (ports or DEFAULT_LAZY_PORTS)],
+                           list(extra_ips or []), include_base)
+    finally:
+        set_dns_servers(None)
+
+
+def _build_lazy(nodes, bugs, ports, extra_ips, include_base):
+    variants, skipped, vid = [], [], 0
+    for bi, node in enumerate(nodes):
+        base_name = str(node.get("name") or f"node{bi + 1}")
+        base = normalize_phantom(node)
+        if include_base:
+            variants.append(_variant(vid, bi, "base", {}, base, base_name, base)); vid += 1
+        t = str(base.get("type", "")).lower()
+        if t not in LAZY_TYPES:
+            skipped.append((bi, base_name, "lazy", f"tipe {t or '?'} tidak didukung (vless/vmess/trojan saja)")); continue
+        if base.get("reality-opts"):
+            skipped.append((bi, base_name, "lazy", "Reality tidak didukung mode Lazy")); continue
+        server = _phantom_server(base)
+        if not server:
+            skipped.append((bi, base_name, "lazy", "tidak ada domain server (Host/SNI/Address kosong atau berupa IP)")); continue
+        ips, note = lazy_edge_ips(base, server, extra_ips)
+        if not ips:
+            skipped.append((bi, base_name, "lazy", "metode berbasis IP edge dilewati — " + (note or "tidak ada IP edge")))
+        net = _net(base)
+        seen = {_lazy_sig(base)}
+        plain_pairs = []
+        for _mid, a, h, _s in LAZY_METHODS:
+            if (a, h) not in plain_pairs:
+                plain_pairs.append((a, h))
+        for port in ports:
+            tls = port_is_tls(port)
+            combos = ([(m[0], m[1], m[2], m[3]) for m in LAZY_METHODS] if tls
+                      else [(LAZY_PLAIN_LABEL[p], p[0], p[1], None) for p in plain_pairs])
+            for label, a, h, s in combos:
+                syms = [x for x in (a, h, s) if x]
+                if ("B" in syms or "W" in syms) and not bugs:
+                    continue
+                if "IP" in syms and not ips:
+                    continue
+                for b_ in (bugs if ("B" in syms or "W" in syms) else [None]):
+                    for ip in (ips if "IP" in syms else [None]):
+                        sym = {"S": server, "B": b_, "IP": ip, "W": f"{b_}.{server}" if b_ else None}
+                        q, why = _lazy_node(base, sym[a], port, sym[h], sym[s] if s else None)
+                        if q is None:
+                            continue
+                        sig = _lazy_sig(q)
+                        if sig in seen:
+                            continue
+                        seen.add(sig)
+                        used = [a] + ([h] if net in HOST_NETS else []) + ([s] if tls else [])
+                        tag = ":".join([label] + ([b_] if b_ and ("B" in used or "W" in used) else [])
+                                       + ([ip] if ip and "IP" in used else []) + [str(port)])
+                        lz = {"method": label, "tag": tag, "addr": sig[0], "port": sig[1], "host": sig[4], "sni": sig[3],
+                              "bug": b_ or "", "ip": ip or "", "tls": tls}
+                        variants.append(_variant(vid, bi, "lazy", {"lazy": lz}, q, base_name, base)); vid += 1
+    return variants, skipped
+
+
+def lazy_summary(variants):
+    """Ringkasan per metode: [{'method','pattern','tested','ok','best'}] sesuai urutan LAZY_ORDER."""
+    rows = {}
+    for v in variants:
+        if v["kind"] != "lazy":
+            continue
+        m = v["fields"]["lazy"]["method"]
+        r = rows.setdefault(m, {"method": m, "pattern": lazy_pattern(m), "tested": 0, "ok": 0, "best": None})
+        r["tested"] += 1
+        if v["ok"]:
+            r["ok"] += 1
+            if v["ms"] and (r["best"] is None or v["ms"] < r["best"]):
+                r["best"] = v["ms"]
+    order = {m: i for i, m in enumerate(LAZY_ORDER)}
+    return sorted(rows.values(), key=lambda r: order.get(r["method"], len(order)))
 
 
 # =====================================================================
@@ -418,6 +737,52 @@ def dns_query_a(host, server, timeout=3.0, port=53):
                 return parse_dns_a(data)
 
 
+CA_FILE = None          # bundel CA untuk verifikasi sertifikat varian Phantom; None = CA bawaan sistem / SSL_CERT_FILE
+
+
+def _phantom_ctx(alpn=None):
+    """Konteks TLS yang memverifikasi rantai sertifikat (nama dicek manual terhadap domain server, bukan terhadap SNI).
+    None kalau tidak ada CA yang bisa dimuat (mis. Termux tanpa ca-certificates) -> pemanggil melewati verifikasi."""
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.check_hostname = False
+    try:
+        if CA_FILE:
+            ctx.load_verify_locations(CA_FILE)
+        else:
+            ctx.load_default_certs()
+    except (OSError, ssl.SSLError):
+        return None
+    if not ctx.get_ca_certs():
+        return None
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    if alpn:
+        try:
+            ctx.set_alpn_protocols([str(a) for a in alpn])
+        except (NotImplementedError, ssl.SSLError):
+            pass
+    return ctx
+
+
+def cert_names(cert):
+    """Nama DNS dari hasil getpeercert(): subjectAltName; kalau tidak ada, commonName."""
+    names = [str(v).lower() for k, v in (cert or {}).get("subjectAltName", ()) if k == "DNS"]
+    if not names:
+        names = [str(v).lower() for rdn in (cert or {}).get("subject", ()) for k, v in rdn if k == "commonName"]
+    return names
+
+
+def cert_matches(cert, name):
+    """True kalau sertifikat berlaku untuk `name` (wildcard '*.x.y' hanya menutup satu label di kirinya)."""
+    name = str(name).lower().rstrip(".")
+    for pat in cert_names(cert):
+        pat = pat.rstrip(".")
+        if pat == name:
+            return True
+        if pat.startswith("*.") and "." in name and name.split(".", 1)[1] == pat[2:] and name.split(".", 1)[0]:
+            return True
+    return False
+
+
 def _resolve(host, port):
     host = str(host).strip("[]")
     if is_ip(host):
@@ -452,9 +817,10 @@ def _read_status_line(sock, limit=4096):
     return buf.split(b"\r\n", 1)[0].decode("latin-1", "replace")
 
 
-def tcp_probe(node, timeout=5.0):
+def tcp_probe(node, timeout=5.0, phantom_verify=True):
     """Tes satu node secara langsung. Return dict(ok True/False/None, ms, conn_ms, detail). Tidak melempar exception.
-    ok=None = tidak bisa diuji di mode ini."""
+    ok=None = tidak bisa diuji di mode ini.
+    Node Phantom ('_phantom'): sertifikat wajib valid DAN cocok dengan domain server (phantom_verify=False = lewati)."""
     res = {"ok": False, "ms": None, "conn_ms": None, "detail": ""}
     typ = str(node.get("type", "")).lower()
     if typ in UDP_ONLY_TYPES:
@@ -494,19 +860,37 @@ def tcp_probe(node, timeout=5.0):
         net = _net(node)
         reality = bool(node.get("reality-opts"))
         ws = net == "ws" and typ in ("vless", "vmess", "trojan")
+        cert_note = ""
         if _is_tls(node) and not reality:
             sni = _get_sni(node)
             alpn = ["http/1.1"] if ws else node.get("alpn")
+            ph = node.get(PH) if phantom_verify else None
+            ctx = _tls_ctx(alpn)
+            if ph:
+                vctx = _phantom_ctx(alpn)
+                if vctx is None:
+                    cert_note = " · sertifikat tidak diverifikasi (CA tidak tersedia)"
+                else:
+                    ctx = vctx
             sock.settimeout(timeout)
             try:
-                sock = _tls_ctx(alpn).wrap_socket(sock, server_hostname=None if (not sni or is_ip(sni)) else sni)
+                sock = ctx.wrap_socket(sock, server_hostname=None if (not sni or is_ip(sni)) else sni)
             except socket.timeout:
                 res["detail"] = "TLS timeout"
+                return res
+            except ssl.SSLCertVerificationError as e:
+                res["detail"] = f"sertifikat tidak valid ({getattr(e, 'verify_message', None) or e.__class__.__name__})"
                 return res
             except (ssl.SSLError, OSError) as e:
                 res["detail"] = f"TLS gagal ({getattr(e, 'reason', None) or e.__class__.__name__})"
                 return res
             stage = "TLS"
+            if ph and ctx.verify_mode == ssl.CERT_REQUIRED:
+                if not cert_matches(sock.getpeercert(), ph["server"]):
+                    got = ", ".join(cert_names(sock.getpeercert())[:3]) or "tanpa nama"
+                    res["detail"] = f"sertifikat tidak cocok dengan {ph['server']} (dapat: {got})"
+                    return res
+                cert_note = f" · cert ✓ {ph['server']}"
         if ws:
             whost, path = _ws_params(node)
             key = base64.b64encode(os.urandom(16)).decode()
@@ -536,7 +920,7 @@ def tcp_probe(node, timeout=5.0):
         elif stage == "TLS" and net in ("grpc", "h2", "http"):
             res["detail"] = f"TLS OK (protokol {net} tidak dites)"
         else:
-            res["detail"] = stage + " OK"
+            res["detail"] = stage + " OK" + cert_note
         return res
     finally:
         if sock is not None:
@@ -556,7 +940,7 @@ def tcp_unsupported(v):
     return None
 
 
-def run_tcp(variants, timeout=5.0, workers=32, progress=None):
+def run_tcp(variants, timeout=5.0, workers=32, progress=None, phantom_verify=True):
     """Isi v['res']['tcp'] untuk tiap varian."""
     done = 0
     lock = threading.Lock()
@@ -565,7 +949,7 @@ def run_tcp(variants, timeout=5.0, workers=32, progress=None):
         why = tcp_unsupported(v)
         if why:
             return v, {"ok": None, "ms": None, "conn_ms": None, "detail": why}
-        return v, tcp_probe(v["node"], timeout)
+        return v, tcp_probe(v["node"], timeout, phantom_verify)
 
     with ThreadPoolExecutor(max_workers=max(1, min(workers, len(variants) or 1))) as ex:
         futs = [ex.submit(job, v) for v in variants]
@@ -705,7 +1089,10 @@ def _xray_stream(node):
                                  "publicKey": ro.get("public-key", ""), "shortId": ro.get("short-id", ""),
                                  "spiderX": ""}
     elif tls:
-        ts = {"serverName": _get_sni(node), "allowInsecure": bool(node.get("skip-cert-verify"))}
+        if node.get(PH):                    # Phantom: SNI = bug, sertifikat diverifikasi terhadap domain server
+            ts = {"serverName": _get_sni(node), "verifyPeerCertByName": node[PH]["server"]}
+        else:
+            ts = {"serverName": _get_sni(node), "allowInsecure": bool(node.get("skip-cert-verify"))}
         if node.get("alpn"):
             ts["alpn"] = list(node["alpn"])
         if node.get("client-fingerprint"):
@@ -957,7 +1344,7 @@ def _test_variants(variants, modes, opts, progress, timeout, url, alive):
         if not alive:
             break
         if m == "tcp":
-            run_tcp(alive, timeout, opts.get("workers", 32), progress)
+            run_tcp(alive, timeout, opts.get("workers", 32), progress, opts.get("phantom_verify", True))
         elif m == "mihomo":
             if not opts.get("mihomo_core"):
                 raise RuntimeError("core Mihomo tidak tersedia")
@@ -978,7 +1365,7 @@ def _test_variants(variants, modes, opts, progress, timeout, url, alive):
 
 def passing(variants, include_base=False):
     out = [v for v in variants if v["ok"] and (include_base or v["kind"] != "base")]
-    order = {k: i for i, k in enumerate(("base",) + FIELDS + ("combo",))}
+    order = {k: i for i, k in enumerate(("base",) + RESULT_KINDS)}
     return sorted(out, key=lambda v: (v["base"], order[v["kind"]], v["ms"] or 10 ** 9, v["id"]))
 
 
@@ -1007,6 +1394,9 @@ def report_text(variants, modes, skipped=(), meta=None):
     names = {}
     for v in variants:
         names.setdefault(v["base"], v["base_name"])
+    if any(v["node"].get(PH) for v in variants):
+        L += ["catatan Phantom: mode TCP/TLS dan V2Ray/Xray memverifikasi sertifikat terhadap domain server;",
+              "                 mode Mihomo tidak bisa (hanya skip-cert-verify), jadi lolos di Mihomo bukan bukti sertifikat cocok.", ""]
     for bi in sorted(names):
         L.append(f"=== {names[bi]} ===")
         base = next((v for v in variants if v["base"] == bi and v["kind"] == "base"), None)
@@ -1016,7 +1406,7 @@ def report_text(variants, modes, skipped=(), meta=None):
         for s in skipped:
             if s[0] == bi:
                 L.append(f"  dilewati {FIELD_LABEL[s[2]]}: {s[3]}")
-        for kind in list(FIELDS) + ["combo"]:
+        for kind in RESULT_KINDS:
             rows = [v for v in variants if v["base"] == bi and v["kind"] == kind]
             if not rows:
                 continue
@@ -1025,6 +1415,13 @@ def report_text(variants, modes, skipped=(), meta=None):
             for v in sorted(rows, key=lambda v: (not v["ok"], v["ms"] or 10 ** 9, v["id"])):
                 tail = f"{v['ms']}ms" if v["ok"] and v["ms"] else v["reason"]
                 L.append(f"     {'✓' if v['ok'] else '✗'} {describe_fields(v):<48} {tail}")
+        L.append("")
+    sm = lazy_summary(variants)
+    if sm:
+        L += ["=== Ringkasan metode Lazy ===", "  S=domain server  B=bug  IP=IP edge  W=<bug>.<server>"]
+        for r in sm:
+            best = f"  terbaik {r['best']}ms" if r["best"] else ""
+            L.append(f"  {'✓' if r['ok'] else '✗'} {r['method']:<15} {r['pattern']:<30} {r['ok']}/{r['tested']} lolos{best}")
         L.append("")
     return "\n".join(L).rstrip() + "\n"
 
@@ -1041,7 +1438,7 @@ def write_outputs(variants, modes, out_dir, dump, skipped=(), meta=None):
         written.append((fn, len(nodes)))
 
     ok = passing(variants)
-    for kind in list(FIELDS) + ["combo"]:
+    for kind in RESULT_KINDS:
         nodes = [clean_node(v["node"]) for v in ok if v["kind"] == kind]
         if nodes:
             put(FIELD_FILE[kind], nodes)
