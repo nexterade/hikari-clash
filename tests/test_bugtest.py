@@ -1255,6 +1255,65 @@ def lazy_methods(vs):
     return {v["fields"]["lazy"]["method"] for v in vs if v["kind"] == "lazy"}
 
 
+class LazyPathBug(unittest.TestCase):
+    """Bug berpath (mis. www.line.me/en): metode ganti path, awalan bug + path node."""
+
+    def setUp(self):
+        self._ra = b._resolve_all
+        b._resolve_all = lambda host: ["13.35.1.58"]
+        self.addCleanup(setattr, b, "_resolve_all", self._ra)
+
+    def test_parse_keeps_path_and_cleans_it(self):
+        good, bad = b.parse_candidates("bug", "www.line.me/en https://XLSmart.co.id/id/?a=1 instagram.com a.com// 1.2.3.4 x")
+        self.assertEqual(good, ["www.line.me/en", "xlsmart.co.id/id", "instagram.com", "a.com"])
+        self.assertEqual(bad, ["1.2.3.4", "x"])
+
+    def test_split_and_prefix(self):
+        self.assertEqual(b.split_bug("www.line.me/en"), ("www.line.me", "/en"))
+        self.assertEqual(b.split_bug("instagram.com"), ("instagram.com", ""))
+        self.assertEqual(b.prefix_path("/id", "/vless"), "/id/vless")
+        self.assertEqual(b.prefix_path("/id", "/"), "/id")
+        self.assertEqual(b.prefix_path("/a/b", "vless?ed=1"), "/a/b/vless?ed=1")
+
+    def test_user_example_line_me(self):
+        vs, _ = b.build_lazy_variants([dict(LZ_NODE, **{"ws-opts": {"path": "/vless", "headers": {"Host": "servervpn.com"}}})],
+                                      ["www.line.me/en"])
+        rows = [(v["fields"]["lazy"]["method"], v["node"]["server"], v["node"]["port"], b._get_path(v["node"]))
+                for v in vs if v["kind"] == "lazy" and v["fields"]["lazy"]["path"]]
+        self.assertIn(("path-bug-addr", "www.line.me", 443, "/en/vless"), rows)
+        self.assertIn(("http-path-bug-addr", "www.line.me", 80, "/en/vless"), rows)
+        v = next(v for v in vs if v["kind"] == "lazy" and v["fields"]["lazy"]["method"] == "path-bug-addr")
+        self.assertEqual(b._get_host(v["node"]), "servervpn.com")
+        self.assertEqual(b._get_sni(v["node"]), "servervpn.com")
+
+    def test_plain_domain_methods_still_run_for_path_bug(self):
+        vs, _ = b.build_lazy_variants([LZ_NODE], ["www.line.me/en"])
+        self.assertIn(("www.line.me", 443, "servervpn.com", "servervpn.com"), lazy_tuples(vs))   # bug-addr tanpa path
+
+    def test_no_path_methods_without_path_bug(self):
+        vs, _ = b.build_lazy_variants([LZ_NODE], ["instagram.com"])
+        self.assertFalse([v for v in vs if v["kind"] == "lazy" and "path" in v["fields"]["lazy"]["method"]])
+
+    def test_grpc_skips_path_methods_with_reason(self):
+        n = dict(LZ_NODE, network="grpc", **{"grpc-opts": {"grpc-service-name": "g"}})
+        vs, skipped = b.build_lazy_variants([n], ["www.line.me/en"])
+        self.assertTrue(any("ganti path" in why for *_, why in skipped))
+        self.assertFalse([v for v in vs if v["kind"] == "lazy" and "path" in v["fields"]["lazy"]["method"]])
+
+    def test_h2_path_and_trojan_plain_skipped(self):
+        n = dict(LZ_NODE, network="h2", **{"h2-opts": {"path": "/h", "host": ["servervpn.com"]}})
+        vs, _ = b.build_lazy_variants([n], ["www.line.me/en"])
+        v = next(v for v in vs if v["kind"] == "lazy" and v["fields"]["lazy"]["method"] == "path-bug-addr")
+        self.assertEqual(v["node"]["h2-opts"]["path"], "/en/h")
+        self.assertFalse([v for v in vs if v["kind"] == "lazy" and v["fields"]["lazy"]["method"].startswith("http-path")])
+
+    def test_summary_orders_path_methods_last(self):
+        vs, _ = b.build_lazy_variants([LZ_NODE], ["www.line.me/en"])
+        names = [r["method"] for r in b.lazy_summary(vs)]
+        self.assertLess(names.index("host-bug-sni"), names.index("path-bug-addr"))
+        self.assertTrue(b.lazy_pattern("path-bug-addr"))
+
+
 class LazyBuild(unittest.TestCase):
     def setUp(self):
         self._ra = b._resolve_all
@@ -1379,7 +1438,7 @@ class LazyBuild(unittest.TestCase):
         self.assertEqual(by_port, {8443: True, 8080: False})
 
     def test_candidate_parsers_for_bug_and_ip(self):
-        self.assertEqual(b.parse_candidates("bug", "a.example 1.2.3.4 https://B.example/x"), (["a.example", "b.example"], ["1.2.3.4"]))
+        self.assertEqual(b.parse_candidates("bug", "a.example 1.2.3.4 https://B.example/x"), (["a.example", "b.example/x"], ["1.2.3.4"]))
         self.assertEqual(b.parse_candidates("ip", "1.2.3.4, a.example 5.6.7.8"), (["1.2.3.4", "5.6.7.8"], ["a.example"]))
 
     def test_summary_and_report(self):

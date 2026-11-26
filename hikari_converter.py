@@ -1267,6 +1267,7 @@ def _bug_collect_lazy(bt):
     got = {}
     for key, title, label, intro in (
             ("bug", "Bug (Lazy)", "bug", ["Paste domain bug, banyak sekaligus (mis. instagram.com).",
+                                          "Bug berpath (mis. www.line.me/en) otomatis juga dicoba metode ganti path.",
                                           "Pisah baris/spasi/koma. '@file.txt' = dari file.",
                                           "Enter kosong = selesai. 'batal' = batalkan uji."]),
             ("ip", "IP edge tambahan (opsional)", "IP edge", ["IP edge CDN, mis. 13.35.1.58 104.18.43.252.",
@@ -1350,6 +1351,8 @@ def _bug_show_lazy(bt, rows, limit=5):
         print(f"        {C.DIM}address {truncate(lz['addr'], 30)}{C.RESET}")
         print(f"        {C.DIM}host    {truncate(lz['host'] or '-', 30)}{C.RESET}")
         print(f"        {C.DIM}sni     {truncate(lz['sni'] or '-', 30)}{C.RESET}")
+        if lz.get("path"):
+            print(f"        {C.DIM}path    {truncate(lz['path'], 30)}{C.RESET}")
     if len(good) > limit:
         print(f"      {C.DIM}... +{len(good) - limit} lainnya (lihat file hasil){C.RESET}")
     print(f"      {C.DIM}per metode (S=server B=bug IP=IP edge W=bug.server):{C.RESET}")

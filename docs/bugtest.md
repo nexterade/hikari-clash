@@ -54,7 +54,21 @@ Simbol: **S** = domain server, **B** = bug, **IP** = IP edge CDN, **W** = `<bug>
 | `host-bug` | S | B | S | injeksi Host |
 | `host-bug-sni` | S | B | B | |
 
-Lima metode pertama adalah pola dari contoh; sisanya tambahan. Aturannya:
+Lima metode pertama adalah pola dari contoh; sisanya tambahan.
+
+### Bug berpath (ganti path)
+
+Kalau bug ditulis dengan path, mis. `www.line.me/en` atau `xlsmart.co.id/id` (situs yang me-redirect ke `/id`), Lazy menambah metode **ganti path** untuk node ws/h2/http. Path node = awalan bug + path asli node (`/en` + `/vless` → `/en/vless`; path asli `/` → `/en`). Contoh `www.line.me/en` pada node dengan path `/vless`: address `www.line.me`, port 443/80, host & SNI = server, path `/en/vless`.
+
+| Metode | Address | Host | SNI | Path |
+|---|---|---|---|---|
+| `path-bug-addr` | B | S | S | awalan bug + path node |
+| `path-bug-addr-sni` | B | S | B | idem |
+| `path-host-bug` | S | B | S | idem |
+| `path-host-bug-sni` | S | B | B | idem |
+| `http-path-bug-addr`, `http-path-host-bug` | B / S | S / B | — | idem (port tanpa TLS) |
+
+Metode biasa tetap dicoba memakai domain bug-nya (`www.line.me`), jadi bug berpath hanya menambah kombinasi. Transport tcp/grpc tidak punya path, jadi metode ganti path dilewati dengan alasan. Bug tanpa path tidak menghasilkan metode ini. Tiap bug berpath menambah sekitar 6 varian per node.
 
 - **Domain server (S)** diambil dari Host, lalu SNI, lalu Address node. **IP edge** = Address node (kalau IP) + hasil resolve S (maks 2, pakai DNS operator bila dipilih) + IP tambahan dari kamu. Metode berbasis IP dilewati dengan alasan kalau tidak ada satu pun IP.
 - **Port tanpa TLS** (80, 8080, 8880, 2052, 2082, 2086, 2095): TLS dimatikan dan SNI dibuang, jadi kombinasi dengan (address, host) yang sama digabung dan diberi label `http-*` (`http-direct`, `http-bug-addr`, `http-ip-edge`, `http-host-ip`, `http-wildcard`, `http-wildcard-ip`, `http-host-bug`). Port lain dianggap TLS. Trojan, gRPC dan H2 tidak punya varian tanpa TLS.

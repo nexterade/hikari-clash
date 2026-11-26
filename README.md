@@ -53,7 +53,7 @@ Ngatur config Mihomo di tiga platform itu ribet: port beda, path beda, fitur And
 | 🛠️ **Auto-patch platform** | Port, DNS listen, `tun`, path provider, controller, rule WIFI disesuaikan per platform |
 | ✅ **Validator** | Cek group/rule/provider, file provider, port bentrok, controller tanpa secret, DNS rawan, dll |
 | 🔌 **Mode Offline** | Ubah semua rule-provider `http` → `file` (tanpa update GitHub) |
-| 🧪 **Uji Bug / Custom** | Di Preview Convert (`[U]`) & Regenerate: uji **banyak SNI / Host / Address sekaligus**, atau **mode Lazy** (isi bug saja, semua metode address/port/host/SNI dicoba otomatis) dan **Phantom** untuk PhantomNG (mode TCP/TLS, Mihomo, V2Ray/Xray); yang lolos jadi node varian + `custom-*.yaml` & link URI — lihat [bugtest](docs/bugtest.md) |
+| 🧪 **Uji Bug / Custom** | Di Preview Convert (`[U]`) & Regenerate: uji **banyak SNI / Host / Address sekaligus**, atau **mode Lazy** (isi bug saja, semua metode address/port/host/SNI dicoba otomatis; bug berpath seperti `www.line.me/en` juga dicoba ganti path) dan **Phantom** untuk PhantomNG (mode TCP/TLS, Mihomo, V2Ray/Xray); yang lolos jadi node varian + `custom-*.yaml` & link URI — lihat [bugtest](docs/bugtest.md) |
 | ♻️ **Regenerate** | Ubah template/DNS/profil ISP lalu bangun ulang config dari node yang sudah tersimpan — **tanpa paste URI lagi** (`1 → 3`) |
 | ➕ **Replace / Append** | Timpa atau tambah node ke provider yang sudah ada |
 | 🌐 **Menu DNS** | Preset (Cloudflare+Google, Quad9, NextDNS, AdGuard, [BebasDNS](https://github.com/bebasid/bebasdns)) dengan pilihan **DoH / DoT / DoQ**, atau **custom manual** (IP, DoH, DoH3, DoT, DoQ, UDP/TCP, `system`, `dhcp://`, akhiran `#proxy`) per field — divalidasi, ada preview diff, format & komentar template dijaga |

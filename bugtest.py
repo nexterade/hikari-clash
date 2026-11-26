@@ -107,6 +107,32 @@ def clean_host(token):
     return t
 
 
+_PATH_RE = re.compile(r"^[A-Za-z0-9._~%!$&'()*+,;=:@/-]+$")
+
+
+def clean_bug(token):
+    """Token bug -> 'domain' atau 'domain/path' (path awalan, mis. 'www.line.me/en'), atau None kalau domain tidak valid.
+    Scheme, port, query dan fragment dibuang; domain jadi huruf kecil, path dirapikan ('//' jadi '/', tanpa '/' di akhir)."""
+    t = re.sub(r"^[A-Za-z][A-Za-z0-9+.-]*://", "", str(token).strip().strip("'\""))
+    dom = clean_host(t)
+    if not dom or is_ip(dom):
+        return None
+    _, sl, rest = t.partition("/")
+    if not sl:
+        return dom
+    path = re.split(r"[?#]", rest, maxsplit=1)[0]
+    path = re.sub(r"/+", "/", "/" + path).rstrip("/")
+    if not path:
+        return dom
+    return dom + path if _PATH_RE.match(path) else None
+
+
+def split_bug(bug):
+    """'www.line.me/en' -> ('www.line.me', '/en'); 'instagram.com' -> ('instagram.com', '')."""
+    dom, sl, path = str(bug).partition("/")
+    return dom, (sl + path if sl else "")
+
+
 def read_candidate_lines(lines, max_bytes=1_000_000):
     """Gabungkan baris input jadi satu teks. Baris '@path' dimuat dari file (UTF-8). Return (teks, [pesan_error])."""
     out, problems = [], []
@@ -139,10 +165,12 @@ def parse_candidates(field, text):
         val = None
         if field in ("sni", "host", "server"):
             val = clean_host(tok)
-        elif field in ("phantom", "bug"):       # bug harus domain (SNI berisi IP tidak berguna)
+        elif field == "phantom":                # harus domain (SNI berisi IP tidak berguna)
             val = clean_host(tok)
             if val and is_ip(val):
                 val = None
+        elif field == "bug":                    # domain, boleh berpath ('www.line.me/en' -> metode ganti path di mode Lazy)
+            val = clean_bug(tok)
         elif field == "ip":                     # IP edge CDN (mode Lazy)
             val = clean_host(tok)
             if val and not is_ip(val):
@@ -196,6 +224,42 @@ def _get_host(n):
         h = ((n.get("http-opts") or {}).get("headers") or {}).get("Host")
         return str(h[0] if isinstance(h, list) and h else (h or ""))
     return ""
+
+
+PATH_NETS = ("ws", "h2", "http")
+
+
+def _get_path(n):
+    net = _net(n)
+    if net == "ws":
+        return str((n.get("ws-opts") or {}).get("path") or "/")
+    if net == "h2":
+        return str((n.get("h2-opts") or {}).get("path") or "/")
+    if net == "http":
+        p = (n.get("http-opts") or {}).get("path")
+        return str((p[0] if isinstance(p, list) and p else p) or "/")
+    return ""
+
+
+def _set_path(n, path):
+    net = _net(n)
+    if net == "ws":
+        n.setdefault("ws-opts", {})["path"] = path
+    elif net == "h2":
+        n.setdefault("h2-opts", {})["path"] = path
+    elif net == "http":
+        n.setdefault("http-opts", {})["path"] = [path]
+    else:
+        return False
+    return True
+
+
+def prefix_path(prefix, base_path):
+    """Awalan bug + path asli node: '/id' + '/vless' -> '/id/vless'; '/id' + '/' -> '/id'."""
+    base = str(base_path or "/")
+    if not base.startswith("/"):
+        base = "/" + base
+    return prefix.rstrip("/") + ("" if base == "/" else base)
 
 
 def _set_host(n, host):
@@ -397,7 +461,8 @@ def describe_fields(v):
         return "(config asli)"
     if v["kind"] == "lazy":
         lz = v["fields"]["lazy"]
-        return f"{lz['method']} {lz['addr']}:{lz['port']} host={lz['host'] or '-'} sni={lz['sni'] or '-'}"
+        return (f"{lz['method']} {lz['addr']}:{lz['port']} host={lz['host'] or '-'} sni={lz['sni'] or '-'}"
+                + (f" path={lz['path']}" if lz.get('path') else ""))
     return " ".join(f"{FIELD_TAG[k]}={_fmt_val(v['fields'][k])}" for k in FIELDS if k in v["fields"])
 
 
@@ -478,7 +543,17 @@ LAZY_METHODS = (
 LAZY_PLAIN_LABEL = {("S", "S"): "http-direct", ("B", "S"): "http-bug-addr", ("IP", "S"): "http-ip-edge",
                     ("S", "IP"): "http-host-ip", ("S", "W"): "http-wildcard", ("IP", "W"): "http-wildcard-ip",
                     ("S", "B"): "http-host-bug"}
-LAZY_ORDER = [m[0] for m in LAZY_METHODS] + list(LAZY_PLAIN_LABEL.values())
+# Bug berpath (mis. 'www.line.me/en'): metode yang memakai bug sebagai address/Host dicoba lagi dengan path = awalan bug + path node.
+LAZY_PATH_METHODS = (
+    # label,               Address, Host, SNI
+    ("path-bug-addr",     "B", "S", "S"),
+    ("path-bug-addr-sni", "B", "S", "B"),
+    ("path-host-bug",     "S", "B", "S"),
+    ("path-host-bug-sni", "S", "B", "B"),
+)
+LAZY_PATH_PLAIN_LABEL = {("B", "S"): "http-path-bug-addr", ("S", "B"): "http-path-host-bug"}
+LAZY_ORDER = ([m[0] for m in LAZY_METHODS] + list(LAZY_PLAIN_LABEL.values()) + [m[0] for m in LAZY_PATH_METHODS]
+              + list(LAZY_PATH_PLAIN_LABEL.values()))
 LAZY_PLAIN_PORTS = (80, 8080, 8880, 2052, 2082, 2086, 2095)     # port HTTP; port lain dianggap TLS
 DEFAULT_LAZY_PORTS = (443, 80)
 LAZY_MAX_IPS = 2        # IP edge yang di-resolve otomatis dari domain server (di luar IP node & IP tambahan)
@@ -498,6 +573,12 @@ def lazy_pattern(label):
     for (a, h), lab in LAZY_PLAIN_LABEL.items():
         if lab == label:
             return f"addr={a} host={h} (tanpa TLS)"
+    for mid, a, h, s in LAZY_PATH_METHODS:
+        if mid == label:
+            return f"addr={a} host={h} sni={s} path=bug+path"
+    for (a, h), lab in LAZY_PATH_PLAIN_LABEL.items():
+        if lab == label:
+            return f"addr={a} host={h} path=bug+path (tanpa TLS)"
     return ""
 
 
@@ -542,7 +623,7 @@ def lazy_edge_ips(base, server, extra=(), limit=LAZY_MAX_IPS):
     return ips, note
 
 
-def _lazy_node(base, addr, port, host, sni):
+def _lazy_node(base, addr, port, host, sni, path_prefix=""):
     """Node varian untuk satu kombinasi. Return (node, None) atau (None, alasan)."""
     q = clean_node(base)
     t, net, tls = str(q.get("type", "")).lower(), _net(q), port_is_tls(port)
@@ -565,6 +646,10 @@ def _lazy_node(base, addr, port, host, sni):
             q.pop(k, None)
     if net in HOST_NETS:
         _set_host(q, host)
+    if path_prefix:
+        if net not in PATH_NETS:
+            return None, f"transport {net} tidak punya path"
+        _set_path(q, prefix_path(path_prefix, _get_path(q)))
     return q, None
 
 
@@ -572,7 +657,7 @@ def _lazy_sig(q):
     """Tanda tangan efektif node (field yang tidak dipakai transport/port itu tidak ikut) untuk membuang duplikat."""
     tls = _is_tls(q)
     return (str(q.get("server")), int(q.get("port") or 0), tls, _get_sni(q) if tls else "",
-            _get_host(q) if _net(q) in HOST_NETS else "")
+            _get_host(q) if _net(q) in HOST_NETS else "", _get_path(q) if _net(q) in PATH_NETS else "")
 
 
 def build_lazy_variants(nodes, bugs, ports=None, extra_ips=(), opts=None, include_base=True):
@@ -607,36 +692,52 @@ def _build_lazy(nodes, bugs, ports, extra_ips, include_base):
             skipped.append((bi, base_name, "lazy", "metode berbasis IP edge dilewati — " + (note or "tidak ada IP edge")))
         net = _net(base)
         seen = {_lazy_sig(base)}
+        domains = list(dict.fromkeys(split_bug(x)[0] for x in bugs))        # bug 'a.com/en' dan 'a.com' = domain yang sama
+        path_bugs = [split_bug(x) for x in bugs if split_bug(x)[1]]
+        if path_bugs and net not in PATH_NETS:
+            skipped.append((bi, base_name, "lazy", f"metode ganti path dilewati — transport {net} tidak punya path (ws/h2/http saja)"))
+            path_bugs = []
         plain_pairs = []
         for _mid, a, h, _s in LAZY_METHODS:
             if (a, h) not in plain_pairs:
                 plain_pairs.append((a, h))
+
+        def add(label, a, h, s_, port, b_, ip, prefix=""):
+            tls = port_is_tls(port)
+            sym = {"S": server, "B": b_, "IP": ip, "W": f"{b_}.{server}" if b_ else None}
+            q, _why = _lazy_node(base, sym[a], port, sym[h], sym[s_] if s_ else None, prefix)
+            if q is None:
+                return
+            sig = _lazy_sig(q)
+            if sig in seen:
+                return
+            seen.add(sig)
+            used = [a] + ([h] if net in HOST_NETS else []) + ([s_] if tls else [])
+            tag = ":".join([label] + ([b_ + prefix] if b_ and ("B" in used or "W" in used) else [])
+                           + ([ip] if ip and "IP" in used else []) + [str(port)])
+            lz = {"method": label, "tag": tag, "addr": sig[0], "port": sig[1], "host": sig[4], "sni": sig[3],
+                  "path": sig[5] if prefix else "", "bug": (b_ + prefix) if b_ else "", "ip": ip or "", "tls": tls}
+            variants.append(_variant(len(variants), bi, "lazy", {"lazy": lz}, q, base_name, base))
+
         for port in ports:
             tls = port_is_tls(port)
             combos = ([(m[0], m[1], m[2], m[3]) for m in LAZY_METHODS] if tls
                       else [(LAZY_PLAIN_LABEL[p], p[0], p[1], None) for p in plain_pairs])
-            for label, a, h, s in combos:
-                syms = [x for x in (a, h, s) if x]
-                if ("B" in syms or "W" in syms) and not bugs:
+            for label, a, h, s_ in combos:
+                syms = [x for x in (a, h, s_) if x]
+                if ("B" in syms or "W" in syms) and not domains:
                     continue
                 if "IP" in syms and not ips:
                     continue
-                for b_ in (bugs if ("B" in syms or "W" in syms) else [None]):
+                for b_ in (domains if ("B" in syms or "W" in syms) else [None]):
                     for ip in (ips if "IP" in syms else [None]):
-                        sym = {"S": server, "B": b_, "IP": ip, "W": f"{b_}.{server}" if b_ else None}
-                        q, why = _lazy_node(base, sym[a], port, sym[h], sym[s] if s else None)
-                        if q is None:
-                            continue
-                        sig = _lazy_sig(q)
-                        if sig in seen:
-                            continue
-                        seen.add(sig)
-                        used = [a] + ([h] if net in HOST_NETS else []) + ([s] if tls else [])
-                        tag = ":".join([label] + ([b_] if b_ and ("B" in used or "W" in used) else [])
-                                       + ([ip] if ip and "IP" in used else []) + [str(port)])
-                        lz = {"method": label, "tag": tag, "addr": sig[0], "port": sig[1], "host": sig[4], "sni": sig[3],
-                              "bug": b_ or "", "ip": ip or "", "tls": tls}
-                        variants.append(_variant(vid, bi, "lazy", {"lazy": lz}, q, base_name, base)); vid += 1
+                        add(label, a, h, s_, port, b_, ip)
+            if path_bugs:                       # bug berpath: awalan path bug dipasang di depan path node
+                pcombos = (LAZY_PATH_METHODS if tls
+                           else [(LAZY_PATH_PLAIN_LABEL[k], k[0], k[1], None) for k in LAZY_PATH_PLAIN_LABEL])
+                for label, a, h, s_ in pcombos:
+                    for dom, prefix in path_bugs:
+                        add(label, a, h, s_, port, dom, None, prefix)
     return variants, skipped
 
 
