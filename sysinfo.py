@@ -30,7 +30,7 @@ SETTINGS_PATH = os.path.join(SCRIPT_DIR, "settings.json")
 
 PLATFORM_NAMES = {"box": "Box", "nikki": "Nikki", "openclash": "OpenClash"}
 PREF_DEFAULTS = {"mode": "full", "mask": False, "lookup": True, "platform": "auto",
-                 "api": "", "secret": "", "stats": ""}
+                 "api": "", "secret": "", "stats": "", "operator": ""}
 MODES = ("full", "compact", "off")
 
 DEFAULT_API = "127.0.0.1:9090"           # external-controller Box (Nikki/OpenClash: 0.0.0.0:9090 di router)
@@ -79,7 +79,8 @@ def load_prefs(path=None, use_env=True):
         prefs["lookup"] = _truthy(env["HIKARI_INFO_LOOKUP"])
     if env.get("HIKARI_PLATFORM", "").strip().lower() in PLATFORM_NAMES:
         prefs["platform"] = env["HIKARI_PLATFORM"].strip().lower()
-    for key, name in (("api", "HIKARI_API"), ("secret", "HIKARI_SECRET"), ("stats", "HIKARI_STATS")):
+    for key, name in (("api", "HIKARI_API"), ("secret", "HIKARI_SECRET"), ("stats", "HIKARI_STATS"),
+                      ("operator", "HIKARI_OPERATOR")):
         if env.get(name):
             prefs[key] = env[name].strip()
     return prefs
@@ -266,15 +267,24 @@ def guess_gateway(ip):
     return ".".join(p[:3] + ["1"])
 
 
+def parse_operators(text):
+    """`gsm.operator.alpha` = satu nama per slot SIM ("XL Axiata,Telkomsel") -> daftar unik, urutan slot."""
+    out = []
+    for tok in str(text or "").split(","):
+        tok = tok.strip()
+        if tok and tok not in out:
+            out.append(tok)
+    return out
+
+
 def _operator_name():
+    """Nama operator dari semua slot SIM. Android tanpa root tidak memberi tahu SIM mana yang dipakai untuk data,
+    jadi HP dual SIM menampilkan semuanya ("XL Axiata / Telkomsel"); pastikan lewat pengaturan Operator."""
     try:
         r = subprocess.run(["getprop", "gsm.operator.alpha"], capture_output=True, text=True, timeout=1)
     except (OSError, subprocess.SubprocessError):
         return None
-    for tok in (r.stdout or "").strip().split(","):
-        if tok.strip():
-            return tok.strip()
-    return None
+    return " / ".join(parse_operators(r.stdout)) or None
 
 
 def collect_net():
@@ -657,7 +667,7 @@ def build_rows(info, prefs, level="full", width=80):
     rows.append(("Lokasi", [(_location(info.get("public"), mask) or "-", "val")]))
     # Jaringan
     if net.get("online"):
-        extra = net.get("operator") if net["kind"] == "data" else None
+        extra = (prefs.get("operator") or net.get("operator")) if net["kind"] == "data" else None
         iface = "" if net["iface"] == "?" else net["iface"]
         det = " · ".join(x for x in (iface, extra) if x)
         segs = [(KIND_LABEL[net["kind"]], "val")] + ([(f"  ({det})", "dim")] if det else [])

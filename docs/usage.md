@@ -38,7 +38,7 @@ Menu utama menampilkan panel info perangkat tepat di bawah banner; layar lain me
 |---|---|---|
 | **IP** | IP lokal dari interface aktif; IP publik dari `ipwho.is` (cadangan `ipinfo.io`) | Kalau Box aktif, IP publik = IP **keluar** (node), bukan IP operator |
 | **Lokasi** | Hasil lookup yang sama (kota, negara, ISP) | Butuh internet |
-| **Jaringan** | Nama interface: `wlan*` → WiFi, `rmnet*`/`ccmni*` → Data, `eth*`/`br-*` → LAN | Operator seluler dari `getprop` bila ada |
+| **Jaringan** | Nama interface: `wlan*` → WiFi, `rmnet*`/`ccmni*` → Data, `eth*`/`br-*` → LAN | Operator seluler dari `getprop`. HP **dual SIM** menampilkan semua SIM (`XL Axiata / by.U`) karena Android tanpa root tidak memberi tahu SIM data; pastikan lewat pengaturan **Operator** |
 | **Status** | `external-controller` Mihomo: `Box Aktif` / `Nikki Aktif` / `OpenClash Aktif`, atau `... Tidak Aktif` | Cek `127.0.0.1:9090` dulu, lalu router di gateway `:9090` (Termux di HP + Nikki di router). Secret dicoba otomatis dari template |
 | **Usage** | [NetStat](netstat.md) (hari ini, WiFi vs Data, sisa kuota) → bila tidak jalan: total sesi core → counter interface sejak boot | Sumbernya selalu ditulis di dalam kurung |
 | **Etc** | Versi core, mode, jumlah koneksi, uptime perangkat, ping ke `cp.cloudflare.com` | Baris yang datanya tidak ada dilewati |
@@ -48,9 +48,10 @@ Menu utama menampilkan panel info perangkat tepat di bawah banner; layar lain me
 - **Tampilan** `full` / `compact` / `off`. Pilihan ini jadi batas atas: `compact` berarti menu utama pun satu baris.
 - **Sensor IP**: `36.71.12.34` → `36.71.x.x`, lokasi hanya negara. Pakai sebelum screenshot.
 - **IP publik+lokasi**: matikan kalau tidak mau script menghubungi layanan lookup (satu-satunya panggilan keluar dari fitur ini).
+- **Operator**: isi nama operator (mis. `by.U`) kalau HP dual SIM dan deteksi otomatis menampilkan SIM yang salah.
 - **Platform** (`auto` / `box` / `nikki` / `openclash`), **alamat controller** (mis. `192.168.1.1:9090`), dan **secret** — isi kalau deteksi otomatis salah.
 
-Env yang setara (menimpa file): `HIKARI_INFO`, `HIKARI_INFO_MASK=1`, `HIKARI_INFO_LOOKUP=0`, `HIKARI_PLATFORM`, `HIKARI_API`, `HIKARI_SECRET`, `HIKARI_STATS`.
+Env yang setara (menimpa file): `HIKARI_INFO`, `HIKARI_INFO_MASK=1`, `HIKARI_INFO_LOOKUP=0`, `HIKARI_PLATFORM`, `HIKARI_API`, `HIKARI_SECRET`, `HIKARI_STATS`, `HIKARI_OPERATOR`.
 
 Catatan: info otomatis mati kalau output bukan terminal (pipe/tes), data di-cache beberapa detik supaya menu tidak lambat, dan script **tidak pernah memanggil `su`**. Kalau lookup IP publik gagal, baris itu tampil `-` tanpa menunda menu lebih dari beberapa detik.
 

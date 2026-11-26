@@ -3,6 +3,20 @@
 Versi aplikasi mengikuti [Semantic Versioning](https://semver.org/lang/id/); aturan bump ada di [CLAUDE.md](CLAUDE.md).
 Penomoran template (`config_v*.yaml`) terpisah — lihat [docs/template-changelog.md](docs/template-changelog.md).
 
+## [0.9.0] - 2026-11-26
+
+### Diperbaiki
+- **Info Banner: operator salah di HP dual SIM** (mis. tampil `XL Axiata` padahal data memakai by.U). Sebelumnya hanya SIM slot
+  pertama yang dibaca; sekarang semua SIM ditampilkan (`XL Axiata / by.U`).
+
+### Ditambahkan
+- Pengaturan **Operator** di `Misc > Info Banner` (juga env `HIKARI_OPERATOR`) untuk menetapkan nama operator secara manual.
+  Pratinjau pindah ke `[8]`.
+
+### Batasan
+- Android tanpa root tidak memberi tahu SIM mana yang dipakai untuk data, jadi pilihan otomatis untuk dual SIM tidak mungkin
+  pasti. Belum diuji di perangkat dual SIM sungguhan; yang teruji: tes dengan keluaran `getprop` tiruan.
+
 ## [0.8.0] - 2026-11-26
 
 ### Ditambahkan

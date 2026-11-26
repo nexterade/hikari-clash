@@ -422,6 +422,28 @@ class Rendering(Base):
         self.assertIn("Status   : Box Tidak Aktif", self.text(self.info(core=off)))
         self.assertIn("Status   : -", self.text(self.info(core=None)))
 
+    def test_parse_operators_dual_sim(self):
+        self.assertEqual(si.parse_operators("XL Axiata,by.U"), ["XL Axiata", "by.U"])
+        self.assertEqual(si.parse_operators(",Telkomsel"), ["Telkomsel"])
+        self.assertEqual(si.parse_operators("Telkomsel,Telkomsel"), ["Telkomsel"])
+        self.assertEqual(si.parse_operators(""), [])
+        self.assertEqual(si.parse_operators(None), [])
+
+    def test_operator_name_lists_every_sim(self):
+        fake = mock.Mock(stdout="XL Axiata,by.U\n")
+        with mock.patch.object(si.subprocess, "run", return_value=fake):
+            self.assertEqual(si._operator_name(), "XL Axiata / by.U")
+        with mock.patch.object(si.subprocess, "run", side_effect=OSError):
+            self.assertIsNone(si._operator_name())
+
+    def test_operator_pref_overrides_detected_sim(self):
+        net = {**self.NET, "iface": "rmnet_data1", "kind": "data", "operator": "XL Axiata / by.U"}
+        t = self.text(self.info(net=net), {**si.load_prefs(), "operator": "by.U"})
+        self.assertIn("Jaringan : Data  (rmnet_data1 · by.U)", t)
+        self.assertNotIn("XL Axiata", t)
+        os.environ["HIKARI_OPERATOR"] = "Telkomsel"
+        self.assertEqual(si.load_prefs()["operator"], "Telkomsel")
+
     def test_data_network_shows_operator(self):
         net = {**self.NET, "iface": "rmnet_data1", "kind": "data", "operator": "XL Axiata"}
         self.assertIn("Jaringan : Data  (rmnet_data1 · XL Axiata)", self.text(self.info(net=net)))

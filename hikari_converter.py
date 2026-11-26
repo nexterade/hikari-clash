@@ -3454,7 +3454,8 @@ def feature_info_banner():
         print(f"  {C.CYAN}[4]{C.RESET} Platform          : {C.BOLD}{pr['platform']}{C.RESET} {C.DIM}(auto / box / nikki / openclash){C.RESET}")
         print(f"  {C.CYAN}[5]{C.RESET} Alamat controller : {C.BOLD}{pr['api'] or '(otomatis)'}{C.RESET} {C.DIM}(mis. 192.168.1.1:9090 untuk router){C.RESET}")
         print(f"  {C.CYAN}[6]{C.RESET} Secret controller : {C.BOLD}{'(diisi)' if pr['secret'] else '(otomatis dari template)'}{C.RESET}")
-        print(f"  {C.CYAN}[7]{C.RESET} Pratinjau sekarang")
+        print(f"  {C.CYAN}[7]{C.RESET} Operator          : {C.BOLD}{pr['operator'] or '(otomatis dari SIM)'}{C.RESET} {C.DIM}(isi bila HP dual SIM, mis. by.U){C.RESET}")
+        print(f"  {C.CYAN}[8]{C.RESET} Pratinjau sekarang")
         print(f"  {C.CYAN}[0]{C.RESET} Kembali\n{sep(50)}")
         pilih = ask(f"{C.YELLOW}Pilih ❯{C.RESET} ").strip()
         if pilih == "0":
@@ -3482,6 +3483,8 @@ def feature_info_banner():
         elif pilih == "6":
             saved["secret"] = ask("  Secret (kosong = otomatis) ❯ ").strip()
         elif pilih == "7":
+            saved["operator"] = ask("  Nama operator (kosong = otomatis) ❯ ").strip()[:40]
+        elif pilih == "8":
             sysinfo.clear_cache()
             rows = sysinfo.lines("full", None, sys.stdout.isatty(), force=True)
             print("\n".join(rows) if rows else f"  {C.DIM}(info dimatikan){C.RESET}")
