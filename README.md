@@ -58,6 +58,7 @@ Ngatur config Mihomo di tiga platform itu ribet: port beda, path beda, fitur And
 | ➕ **Replace / Append** | Timpa atau tambah node ke provider yang sudah ada |
 | 🌐 **Menu DNS** | Preset (Cloudflare+Google, Quad9, NextDNS, AdGuard, [BebasDNS](https://github.com/bebasid/bebasdns)) dengan pilihan **DoH / DoT / DoQ**, atau **custom manual** (IP, DoH, DoH3, DoT, DoQ, UDP/TCP, `system`, `dhcp://`, akhiran `#proxy`) per field — divalidasi, ada preview diff, format & komentar template dijaga |
 | 🧪 **Miscellaneous** | Converter rule-provider `.mrs` ⇄ `.yaml`/`.txt`, tester config (+ `mihomo -t`), tester node (offline / via core), tester route, **sniffer only** (config pengintai koneksi + inspector) — lihat [menu 5](docs/misc-tools.md) |
+| 🪪 **Info pengguna** | Di bawah banner: IP (lokal + publik), lokasi, jaringan **WiFi/Data**, **status core** (`Box Aktif` / `Nikki Aktif`), usage, versi core, ping. Ada sensor IP untuk screenshot — lihat [usage](docs/usage.md#info-di-bawah-banner) |
 | 📊 **NetStat** | Collector statistik trafik **standalone**: harian/mingguan/bulanan, WiFi vs Data, top app, kuota paket — lihat [NetStat](#-hikari-netstat) |
 | 🛡️ **Aman** | Auto-backup `.bak`, input divalidasi, `PermissionError` ditangani, pilihan secret dashboard (default `hikari` / acak) |
 
@@ -145,7 +146,7 @@ hikari-clash/
 ├── bugtest.py                   # Uji Bug: kandidat SNI/Host/Address/Phantom atau mode Lazy ➜ tes TCP / Mihomo / V2Ray ➜ varian lolos
 ├── VERSION  CHANGELOG.md        # Versi aplikasi (SemVer) & riwayat perubahan
 ├── CLAUDE.md                    # Aturan kerja Claude/kontributor (version bump semantik wajib)
-├── mrs_codec.py  nodetest.py  routetest.py  sniffer.py  httpcatch.py  banner.py   # tools menu 5 & pendukung
+├── mrs_codec.py  nodetest.py  routetest.py  sniffer.py  httpcatch.py  banner.py  sysinfo.py   # tools menu 5 & pendukung
 ├── template/                    # Template master config_v*.yaml (+ sniffer_only.yaml)
 ├── ruleset/                     # Ruleset (WAJIB): *.yaml & *.mrs
 ├── netstat/                     # Hikari NetStat: collector statistik trafik (standalone)

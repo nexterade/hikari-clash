@@ -130,8 +130,17 @@ def load_settings():
 
 
 def save_settings(cfg):
+    """Tulis settings.json; kunci lain yang sudah ada (mis. "info" milik sysinfo.py) dipertahankan."""
+    data = {}
+    try:
+        data = json.loads(read_text(SETTINGS_PATH))
+    except (OSError, ValueError):
+        pass
+    if not isinstance(data, dict):
+        data = {}
+    data.update(cfg)
     with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+        json.dump(data, f, ensure_ascii=False, indent=2)
         f.write("\n")
 
 
@@ -171,9 +180,10 @@ def section(title, width=50):
     print(C.GRAY + "─" * left + C.RESET + C.BOLD + C.WHITE + t + C.RESET + C.GRAY + "─" * right + C.RESET)
 
 
-def banner(mode="CONVERTER"):
-    """Banner Hikari /.CLASH (definisi visual ada di banner.py)."""
-    _show_banner(mode=mode)
+def banner(mode="CONVERTER", info="compact"):
+    """Banner Hikari /.CLASH (definisi visual ada di banner.py) + info pengguna di bawahnya (sysinfo.py).
+    info: "full" (menu utama) / "compact" (satu baris, layar lain) / None. Pengaturan pengguna jadi batas atas."""
+    _show_banner(mode=mode, info=info)
     print()
 
 
@@ -3431,6 +3441,60 @@ def feature_misc_info():
     pause()
 
 
+def feature_info_banner():
+    """Pengaturan info di bawah banner (disimpan di settings.json, kunci "info")."""
+    import sysinfo
+    onoff = lambda v: f"{C.GREEN}ON{C.RESET}" if v else f"{C.GRAY}OFF{C.RESET}"
+    while True:
+        clear_screen(); banner("MISC", info=None); section("Info Banner")
+        pr = sysinfo.load_prefs()
+        print(f"  {C.CYAN}[1]{C.RESET} Tampilan          : {C.BOLD}{pr['mode']}{C.RESET} {C.DIM}(full / compact / off){C.RESET}")
+        print(f"  {C.CYAN}[2]{C.RESET} Sensor IP         : {onoff(pr['mask'])} {C.DIM}(36.71.x.x, lokasi hanya negara — aman untuk screenshot){C.RESET}")
+        print(f"  {C.CYAN}[3]{C.RESET} IP publik+lokasi  : {onoff(pr['lookup'])} {C.DIM}(menghubungi ipwho.is / ipinfo.io){C.RESET}")
+        print(f"  {C.CYAN}[4]{C.RESET} Platform          : {C.BOLD}{pr['platform']}{C.RESET} {C.DIM}(auto / box / nikki / openclash){C.RESET}")
+        print(f"  {C.CYAN}[5]{C.RESET} Alamat controller : {C.BOLD}{pr['api'] or '(otomatis)'}{C.RESET} {C.DIM}(mis. 192.168.1.1:9090 untuk router){C.RESET}")
+        print(f"  {C.CYAN}[6]{C.RESET} Secret controller : {C.BOLD}{'(diisi)' if pr['secret'] else '(otomatis dari template)'}{C.RESET}")
+        print(f"  {C.CYAN}[7]{C.RESET} Pratinjau sekarang")
+        print(f"  {C.CYAN}[0]{C.RESET} Kembali\n{sep(50)}")
+        pilih = ask(f"{C.YELLOW}Pilih ❯{C.RESET} ").strip()
+        if pilih == "0":
+            return
+        saved = sysinfo.load_prefs(use_env=False)       # simpan nilai file, bukan hasil timpaan env
+        if pilih == "1":
+            v = ask("  Tampilan (full/compact/off) ❯ ").strip().lower()
+            if v not in sysinfo.MODES:
+                err("Pilih full, compact, atau off."); time.sleep(0.8); continue
+            saved["mode"] = v
+        elif pilih == "2":
+            saved["mask"] = not saved["mask"]
+        elif pilih == "3":
+            saved["lookup"] = not saved["lookup"]
+        elif pilih == "4":
+            v = ask("  Platform (auto/box/nikki/openclash) ❯ ").strip().lower()
+            if v not in ("auto",) + tuple(sysinfo.PLATFORM_NAMES):
+                err("Pilih auto, box, nikki, atau openclash."); time.sleep(0.8); continue
+            saved["platform"] = v
+        elif pilih == "5":
+            v = ask("  host:port (kosong = otomatis) ❯ ").strip()
+            if v and not re.fullmatch(r"[\w.\-]+:\d{1,5}", v):
+                err("Format host:port, mis. 192.168.1.1:9090"); time.sleep(0.8); continue
+            saved["api"] = v
+        elif pilih == "6":
+            saved["secret"] = ask("  Secret (kosong = otomatis) ❯ ").strip()
+        elif pilih == "7":
+            sysinfo.clear_cache()
+            rows = sysinfo.lines("full", None, sys.stdout.isatty(), force=True)
+            print("\n".join(rows) if rows else f"  {C.DIM}(info dimatikan){C.RESET}")
+            pause(); continue
+        else:
+            err("Pilihan tidak valid."); time.sleep(0.8); continue
+        try:
+            sysinfo.save_prefs(saved)
+            sysinfo.clear_cache()
+        except OSError as e:
+            err(f"Tidak bisa menyimpan settings.json: {e}"); time.sleep(1.2)
+
+
 def feature_misc_menu():
     while True:
         clear_screen(); banner("MISC"); section("Miscellaneous")
@@ -3440,6 +3504,7 @@ def feature_misc_menu():
         print(f"  {C.CYAN}[4]{C.RESET} Route Tester             {C.DIM}(domain/IP ➜ rule & group){C.RESET}")
         print(f"  {C.CYAN}[5]{C.RESET} Sniffer Only             {C.DIM}(config pengintai koneksi + inspector){C.RESET}")
         print(f"  {C.CYAN}[6]{C.RESET} Info Lingkungan")
+        print(f"  {C.CYAN}[7]{C.RESET} Info Banner              {C.DIM}(IP, lokasi, jaringan, status core, usage){C.RESET}")
         print(f"  {C.CYAN}[0]{C.RESET} Kembali ke Menu Utama\n{sep(50)}")
         pilih = ask(f"{C.YELLOW}Pilih menu ❯{C.RESET} ").strip()
         if pilih == "0":
@@ -3450,6 +3515,7 @@ def feature_misc_menu():
         elif pilih == "4": feature_misc_route()
         elif pilih == "5": feature_misc_sniffer()
         elif pilih == "6": feature_misc_info()
+        elif pilih == "7": feature_info_banner()
         else:
             err("Pilihan tidak valid."); time.sleep(0.8)
 
@@ -3638,7 +3704,7 @@ def main():
         print("  Pindahkan folder script ke /storage/emulated/0/ (jalankan `termux-setup-storage` dulu).")
         sys.exit(1)
     while True:
-        clear_screen(); banner(); section("MENU UTAMA")
+        clear_screen(); banner(info="full"); section("MENU UTAMA")
         for n in startup_notes:
             warn(n)
         print(f"  {C.CYAN}[1]{C.RESET} Convert")

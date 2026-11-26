@@ -3,6 +3,33 @@
 Versi aplikasi mengikuti [Semantic Versioning](https://semver.org/lang/id/); aturan bump ada di [CLAUDE.md](CLAUDE.md).
 Penomoran template (`config_v*.yaml`) terpisah — lihat [docs/template-changelog.md](docs/template-changelog.md).
 
+## [0.8.0] - 2026-11-26
+
+### Ditambahkan
+- **Info pengguna di bawah banner** (`sysinfo.py`): IP (lokal + publik), lokasi + ISP, jaringan **WiFi / Data** (nama
+  interface, operator), **status core** (`Status: Box Aktif` / `Nikki Aktif` / `OpenClash Aktif` / `... Tidak Aktif`),
+  usage (hari ini dari NetStat; kalau NetStat tidak jalan: sesi core, lalu counter interface) dan info lain (versi core,
+  mode, jumlah koneksi, uptime perangkat, ping). Menu utama menampilkan panel penuh; layar lain satu baris ringkas.
+- Status core dibaca dari `external-controller` (lokal `127.0.0.1:9090`, lalu router di gateway `:9090` untuk kasus
+  Termux di HP + Nikki di router), secret otomatis dari template. Tidak memakai `su`, jadi tidak memicu popup root.
+- **Misc > [7] Info Banner**: ubah tampilan (full/compact/off), **sensor IP** (aman untuk screenshot), matikan lookup
+  IP publik, paksa platform, alamat/secret controller. Env: `HIKARI_INFO`, `HIKARI_INFO_MASK`, `HIKARI_INFO_LOOKUP`,
+  `HIKARI_PLATFORM`, `HIKARI_API`, `HIKARI_SECRET`, `HIKARI_STATS`. Lihat [docs/usage.md](docs/usage.md#info-di-bawah-banner).
+- `python3 sysinfo.py` menampilkan panelnya saja (untuk uji cepat).
+
+### Diubah
+- `save_settings` tidak lagi menghapus kunci lain di `settings.json` (diperlukan agar pengaturan Info Banner dan profil ISP
+  hidup berdampingan).
+- Info banner mati otomatis kalau output bukan terminal (pipe, tes) kecuali `HIKARI_INFO` diisi.
+
+### Batasan
+- IP publik & lokasi memerlukan internet dan menghubungi `ipwho.is` (cadangan `ipinfo.io`); kalau Box aktif yang tampil
+  adalah IP keluar (node). Matikan di Info Banner bila tidak mau.
+- Label **Nikki/OpenClash untuk core di router** memakai heuristik halaman LuCI; kalau tidak yakin tampil `Mihomo Aktif`
+  (atur Platform di Info Banner untuk memastikan). Belum diuji di perangkat Box/Nikki/OpenClash sungguhan; yang teruji:
+  tes lokal dengan controller & NetStat tiruan. Di Android tanpa root sebagian sumber (`/proc`) bisa tidak terbaca →
+  nilai tampil `-`.
+
 ## [0.7.0] - 2026-11-26
 
 ### Ditambahkan

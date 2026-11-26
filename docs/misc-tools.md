@@ -12,3 +12,4 @@ Kumpulan tools tambahan. Semuanya offline; yang butuh sesuatu dari luar (core Mi
 | **4. Route Tester** | Ketik domain/IP (`chatgpt.com`, `1.1.1.1:443`, `udp://x.com:443`) → rule & group yang kena | Tanpa DNS lookup; rule `GEOIP`/`SRC-*`/`PROCESS-*` ditandai "tidak bisa dievaluasi", tidak ditebak |
 | **5. Sniffer Only** | Config pengintai tanpa node + inspector detail per koneksi — lihat [Sniffer Only](sniffer.md) | Semua trafik DIRECT lewat kuota reguler |
 | **6. Info Lingkungan** | Versi Python/PyYAML, backend zstd, lokasi core, template aktif | Berguna untuk debugging |
+| **7. Info Banner** | Atur info di bawah banner (IP, lokasi, jaringan, status core, usage): tampilan, sensor IP, lookup IP publik, platform, controller | Lihat [Info di bawah banner](usage.md#info-di-bawah-banner) |

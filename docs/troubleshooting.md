@@ -23,5 +23,8 @@
 | Unduh core terputus di tengah jalan | Koneksi GitHub tidak stabil | Tekan `[9]` lagi: unduhan dilanjutkan dari `bin/*.part` |
 | `src/` kosong / source basi | File `.txt` belum diunduh atau sudah lama | Menu `[8]` di sub2yaml, atau `python3 sub2yaml.py --update-source` (butuh internet) |
 | `📑 Keyring` kosong / provider gagal download | Download lewat 🗃️ UPDATER: node dulu, DIRECT kalau semua node mati. Gagal kalau keduanya tidak bisa menjangkau GitHub raw (mis. diblokir) | Pakai cache awal dari `subscription.yaml`, atau Mode Offline. Di start pertama, core mungkin masih mencoba node dulu sebelum jatuh ke DIRECT (perilaku core belum diuji) |
+| `Status: Box Tidak Aktif` padahal core jalan | Controller bukan di `127.0.0.1:9090`, secret beda, atau (Android tanpa root) proses tidak terlihat | `Misc → 7 Info Banner`: isi **alamat controller** dan **secret**. Cek manual: `curl -H "Authorization: Bearer <secret>" http://127.0.0.1:9090/version` |
+| Status tampil `Mihomo Aktif`, bukan `Nikki Aktif` (core di router) | Label router hanya heuristik halaman LuCI | `Misc → 7 Info Banner → Platform` = `nikki` / `openclash` |
+| Menu utama terasa lambat sebentar saat dibuka | Lookup IP publik menunggu internet (batas ±3,5 dtk, lalu di-cache) | Matikan *IP publik+lokasi* di Info Banner, atau set `off` / `compact` |
 | Chip "Mihomo putus" di halaman NetStat | `API`/`SECRET` di `stats.conf` tidak cocok dengan controller, atau core belum jalan | Samakan lalu `stats-ctl.sh restart`; detail di [netstat.md](netstat.md#masalah-umum) |
 | NetStat `gagal start, cek stats.log` | Port 9099 dipakai (mis. versi lama masih jalan) | Ubah `LISTEN` di `stats.conf` atau hentikan yang lama |

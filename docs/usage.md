@@ -14,10 +14,45 @@ python hikari_converter.py
 [2] Edit Configuration      ← port & secret, ganti template, DNS, emoji node
 [3] Check Status            ← template, provider, config yang sudah jadi
 [4] Validasi / Audit Config ← cek template untuk ketiga platform
-[5] Miscellaneous           ← converter .mrs, tester config / node / route, sniffer only
+[5] Miscellaneous           ← converter .mrs, tester config / node / route, sniffer only, info banner
 ────────────────────────────
 [Q] Exit
 ```
+
+## Info di bawah banner
+
+Menu utama menampilkan panel info perangkat tepat di bawah banner; layar lain memakai satu baris ringkas.
+
+```text
+  IP       : 192.168.1.23 lokal  ·  36.71.12.34 publik
+  Lokasi   : Jakarta, ID · XL Axiata
+  Jaringan : WiFi  (wlan0)
+  Status   : Box Aktif
+  Usage    : ↓ 1.2 GB  ↑ 340 MB  (hari ini)
+             Data 840 MB  ·  WiFi 1.4 GB  ·  sisa 12.3 GB
+  Etc      : mihomo v1.19.2  ·  mode rule  ·  42 koneksi
+             uptime 3 jam 12 mnt  ·  ping 87 ms
+```
+
+| Baris | Sumber | Catatan |
+|---|---|---|
+| **IP** | IP lokal dari interface aktif; IP publik dari `ipwho.is` (cadangan `ipinfo.io`) | Kalau Box aktif, IP publik = IP **keluar** (node), bukan IP operator |
+| **Lokasi** | Hasil lookup yang sama (kota, negara, ISP) | Butuh internet |
+| **Jaringan** | Nama interface: `wlan*` → WiFi, `rmnet*`/`ccmni*` → Data, `eth*`/`br-*` → LAN | Operator seluler dari `getprop` bila ada |
+| **Status** | `external-controller` Mihomo: `Box Aktif` / `Nikki Aktif` / `OpenClash Aktif`, atau `... Tidak Aktif` | Cek `127.0.0.1:9090` dulu, lalu router di gateway `:9090` (Termux di HP + Nikki di router). Secret dicoba otomatis dari template |
+| **Usage** | [NetStat](netstat.md) (hari ini, WiFi vs Data, sisa kuota) → bila tidak jalan: total sesi core → counter interface sejak boot | Sumbernya selalu ditulis di dalam kurung |
+| **Etc** | Versi core, mode, jumlah koneksi, uptime perangkat, ping ke `cp.cloudflare.com` | Baris yang datanya tidak ada dilewati |
+
+**Pengaturan** — `Miscellaneous → [7] Info Banner` (disimpan di `settings.json`, kunci `info`):
+
+- **Tampilan** `full` / `compact` / `off`. Pilihan ini jadi batas atas: `compact` berarti menu utama pun satu baris.
+- **Sensor IP**: `36.71.12.34` → `36.71.x.x`, lokasi hanya negara. Pakai sebelum screenshot.
+- **IP publik+lokasi**: matikan kalau tidak mau script menghubungi layanan lookup (satu-satunya panggilan keluar dari fitur ini).
+- **Platform** (`auto` / `box` / `nikki` / `openclash`), **alamat controller** (mis. `192.168.1.1:9090`), dan **secret** — isi kalau deteksi otomatis salah.
+
+Env yang setara (menimpa file): `HIKARI_INFO`, `HIKARI_INFO_MASK=1`, `HIKARI_INFO_LOOKUP=0`, `HIKARI_PLATFORM`, `HIKARI_API`, `HIKARI_SECRET`, `HIKARI_STATS`.
+
+Catatan: info otomatis mati kalau output bukan terminal (pipe/tes), data di-cache beberapa detik supaya menu tidak lambat, dan script **tidak pernah memanggil `su`**. Kalau lookup IP publik gagal, baris itu tampil `-` tanpa menunda menu lebih dari beberapa detik.
 
 ## Alur Convert (URI ➜ Clash)
 

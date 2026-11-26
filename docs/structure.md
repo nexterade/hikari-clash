@@ -5,7 +5,8 @@
 ```text
 hikari-clash/
 ├── hikari_converter.py          # Script utama (menu & generator)
-├── banner.py                    # Banner Hikari /.CLASH
+├── banner.py                    # Banner Hikari /.CLASH (+ info pengguna di bawahnya bila diminta)
+├── sysinfo.py                   # Info di bawah banner: IP, lokasi, WiFi/Data, status Box/Nikki, usage (docs/usage.md)
 ├── VERSION                      # Versi aplikasi (SemVer, satu baris) — terpisah dari versi template
 ├── CHANGELOG.md                 # Riwayat perubahan per versi aplikasi
 ├── CLAUDE.md                    # Aturan kerja untuk Claude/kontributor (termasuk version bump semantik)
