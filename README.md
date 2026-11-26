@@ -145,7 +145,7 @@ hikari-clash/
 ├── bugtest.py                   # Uji Bug: kandidat SNI/Host/Address/Phantom atau mode Lazy ➜ tes TCP / Mihomo / V2Ray ➜ varian lolos
 ├── VERSION  CHANGELOG.md        # Versi aplikasi (SemVer) & riwayat perubahan
 ├── CLAUDE.md                    # Aturan kerja Claude/kontributor (version bump semantik wajib)
-├── mrs_codec.py  nodetest.py  routetest.py  sniffer.py  banner.py   # tools menu 5 & pendukung
+├── mrs_codec.py  nodetest.py  routetest.py  sniffer.py  httpcatch.py  banner.py   # tools menu 5 & pendukung
 ├── template/                    # Template master config_v*.yaml (+ sniffer_only.yaml)
 ├── ruleset/                     # Ruleset (WAJIB): *.yaml & *.mrs
 ├── netstat/                     # Hikari NetStat: collector statistik trafik (standalone)
@@ -215,7 +215,7 @@ Lalu buka `http://127.0.0.1:9099/` di browser HP. Konfigurasi, cara kerja klasif
 | [CHANGELOG.md](CHANGELOG.md) | Riwayat perubahan per versi aplikasi (SemVer) |
 | [docs/sub2yaml.md](docs/sub2yaml.md) | Free node: impor ke ☘️ FREE NODE dan `sub2yaml.py` |
 | [docs/misc-tools.md](docs/misc-tools.md) | Menu 5: converter `.mrs`, tester config / node / route |
-| [docs/sniffer.md](docs/sniffer.md) | Sniffer Only: config pengintai koneksi + inspector |
+| [docs/sniffer.md](docs/sniffer.md) | Sniffer Only: config pengintai koneksi + inspector + penangkap path HTTP (bug catcher) |
 | [docs/platforms.md](docs/platforms.md) | Memasang hasil ke Box / Nikki / OpenClash, beda output per platform |
 | [docs/template.md](docs/template.md) | Isi template, urutan rule, group node, ruleset |
 | [docs/template-changelog.md](docs/template-changelog.md) | Beda antar versi template (v0.3 → v1.3) |

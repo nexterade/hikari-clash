@@ -3,6 +3,24 @@
 Versi aplikasi mengikuti [Semantic Versioning](https://semver.org/lang/id/); aturan bump ada di [CLAUDE.md](CLAUDE.md).
 Penomoran template (`config_v*.yaml`) terpisah — lihat [docs/template-changelog.md](docs/template-changelog.md).
 
+## [0.7.0] - 2026-11-26
+
+### Ditambahkan
+- **Penangkap path HTTP** (`httpcatch.py`, "bug catcher"): proxy lokal yang mencatat **URL path**, metode, Host, User-Agent,
+  status, **redirect (`Location`)**, Content-Type/Server dan petunjuk CDN dari HTTP polos, lalu meneruskan byte apa adanya
+  (CONNECT maupun URL absolut; keep-alive; handshake TLS hanya dicatat SNI-nya). Mihomo sendiri tidak pernah melihat path.
+  Menu baru **Sniffer Only > [4] Penangkap Path**, juga bisa dijalankan sendiri: `python3 httpcatch.py`.
+- **Sniffer Only > Generate Config**: opsi *penangkap path* menambahkan proxy `🪤 Catcher` (http), group `🪤 HTTP Catcher`
+  dan rule port HTTP polos (80, 8080, 8880, 2052, 2082, 2086, 2095) sebelum rule CDN, sehingga trafik Cloudflare/CloudFront
+  ikut tertangkap.
+- **Inspector Live** dapat menjalankan penangkap sekaligus; laporan `koneksi_<waktu>.md` mendapat bagian *Path HTTP tertangkap*
+  dan **Kandidat bug berpath** (`host/path`) yang bisa langsung ditempel ke Uji Bug > Lazy. Rekaman mentah: `path_<waktu>.jsonl`.
+  Lihat [docs/sniffer.md](docs/sniffer.md).
+
+### Batasan
+- Path HTTPS **tidak** ditangkap (tanpa MITM/sertifikat palsu); hanya host:port dan SNI. Config dan penangkap belum diuji
+  dengan Box/Nikki/OpenClash di perangkat; yang teruji: tes lokal dengan origin tiruan.
+
 ## [0.6.0] - 2026-11-26
 
 ### Ditambahkan

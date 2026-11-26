@@ -377,7 +377,7 @@ def _ips(g, top=3):
     return ", ".join(shown) + (f" +{extra}" if extra > 0 else "")
 
 
-def render_markdown(rows, source="", min_download=1):
+def render_markdown(rows, source="", min_download=1, path_events=None):
     rows = list(rows)
     groups, total, dropped = aggregate_ok(rows, min_download)
     ok_conns = total - dropped
@@ -390,7 +390,7 @@ def render_markdown(rows, source="", min_download=1):
           f"- Trafik: ↑ {human_bytes(up)} · ↓ {human_bytes(down)} · total {human_bytes(up + down)}", ""]
     if not groups:
         L += ["_Tidak ada koneksi yang menerima data pada rekaman ini._", ""]
-        return "\n".join(L)
+        return "\n".join(L + _path_section(path_events))
 
     by_app = {}
     for g in groups:
@@ -439,13 +439,24 @@ def render_markdown(rows, source="", min_download=1):
           "> Catatan: \"kandidat\" artinya host itu membalas data, bukan jaminan gratis atau bisa dipakai sebagai bug-host. "
           "Bukti paling kuat hanya kalau rekaman diambil di SIM **tanpa kuota reguler**; uji ulang tiap host sebelum dipakai. "
           "Koneksi dengan \"respons kecil\" atau \"HTTP polos\" bisa berupa redirect/halaman operator, jadi jangan langsung dipercaya.", ""]
-    return "\n".join(L)
+    return "\n".join(L + _path_section(path_events))
 
 
-def export_markdown(rows, path, source="", min_download=1):
+def _path_section(events):
+    """Bagian laporan dari penangkap path (httpcatch.py); kosong kalau tidak ada event."""
+    if not events:
+        return []
+    try:
+        import httpcatch
+    except ImportError:
+        return []
+    return ["", "---", ""] + httpcatch.render_markdown(events, "penangkap path (httpcatch.py)").splitlines() + [""]
+
+
+def export_markdown(rows, path, source="", min_download=1, path_events=None):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
-        f.write(render_markdown(rows, source, min_download))
+        f.write(render_markdown(rows, source, min_download, path_events))
     return path
 
 

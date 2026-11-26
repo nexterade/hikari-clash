@@ -10,7 +10,37 @@ Config khusus **mengintip koneksi**, bukan menerowongnya: **tanpa node, tanpa pr
 | **2. Inspector Live** | Membaca `/connections` dari core yang sedang jalan, mencetak koneksi baru (mode ringkas atau detail), lalu ringkasan sesi dan ekspor CSV/JSON/**Markdown** ke `hasil/sniffer/` |
 | **3. Update CIDR CDN** | Unduh daftar resmi Cloudflare (`cloudflare.com/ips-v4`, `ips-v6`) dan CloudFront (AWS `ip-ranges.json`, layanan `CLOUDFRONT`) ke cache lokal. Memakai kuota reguler, ukuran `ip-ranges.json` beberapa MB |
 
+| **4. Penangkap Path** | Proxy lokal `httpcatch.py` yang mencatat **URL path**, redirect (`Location`), status dan header CDN dari HTTP polos. Lihat [Penangkap path](#penangkap-path-bug-catcher) |
+
 **Laporan Markdown (`koneksi_<waktu>.md`):** dibuat otomatis saat sesi inspector disimpan. Isinya hanya koneksi yang **menerima data** (download > 0 B), koneksi serupa digabung (aplikasi + protokol + port + host + chain; IP-nya dikumpulkan), upload dan download dijumlahkan, lalu ditutup dengan daftar kandidat SNI, Address (`host:port`), dan wildcard domain format rule-set Mihomo. Kolom Catatan menandai `HTTP polos`, `respons kecil` (bisa redirect/halaman operator), `host dari DNS, bukan SNI`, dan `tanpa SNI`. Untuk rekaman lama: `python3 sniffer.py laporan koneksi_XXXX.json [keluaran.md]` (JSON atau CSV). Kandidat bukan jaminan gratis; buktinya paling kuat kalau direkam di SIM tanpa kuota reguler.
+
+## Penangkap path (bug catcher)
+
+Sniffer Mihomo hanya melihat **host** (SNI / header Host); **path tidak pernah terlihat**. Penangkap (`httpcatch.py`) menyelipkan proxy kecil di jalur HTTP polos dan mencatat tiap permintaan beserta balasannya:
+
+| Dicatat | Contoh |
+|---|---|
+| Metode + Host + **path** (+ query) | `GET xlsmart.co.id /` |
+| Status + **`Location`** (tujuan redirect) | `302 → https://xlsmart.co.id/id` |
+| Content-Type, Server, User-Agent | `text/html`, `cloudflare` |
+| Petunjuk CDN dari header | `cf-ray` → Cloudflare, `x-amz-cf-id` → CloudFront |
+| Handshake TLS (hanya SNI + ALPN) | `instagram.com` |
+
+**Cara pakai**
+1. *Generate Config* → jawab `y` pada **Aktifkan penangkap path** (alamat default `127.0.0.1`, port `7893`). Config mendapat proxy `🪤 Catcher`, group `🪤 HTTP Catcher`, dan rule port HTTP polos (80, 8080, 8880, 2052, 2082, 2086, 2095) **sebelum** rule CDN.
+2. Pasang config, jalankan core, lalu buka **Inspector Live** dan jawab `y` pada *Tangkap URL path HTTP juga* (atau menu **[4] Penangkap Path** untuk penangkap saja).
+3. Buka situs/aplikasi. Tiap permintaan tampil `⇢ 12:00:01 GET host/path → 302 ➜ https://host/id`. Saat berhenti, laporan `.md` + `.jsonl` disimpan di `hasil/sniffer/`.
+4. Bagian **Kandidat bug berpath** berisi `host/path` (mis. `xlsmart.co.id/id`, `www.line.me/en`) dari redirect dan path yang dibalas < 400; tempel ke **Uji Bug > Lazy** agar metode ganti path dicoba otomatis.
+
+Tanpa config: atur **proxy HTTP** aplikasi/perangkat ke alamat penangkap (menerima `CONNECT` maupun URL absolut), atau `python3 httpcatch.py --port 7893 --log sesi.jsonl --report sesi.md`.
+
+**Batasan (jujur)**
+- **Path HTTPS tidak terlihat.** Isinya terenkripsi dan penangkap sengaja **tidak** melakukan MITM (tanpa sertifikat palsu). Untuk HTTPS yang tercatat hanya host:port dan SNI.
+- **Loop trafik:** penangkap berjalan di Termux dan menyambung keluar sebagai trafik biasa. Kalau Box mencegat Termux juga, koneksinya masuk penangkap lagi (loop). **Kecualikan paket Termux di Box** (`proxy_mode` blacklist). Menyambung ke dirinya sendiri ditolak (508), tetapi loop lewat Box tidak bisa dideteksi dari dalam.
+- **Penangkap harus jalan lebih dulu.** Bila group `🪤 HTTP Catcher` memilih `🪤 Catcher` padahal penangkap mati, trafik HTTP polos gagal; pilih `DIRECT` di dashboard.
+- Parsing berhenti (byte tetap diteruskan) untuk badan *chunked*, WebSocket/Upgrade, dan badan tanpa `Content-Length`. Path di Host/SNI non-standar (domain fronting) dicatat apa adanya dari header Host.
+- Petunjuk CDN dari header bisa dipalsukan atau dihapus; bukan bukti.
+- **Belum diuji di perangkat** dengan Box/Nikki/OpenClash; yang teruji: tes lokal (origin tiruan, redirect, keep-alive, HEAD, SNI). Sintaks `DST-PORT` satu port per rule dipakai agar aman.
 
 **Data per koneksi:** alamat tujuan (IP:port), host hasil **sniff** (SNI/Host) dan host dari **DNS** (dipisah), subdomain, domain dasar, GeoIP negara, ASN (bila diaktifkan), CDN (Cloudflare / CloudFront) beserta **dasar deteksinya** (`rule` / `ip` / `host`), rule + chain, sumber, aplikasi (Box: nama package), dan trafik ↑/↓.
 

@@ -17,6 +17,7 @@ hikari-clash/
 ├── nodetest.py                  # Tester node proxy                  (menu 5)
 ├── routetest.py                 # Tester route domain/IP             (menu 5)
 ├── sniffer.py                   # Inspector koneksi (Sniffer Only)   (menu 5)
+├── httpcatch.py                 # Penangkap path HTTP ("bug catcher"): proxy lokal, catat path/redirect/status   (menu 5 → 5 → 4)
 ├── template/
 │   ├── sniffer_only.yaml        # Config pengintai: tanpa node, semua DIRECT (bukan template konversi; tidak ikut glob config_v*.yaml)
 │   ├── config_v1.3.yaml         # Template master terbaru (netral; 💫 FALLBACK, 🗃️ UPDATER; URL test Cloudflare)

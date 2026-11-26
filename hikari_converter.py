@@ -3056,8 +3056,37 @@ def detect_system_dns(run=None):
     return []
 
 
+CATCHER_PORT = 7893                                     # httpcatch.py: proxy penangkap path HTTP polos
+CATCHER_HTTP_PORTS = (80, 8080, 8880, 2052, 2082, 2086, 2095)
+CATCHER_PROXY = "🪤 Catcher"
+CATCHER_GROUP = "🪤 HTTP Catcher"
+
+
+def add_catcher(cfg, host="127.0.0.1", port=CATCHER_PORT, enabled=True):
+    """Selipkan penangkap path ke config sniffer: proxy http -> host:port, group pilihan, dan rule port HTTP polos
+    (setelah rule LAN/DNS, SEBELUM rule CDN supaya trafik Cloudflare/CloudFront ikut tertangkap). enabled=False:
+    DIRECT jadi pilihan awal group (aman kalau penangkap belum jalan). Return catatan."""
+    cfg.setdefault("proxies", [])
+    cfg["proxies"] = [x for x in cfg["proxies"] if not (isinstance(x, dict) and x.get("name") == CATCHER_PROXY)]
+    cfg["proxies"].append({"name": CATCHER_PROXY, "type": "http", "server": host, "port": int(port)})
+    groups = cfg.setdefault("proxy-groups", [])
+    groups[:] = [g for g in groups if g.get("name") != CATCHER_GROUP]
+    groups.append({"name": CATCHER_GROUP, "type": "select",
+                   "proxies": [CATCHER_PROXY, "DIRECT"] if enabled else ["DIRECT", CATCHER_PROXY]})
+    rules = cfg.setdefault("rules", [])
+    rules[:] = [r for r in rules if CATCHER_GROUP not in str(r)]
+    idx = 0
+    for i, r in enumerate(rules):
+        if str(r).startswith(("GEOIP,", "DST-PORT,53", "DST-PORT,853")):
+            idx = i + 1
+    for j, pt in enumerate(CATCHER_HTTP_PORTS):
+        rules.insert(idx + j, f"DST-PORT,{pt},{CATCHER_GROUP}")
+    return [f"Penangkap path: port HTTP polos ({', '.join(map(str, CATCHER_HTTP_PORTS))}) → proxy http {host}:{port} "
+            f"(jalankan penangkap di Sniffer Only > Inspector atau menu Penangkap Path; Termux harus dikecualikan dari Box)"]
+
+
 def build_sniffer_config(platform, with_asn=False, secret_mode="template", template_path=None, operator_dns=None,
-                         operator_scope="provider"):
+                         operator_scope="provider", catcher=None):
     """Config pengintai dari template/sniffer_only.yaml, disesuaikan per platform. Return (cfg, notes).
     Tanpa profil ISP (kuota reguler) dan tanpa provider. geodata-mode dipaksa false: GeoIP di /connections
     hanya terisi di mode mmdb. operator_dns (list IP, opsional): domain aplikasi provider di-resolve lewat
@@ -3086,14 +3115,17 @@ def build_sniffer_config(platform, with_asn=False, secret_mode="template", templ
         rules = cfg.setdefault("rules", [])
         rules.insert(1 if rules and str(rules[0]).startswith("GEOIP,ZZ") else 0, "IP-ASN,0,DIRECT")
         notes.append("ASN aktif: core akan mengunduh GeoLite2-ASN.mmdb (kuota reguler) saat start")
+    if catcher:
+        chost, cport = catcher if isinstance(catcher, (tuple, list)) else (catcher, CATCHER_PORT)
+        notes += add_catcher(cfg, chost, cport)
     return cfg, notes
 
 
 def write_sniffer_config(platform, with_asn=False, secret_mode="template", out_root=None, operator_dns=None,
-                         operator_scope="provider"):
+                         operator_scope="provider", catcher=None):
     """Tulis hasil/sniffer/<platform>/config.yaml. Return (path, issues, notes)."""
     cfg, notes = build_sniffer_config(platform, with_asn, secret_mode, operator_dns=operator_dns,
-                                      operator_scope=operator_scope)
+                                      operator_scope=operator_scope, catcher=catcher)
     out_dir = os.path.join(out_root or SNIFFER_OUT_DIR, platform)
     os.makedirs(out_dir, exist_ok=True)
     path = os.path.join(out_dir, "config.yaml")
@@ -3184,10 +3216,17 @@ def _sniffer_generate():
         print(f"  {C.DIM}[2] dibutuhkan untuk paket aplikasi (Spotify, Instagram, dsb): CDN-nya hanya dijawab DNS operator.{C.RESET}")
         print(f"  {C.DIM}Risiko [2]: kalau DNS itu tidak terjangkau (pindah jaringan), semua koneksi gagal resolve.{C.RESET}")
         scope = "provider" if ask(f"{C.YELLOW}Cakupan (1/2, Enter = 2) ❯{C.RESET} ").strip() == "1" else "all"
+    catcher = None
+    print(f"\n  {C.DIM}Penangkap path: proxy lokal (httpcatch.py) yang mencatat URL PATH, redirect (Location) dan status")
+    print(f"  untuk HTTP polos (port 80/8080/...). Path HTTPS tidak terlihat. Berjalan di perangkat yang sama dengan Box.{C.RESET}")
+    if ask(f"{C.YELLOW}Aktifkan penangkap path? (y/N) ❯{C.RESET} ").strip().lower() == "y":
+        chost = ask(f"  Alamat penangkap (Enter = 127.0.0.1) ❯ ").strip() or "127.0.0.1"
+        craw = ask(f"  Port penangkap   (Enter = {CATCHER_PORT}) ❯ ").strip()
+        catcher = (chost, int(craw) if craw.isdigit() and 1 <= int(craw) <= 65535 else CATCHER_PORT)
     spinner("Membangun config", 0.4)
     try:
         path, issues, notes = write_sniffer_config(plat, with_asn, "random" if rnd else "template",
-                                                   operator_dns=op_ips or None, operator_scope=scope)
+                                                   operator_dns=op_ips or None, operator_scope=scope, catcher=catcher)
     except Exception as e:
         err(f"Gagal membuat config: {type(e).__name__}: {e}"); pause(); return
     ok(f"Config {PLATFORMS[plat]['label']} → {os.path.relpath(path, SCRIPT_DIR)}")
@@ -3213,6 +3252,24 @@ def _sniffer_controller_defaults():
     return "127.0.0.1:9090", "hikari"
 
 
+def _catcher_start(hc, stamp):
+    """Tanya alamat/port lalu jalankan penangkap path di thread latar. Return CatchServer atau None."""
+    host = ask(f"  Listen penangkap (Enter = 127.0.0.1; 0.0.0.0 bila Box di perangkat lain) ❯ ").strip() or "127.0.0.1"
+    raw = ask(f"  Port penangkap    (Enter = {CATCHER_PORT}) ❯ ").strip()
+    port = int(raw) if raw.isdigit() and 1 <= int(raw) <= 65535 else CATCHER_PORT
+
+    def show(e, phase):
+        if phase == "done":
+            print(f"  {C.MAGENTA}⇢{C.RESET} {hc.fmt_event(e)}")
+
+    try:
+        srv = hc.CatchServer(host, port, os.path.join(SNIFFER_OUT_DIR, f"path_{stamp}.jsonl"), show).start()
+    except OSError as e:
+        err(str(e)); return None
+    ok(f"Penangkap path aktif di {host}:{srv.port} {C.DIM}(HTTP polos saja; HTTPS hanya SNI){C.RESET}")
+    return srv
+
+
 def _sniffer_inspect():
     sn = _import_tool("sniffer")
     if not sn:
@@ -3223,6 +3280,12 @@ def _sniffer_inspect():
     a = ask(f"  Controller (Enter = {addr}) ❯ ").strip() or addr
     sec = ask(f"  Secret     (Enter = {secret or 'kosong'}) ❯ ").strip() or secret
     detail = ask(f"  Tampilan   [1] ringkas  [2] detail (Enter=2) ❯ ").strip() != "1"
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    catch = None
+    hc = _import_tool("httpcatch")
+    if hc and ask(f"  Tangkap URL path HTTP juga? (y/N) ❯ ").strip().lower() == "y":
+        print(f"  {C.DIM}Config sniffer harus dibuat dengan 'penangkap path' aktif (Generate Config) agar trafik lewat sini.{C.RESET}")
+        catch = _catcher_start(hc, stamp)
     base = sn.controller_url(a)
     ranges = sn.CdnRanges(SNIFFER_OUT_DIR)
     if not ranges.cloudfront:
@@ -3230,6 +3293,8 @@ def _sniffer_inspect():
     try:
         first = sn.fetch_connections(base, sec)      # snapshot pertama ikut diproses, tidak dibuang
     except sn.SnifferError as e:
+        if catch:
+            catch.stop()
         err(str(e)); pause(); return
     tracker = sn.Tracker(ranges)
     print(f"\n  {C.GREEN}Terhubung{C.RESET} ke {base}. Buka aplikasi/situs yang mau diintip. {C.DIM}Ctrl+C untuk berhenti.{C.RESET}\n{sep(50)}")
@@ -3252,17 +3317,26 @@ def _sniffer_inspect():
     except KeyboardInterrupt:
         print()
     rows = tracker.all()
+    path_events = []
+    if catch:
+        path_events = catch.log.snapshot()
+        catch.stop()
     print(f"{sep(50)}\n{C.BOLD}Ringkasan sesi{C.RESET}")
     for ln in sn.summary_lines(rows):
         print(f"  {ln}")
-    if not rows:
+    if path_events:
+        plain = [e for e in path_events if not e.get("tls")]
+        print(f"  Path HTTP tertangkap: {len(plain)} permintaan")
+        for c in hc.bug_candidates(path_events)[:8]:
+            print(f"    {C.GREEN}•{C.RESET} {c}  {C.DIM}(kandidat bug berpath){C.RESET}")
+    if not rows and not path_events:
         pause(); return
     if ask(f"\n{C.YELLOW}Simpan ke hasil/sniffer/? (y/N) ❯{C.RESET} ").strip().lower() == "y":
-        stamp = time.strftime("%Y%m%d_%H%M%S")
         try:
             p1 = sn.export_csv(rows, os.path.join(SNIFFER_OUT_DIR, f"koneksi_{stamp}.csv"))
             p2 = sn.export_json(rows, os.path.join(SNIFFER_OUT_DIR, f"koneksi_{stamp}.json"))
-            p3 = sn.export_markdown(rows, os.path.join(SNIFFER_OUT_DIR, f"koneksi_{stamp}.md"), source=f"sesi {stamp}")
+            p3 = sn.export_markdown(rows, os.path.join(SNIFFER_OUT_DIR, f"koneksi_{stamp}.md"), source=f"sesi {stamp}",
+                                    path_events=path_events)
             ok(f"{os.path.relpath(p1, SCRIPT_DIR)}"); ok(f"{os.path.relpath(p2, SCRIPT_DIR)}")
             ok(f"{os.path.relpath(p3, SCRIPT_DIR)}  {C.DIM}(hanya yang menerima data, digabung){C.RESET}")
         except OSError as e:
@@ -3285,12 +3359,47 @@ def _sniffer_update_cidr():
     pause()
 
 
+def _sniffer_catcher():
+    hc = _import_tool("httpcatch")
+    if not hc:
+        pause(); return
+    clear_screen(); banner("MISC"); section("Sniffer Only — Penangkap Path")
+    print(f"  {C.DIM}Proxy lokal yang mencatat URL PATH, redirect (Location) dan status dari HTTP polos.")
+    print(f"  Masuk lewat config sniffer (Generate Config > penangkap path) atau atur proxy HTTP aplikasi ke alamat ini.")
+    print(f"  Path HTTPS tidak terlihat (tanpa MITM); untuk HTTPS hanya SNI.{C.RESET}\n")
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    srv = _catcher_start(hc, stamp)
+    if not srv:
+        pause(); return
+    print(f"  {C.DIM}Buka situs/aplikasi yang mau diintip. Ctrl+C untuk berhenti.{C.RESET}\n{sep(50)}")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print()
+    events = srv.log.snapshot()
+    srv.stop()
+    print(f"{sep(50)}\n  {len([e for e in events if not e.get('tls')])} permintaan HTTP · {len([e for e in events if e.get('tls')])} TLS")
+    for c in hc.bug_candidates(events)[:10]:
+        print(f"    {C.GREEN}•{C.RESET} {c}  {C.DIM}(kandidat bug berpath){C.RESET}")
+    if events:
+        try:
+            mdp = os.path.join(SNIFFER_OUT_DIR, f"path_{stamp}.md")
+            with open(mdp, "w", encoding="utf-8") as f:
+                f.write(hc.render_markdown(events, f"sesi {stamp}"))
+            ok(f"{os.path.relpath(mdp, SCRIPT_DIR)}  {C.DIM}(+ path_{stamp}.jsonl){C.RESET}")
+        except OSError as e:
+            err(f"Gagal menyimpan: {e}")
+    pause()
+
+
 def feature_misc_sniffer():
     while True:
         clear_screen(); banner("MISC"); section("Sniffer Only")
         print(f"  {C.CYAN}[1]{C.RESET} Generate Config          {C.DIM}(tanpa node, semua DIRECT){C.RESET}")
         print(f"  {C.CYAN}[2]{C.RESET} Inspector Live           {C.DIM}(detail tiap koneksi dari /connections){C.RESET}")
         print(f"  {C.CYAN}[3]{C.RESET} Update CIDR CDN          {C.DIM}(Cloudflare + CloudFront, resmi){C.RESET}")
+        print(f"  {C.CYAN}[4]{C.RESET} Penangkap Path           {C.DIM}(URL path + redirect HTTP polos){C.RESET}")
         print(f"  {C.CYAN}[0]{C.RESET} Kembali\n{sep(50)}")
         pilih = ask(f"{C.YELLOW}Pilih menu ❯{C.RESET} ").strip()
         if pilih == "0":
@@ -3298,6 +3407,7 @@ def feature_misc_sniffer():
         elif pilih == "1": _sniffer_generate()
         elif pilih == "2": _sniffer_inspect()
         elif pilih == "3": _sniffer_update_cidr()
+        elif pilih == "4": _sniffer_catcher()
         else:
             err("Pilihan tidak valid."); time.sleep(0.8)
 
