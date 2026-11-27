@@ -3,6 +3,11 @@
 Versi aplikasi mengikuti [Semantic Versioning](https://semver.org/lang/id/); aturan bump ada di [CLAUDE.md](CLAUDE.md).
 Penomoran template (`config_v*.yaml`) terpisah — lihat [docs/template-changelog.md](docs/template-changelog.md).
 
+## [0.11.3] - 2026-11-27
+
+### Diubah
+- README: panduan instalasi disederhanakan jadi satu blok perintah per platform (tanpa komentar `#`), memakai `pip install -r requirements.txt`, plus perintah pembuat shortcut `hikari-clash`.
+
 ## [0.11.2] - 2026-11-27
 
 ### Diubah

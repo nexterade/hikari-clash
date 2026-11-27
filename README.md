@@ -122,37 +122,32 @@ Pipeline: `template → parse YAML → patch per platform → validasi → tulis
 
 ```bash
 pkg update && pkg install python git -y
-pip install pyyaml
-termux-setup-storage          # izinkan akses penyimpanan
+termux-setup-storage
+git clone https://github.com/nexterade/hikari-clash.git /storage/emulated/0/Project/hikari-clash
+cd /storage/emulated/0/Project/hikari-clash
+pip install -r requirements.txt
+python3 hikari_converter.py
+```
+
+Shortcut, setelah itu cukup ketik `hikari-clash`:
+
+```bash
+printf '#!/bin/sh\ncd /storage/emulated/0/Project/hikari-clash && exec python3 hikari_converter.py "$@"\n' > "$PREFIX/bin/hikari-clash"
+chmod +x "$PREFIX/bin/hikari-clash"
 ```
 
 **Linux / OpenWrt / PC:**
 
 ```bash
-pip install pyyaml            # butuh Python 3.8+
-```
-
-**Opsional — konversi `.mrs`** (menu 5 → 1) butuh kompresi zstd. Python 3.14+ sudah bawaan; selain itu pasang salah satu: `pkg install zstd` (Termux), `pip install zstandard`, atau `opkg install libzstd zstd` (OpenWrt). Cek statusnya di menu `5 → 5`.
-
-**Ambil project:**
-
-Termux (langsung clone ke penyimpanan internal, tanpa pindah manual; folder `Project` boleh diganti sesuka hati):
-
-```bash
-git clone https://github.com/nexterade/hikari-clash.git /storage/emulated/0/Project/hikari-clash
-cd /storage/emulated/0/Project/hikari-clash
-python3 hikari_converter.py
-```
-
-Linux / OpenWrt / PC:
-
-```bash
 git clone https://github.com/nexterade/hikari-clash.git
 cd hikari-clash
+pip install -r requirements.txt
 python3 hikari_converter.py
 ```
 
-> Di Termux, clone ke `/storage/emulated/0/...` (butuh `termux-setup-storage` dulu), **jangan** di `~` biar tidak kena `PermissionError` dan gampang diakses file manager. Perhatikan `cd` memakai `/` di depan (`/storage/...`); tanpa itu path-nya dianggap relatif dan gagal. Kalau git mengeluh *dubious ownership*, jalankan `git config --global --add safe.directory '*'`.
+> Di Termux jangan clone ke `~` (kena `PermissionError`).
+
+Opsional, konversi `.mrs` (menu 5 → 1) butuh zstd. Python 3.14+ sudah bawaan; selain itu: `pkg install zstd` (Termux), `pip install zstandard`, atau `opkg install libzstd zstd` (OpenWrt). Cek di menu `5 → 5`.
 
 ---
 
