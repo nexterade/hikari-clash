@@ -1013,6 +1013,34 @@ class Profile(unittest.TestCase):
         self.assertIn("| T | sni=a.com | 2026-11-26 10:00:00 |", md)
         self.assertIn("## ✨ Baru lolos (1)", md)
 
+    def test_markdown_starts_with_terminal_report_then_summary(self):
+        vs = self.variants({"a.com"})
+        text = b.result_text(vs)
+        self.assertIn("  T\n    config asli : ✓ OK 80ms", text)
+        self.assertIn("    SNI         : 1/3 lolos", text)
+        self.assertIn("      ✓ sni=a.com", text)
+        self.assertTrue(text.rstrip().endswith("1 varian lolos dari 3 diuji"))
+        md = b.report_markdown(vs, ["mihomo"], (), {"when": "2026-11-27 10:00:00"})
+        self.assertLess(md.index("## Hasil Uji"), md.index("## Ringkasan per node"))   # laporan terminal dulu, ringkasan di bawahnya
+        self.assertLess(md.index("## Ringkasan per node"), md.index("## Rincian lengkap per node"))
+        self.assertIn("```text\n  T\n", md)
+        self.assertNotIn("\x1b[", md)                                                   # tanpa kode warna
+
+    def test_result_text_lazy_matches_terminal_layout(self):
+        vs, _ = b.build_lazy_variants([LZ_NODE], ["x.example"])
+        for v in vs:
+            v["ok"] = v["kind"] == "base" or v["fields"]["lazy"]["method"] in ("bug-sni", "http-direct")
+            v["ms"] = 120 if v["ok"] else None
+            v["reason"] = "" if v["ok"] else "x"
+        text = b.result_text(vs, lazy_limit=1)
+        self.assertIn("    Lazy        : ", text)
+        self.assertIn("      ✓ bug-sni · port 443 120ms", text)
+        self.assertIn("        sni     x.example", text)
+        self.assertIn("... +", text)                                                     # dibatasi lazy_limit
+        self.assertIn("      per metode (S=server B=bug IP=IP edge W=bug.server):", text)
+        self.assertIn("      ✓ bug-sni", text)
+        self.assertIn("      ✗ bug-addr", text)
+
     def test_markdown_escapes_pipes(self):
         self.assertEqual(b._table(["a"], [["x|y"]])[2], "| x\\|y |")
 

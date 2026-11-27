@@ -251,6 +251,44 @@ class Core(Base):
             core = si.collect_core({"online": False}, prefs)
         self.assertEqual((core["alive"], core["label"]), (True, "Box"))
 
+    def test_norm_hostport(self):
+        for raw, want in (("0.0.0.0:9090", "127.0.0.1:9090"), ("http://127.0.0.1:9091/ui", "127.0.0.1:9091"),
+                          (":9095", "127.0.0.1:9095"), ('"0.0.0.0:9090"', "127.0.0.1:9090"), ("10.0.0.2", "10.0.0.2:9090"),
+                          ("", "")):
+            self.assertEqual(si._norm_hostport(raw), want, raw)
+
+    def test_core_on_nondefault_controller_found_via_remembered(self):
+        # Inspector Live memakai controller/secret lain (config sniffer): banner tidak boleh bilang "Tidak Aktif"
+        hp = self.serve(MIHOMO, secret="rahasia-sniffer")
+        dead, dead_hp = fake_server({})
+        dead.shutdown(); dead.server_close()
+        self.addCleanup(si._REMEMBERED.clear)
+        si.remember_controller(hp, "rahasia-sniffer")
+        prefs = {**si.load_prefs(), "api": "", "platform": "box"}
+        with mock.patch.object(si, "DEFAULT_API", dead_hp), mock.patch.object(si, "generated_controllers", return_value=[]), \
+                mock.patch.object(si, "core_process_running", return_value=False):
+            core = si.collect_core({"online": True, "kind": "data", "gateway": None}, prefs)
+        self.assertEqual((core["alive"], core["host"]), (True, hp))
+        self.assertEqual(si.status_text(core), ("Box Aktif", "ok"))
+
+    def test_core_found_via_generated_config_controller(self):
+        hp = self.serve(MIHOMO, secret="acak123")
+        dead, dead_hp = fake_server({})
+        dead.shutdown(); dead.server_close()
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "hasil", "sniffer", "box"))
+            with open(os.path.join(d, "hasil", "sniffer", "box", "sniffer-three.yaml"), "w", encoding="utf-8") as f:
+                f.write(f'mixed-port: 7890\nexternal-controller: "0.0.0.0:{hp.rsplit(":", 1)[1]}"\nsecret: "acak123"\n')
+            self.assertEqual(si.generated_controllers(d), [(f"127.0.0.1:{hp.rsplit(':', 1)[1]}", "acak123")])
+            prefs = {**si.load_prefs(), "api": "", "platform": "box"}
+            with mock.patch.object(si, "DEFAULT_API", dead_hp), mock.patch.object(si, "SCRIPT_DIR", d), \
+                    mock.patch.object(si, "core_process_running", return_value=False):
+                core = si.collect_core({"online": True, "kind": "data", "gateway": None}, prefs)
+        self.assertTrue(core["alive"])
+
+    def test_generated_controllers_ignores_missing_dir(self):
+        self.assertEqual(si.generated_controllers("/nonexistent-hikari"), [])
+
     def test_remote_router_core_gets_router_label(self):
         # core di router (gateway), bukan di perangkat ini; labelnya dari heuristik LuCI
         def fake_probe(hp, secrets):
@@ -268,6 +306,7 @@ class Core(Base):
         seen = []
         net = {"online": True, "kind": "data", "gateway": "10.0.0.1"}
         with mock.patch.object(si, "probe_controller", side_effect=lambda hp, s: seen.append(hp)), \
+                mock.patch.object(si, "generated_controllers", return_value=[]), \
                 mock.patch.object(si, "core_process_running", return_value=False):
             core = si.collect_core(net, {**si.load_prefs(), "platform": "box"})
         self.assertFalse(core["alive"])

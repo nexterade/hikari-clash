@@ -40,7 +40,7 @@ Menu utama menampilkan panel info perangkat tepat di bawah banner; layar lain me
 | **IP** | IP lokal dari interface aktif; IP publik dari `ipwho.is` (cadangan `ipinfo.io`) | Kalau Box aktif, IP publik = IP **keluar** (node), bukan IP operator |
 | **Lokasi** | Hasil lookup yang sama (kota, negara, ISP) | Butuh internet |
 | **Jaringan** | Nama interface: `wlan*` → WiFi, `rmnet*`/`ccmni*` → Data, `eth*`/`br-*` → LAN | Operator seluler dari `getprop`. HP **dual SIM** menampilkan semua SIM (`XL Axiata / by.U`) karena Android tanpa root tidak memberi tahu SIM data; pastikan lewat pengaturan **Operator** |
-| **Status** | `external-controller` Mihomo: `Box Aktif` / `Nikki Aktif` / `OpenClash Aktif`, atau `... Tidak Aktif` | Cek `127.0.0.1:9090` dulu, lalu router di gateway `:9090` (Termux di HP + Nikki di router). Secret dicoba otomatis dari template |
+| **Status** | `external-controller` Mihomo: `Box Aktif` / `Nikki Aktif` / `OpenClash Aktif`, atau `... Tidak Aktif` | Cek `127.0.0.1:9090` dulu, lalu router di gateway `:9090` (Termux di HP + Nikki di router). Secret dicoba otomatis dari template. Controller + secret dari config hasil generate terbaru dan dari Inspector Live (selama sesi) ikut dicoba |
 | **Usage** | [NetStat](netstat.md) (hari ini, WiFi vs Data, sisa kuota) → bila tidak jalan: total sesi core → counter interface sejak boot | Sumbernya selalu ditulis di dalam kurung |
 | **Etc** | Versi core, mode, jumlah koneksi, uptime perangkat, ping ke `cp.cloudflare.com` | Baris yang datanya tidak ada dilewati |
 

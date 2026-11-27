@@ -6,7 +6,7 @@ Mengendalikan modul **Box for Root** (BFR) langsung dari Hikari lewat `su`: star
 
 ## Aturan keselamatan
 
-- **Persetujuan tiap perubahan.** Sebelum menjalankan apa pun yang mengubah perangkat, Hikari menampilkan perintah root-nya (`# su -c …`) dan bertanya `Setuju? (y/N)`. Default tidak. Jawaban asal ditolak.
+- **Persetujuan tiap perubahan.** Sebelum menjalankan apa pun yang mengubah perangkat, Hikari menampilkan perintah root-nya (`# su -c …`) dan bertanya `Setuju? (Y/n)`. **Enter = setuju** (default ya, berlaku di semua pertanyaan y/n menu ini, termasuk tawaran restart/start dan "Pasang ke Box sekarang?" setelah generate); `n` membatalkan. Karena perintah selalu tampil dulu, baca sebelum menekan Enter. Jawaban asal ditolak.
 - Popup izin root (Magisk / KernelSU / APatch) bisa muncul saat menu dibuka — itu dari manajer root-mu, bukan Hikari. Info banner (menu utama) tetap **tidak** memanggil `su`.
 - Perintah berhenti di kegagalan pertama; rc dan keluarannya ditampilkan.
 - `settings.ini` selalu dicadangkan ke `settings.ini.hikari.bak` sebelum diubah, dan hasilnya dibaca ulang untuk memastikan perubahannya benar.

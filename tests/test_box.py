@@ -247,6 +247,26 @@ class MenuFlows(Device):
         self.assertEqual(self.calls_text().split(), ["service", "start", "iptables", "enable", "iptables", "disable", "service", "stop"])
         self.assertIn("su -c", out)                                   # perintah ditampilkan sebelum dijalankan
 
+    def test_enter_means_yes_on_consent_and_offers(self):
+        # semua prompt y/n di Box Utilities default Ya: Enter = setuju (perintah tetap ditampilkan dulu)
+        out, left = self.run_flow(h.feature_box_menu, ["1", "", "", "2", "", "", "0"])
+        self.assertEqual(left, [])
+        self.assertEqual(self.calls_text().split(), ["service", "start", "iptables", "enable", "iptables", "disable", "service", "stop"])
+        with open(h.__file__, encoding="utf-8") as fh:
+            src = fh.read()
+        box_part = src[src.index("def _box_run("):src.index("def main(")]
+        self.assertNotIn("(y/N)", box_part)                            # tidak ada lagi prompt default-tidak di Box Utilities
+
+    def test_enter_installs_activates_and_restarts(self):
+        self.generate("xl")
+        bx.run_steps(bx.start_cmds(bx.box_info()))
+        _w(self.calls, "")
+        # 5 → pilih 1 → Enter x5: setuju pasang, jadikan aktif, setuju settings, restart, setuju restart → pause
+        out, left = self.run_flow(h.feature_box_menu, ["5", "1", "", "", "", "", "", "", "0"])
+        self.assertEqual(left, [])
+        self.assertTrue(bx.verify_active("xl.yaml", bx.box_info()))
+        self.assertEqual(self.calls_text().split(), ["iptables", "disable", "service", "stop", "service", "start", "iptables", "enable"])
+
     def test_declined_consent_runs_nothing(self):
         out, left = self.run_flow(h.feature_box_menu, ["1", "n", "", "0"])
         self.assertEqual(self.calls_text(), "")

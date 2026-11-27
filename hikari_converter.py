@@ -2080,7 +2080,7 @@ def _generate_and_report(proxies, n_emoji=0, default_plat=None, default_target=N
         print(f"   2. folder {C.BOLD}proxy_provider/{C.RESET} & {C.BOLD}rule_provider/{C.RESET} → {C.BOLD}/etc/openclash/{C.RESET}")
     if plat == "box":
         bx = _import_tool("boxutil")
-        if bx and bx.can_use_root() and ask_yn(f"\n{C.YELLOW}Pasang ke Box sekarang (root)? (y/N) ❯{C.RESET} "):
+        if bx and bx.can_use_root() and ask_yn(f"\n{C.YELLOW}Pasang ke Box sekarang (root)? (Y/n) ❯{C.RESET} ", default=True):
             box_install_flow(out_dir, operator)
             return
     pause("Tekan Enter untuk kembali ke menu...")
@@ -3692,6 +3692,12 @@ def _sniffer_inspect():
         if catch:
             catch.stop()
         err(str(e)); pause(); return
+    try:
+        import sysinfo
+        sysinfo.remember_controller(a, sec)            # banner tahu controller ini hidup (bisa beda dari 127.0.0.1:9090)
+        sysinfo.clear_cache()
+    except ImportError:
+        pass
     tracker = sn.Tracker(ranges)
     print(f"\n  {C.GREEN}Terhubung{C.RESET} ke {base}. Buka aplikasi/situs yang mau diintip. {C.DIM}Ctrl+C untuk berhenti.{C.RESET}\n{sep(50)}")
     try:
@@ -4110,7 +4116,7 @@ def _box_run(bx, title, cmds, timeout=90, confirm=True):
     print(f"\n  {C.BOLD}{title}{C.RESET} {C.DIM}(dijalankan sebagai root){C.RESET}")
     for c in cmds:
         print(f"    {C.DIM}# su -c{C.RESET} {truncate(c, 110)}")
-    if confirm and not ask_yn(f"{C.YELLOW}Setuju? (y/N) ❯{C.RESET} "):
+    if confirm and not ask_yn(f"{C.YELLOW}Setuju? (Y/n) ❯{C.RESET} ", default=True):
         warn("Dibatalkan."); return False
     good, log = bx.run_steps(cmds, timeout)
     for c, rc, out in log:
@@ -4166,7 +4172,7 @@ def box_activate(bx, info, name, restart_hint=True):
         return False
     ok(f"name_clash_config = {name}")
     info["config_name"] = name
-    if restart_hint and bx.is_running(info)[0] and ask_yn(f"{C.YELLOW}Box sedang berjalan. Restart agar config baru dipakai? (y/N) ❯{C.RESET} "):
+    if restart_hint and bx.is_running(info)[0] and ask_yn(f"{C.YELLOW}Box sedang berjalan. Restart agar config baru dipakai? (Y/n) ❯{C.RESET} ", default=True):
         _box_restart(bx, info)
     return True
 
@@ -4216,7 +4222,7 @@ def box_install_flow(src_dir=None, operator=None, bx=None, info=None):
     if running:
         if ask_yn(f"{C.YELLOW}Restart Box agar perubahan dipakai? (Y/n) ❯{C.RESET} ", default=True):
             _box_restart(bx, info)
-    elif activated and ask_yn(f"{C.YELLOW}Start Box sekarang? (y/N) ❯{C.RESET} "):
+    elif activated and ask_yn(f"{C.YELLOW}Start Box sekarang? (Y/n) ❯{C.RESET} ", default=True):
         _box_run(bx, "Start Box", bx.start_cmds(info), 120, confirm=False)
     pause()
 
@@ -4240,7 +4246,7 @@ def _box_view_config(bx, info):
         print(f"  {'proxy-groups / rules':<20}: {s['groups']} / {s['rules']}")
         for k, v in s["providers"].items():
             print(f"  {C.DIM}provider {k:<14} → {v}{C.RESET}")
-    if ask_yn(f"\n{C.YELLOW}Tampilkan teks penuh? (y/N) ❯{C.RESET} "):
+    if ask_yn(f"\n{C.YELLOW}Tampilkan teks penuh? (Y/n) ❯{C.RESET} ", default=True):
         lines = text.splitlines()
         for i in range(0, len(lines), 40):
             print("\n".join(lines[i:i + 40]))
@@ -4266,7 +4272,7 @@ def _box_dashboard(bx, info):
         rc, _ = bx.run_root(f"[ -d {bx.q(ui_path)} ] && [ -n \"$(ls -A {bx.q(ui_path)} 2>/dev/null)\" ]", 15)
         if rc != 0:
             warn(f"Folder dashboard {ui_path} kosong/tidak ada.")
-            if ask_yn(f"{C.YELLOW}Pasang dashboard UI lewat box.tool upxui? (y/N) ❯{C.RESET} "):
+            if ask_yn(f"{C.YELLOW}Pasang dashboard UI lewat box.tool upxui? (Y/n) ❯{C.RESET} ", default=True):
                 _box_run(bx, "Pasang dashboard UI", [f"{info['box_dir']}/scripts/box.tool upxui"], 300, confirm=False)
     if not bx.is_running(info)[0]:
         warn("Box tidak berjalan — dashboard baru bisa dibuka setelah Start.")

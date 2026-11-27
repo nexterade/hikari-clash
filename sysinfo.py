@@ -7,6 +7,7 @@ dengan tenang (nilai kosong tampil sebagai "-"). Tidak pernah memanggil `su`, ja
 Otomatis mati kalau stdout bukan terminal (pipe / tes) kecuali HIKARI_INFO diisi eksplisit.
 """
 
+import glob
 import ipaddress
 import json
 import os
@@ -439,18 +440,74 @@ def remote_label(ip, prefs):
     return "Mihomo"
 
 
+_REMEMBERED = []          # [(host:port, secret)] controller yang terbukti hidup di sesi ini (mis. dari Inspector Live)
+
+
+def _norm_hostport(raw):
+    """'http://0.0.0.0:9090/ui' -> '127.0.0.1:9090'; ':9090' -> '127.0.0.1:9090'; tanpa port -> :9090. Kosong -> ''."""
+    s = re.sub(r"^[a-z]+://", "", str(raw or "").strip().strip("\"'"), flags=re.I).split("/")[0]
+    if not s:
+        return ""
+    host, sep_, port = s.rpartition(":") if not s.endswith("]") else (s, "", "")
+    if not sep_ or not port.isdigit():
+        host, port = s, "9090"
+    host = host.strip("[]")
+    if host in ("", "0.0.0.0", "::", "*"):
+        host = "127.0.0.1"
+    return f"{host}:{port}"
+
+
+def remember_controller(hostport, secret=""):
+    """Ingat controller yang baru terbukti hidup supaya banner tidak salah menyatakan core mati."""
+    hp = _norm_hostport(hostport)
+    if hp:
+        _REMEMBERED[:] = [(h, s) for h, s in _REMEMBERED if h != hp]
+        _REMEMBERED.insert(0, (hp, secret or ""))
+
+
+def generated_controllers(root=None, limit=6):
+    """[(host:port, secret)] dari config hasil generate terbaru (hasil/**/*.yaml): external-controller & secret-nya
+    bisa beda dari template (mis. config sniffer)."""
+    base = os.path.join(root or SCRIPT_DIR, "hasil")
+    try:
+        files = sorted(glob.glob(os.path.join(base, "**", "*.yaml"), recursive=True), key=os.path.getmtime, reverse=True)
+    except OSError:
+        return []
+    out = []
+    for fp in files[:40]:
+        try:
+            with open(fp, encoding="utf-8") as f:
+                head = f.read(20000)
+        except OSError:
+            continue
+        m = re.search(r"^external-controller:\s*[\"']?([^\"'#\s]+)", head, re.M)
+        if not m:
+            continue
+        s = re.search(r"^secret:\s*[\"']?([^\"'#\s]*)", head, re.M)
+        item = (_norm_hostport(m.group(1)), s.group(1) if s else "")
+        if item[0] and item not in out:
+            out.append(item)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def collect_core(net, prefs):
     """{alive, label, where, ...}. Urutan: controller diset -> lokal 127.0.0.1 -> proses lokal -> router (gateway)."""
     plat = detect_platform(prefs)
     local_label = PLATFORM_NAMES.get(plat, "Mihomo")
+    remembered, generated = list(_REMEMBERED), generated_controllers()
     secrets = []
-    for s in ("", prefs.get("secret") or "", template_secret(), "hikari"):
+    for s in ("", prefs.get("secret") or "", *(s for _, s in remembered), template_secret(), "hikari",
+              *(s for _, s in generated)):
         if s not in secrets:
             secrets.append(s)
     cands = []
     if prefs.get("api"):
         cands.append(prefs["api"])
+    cands += [h for h, _ in remembered]
     cands.append(DEFAULT_API)
+    cands += [h for h, _ in generated]
     gw = (net or {}).get("gateway")
     if gw and (net or {}).get("kind") in ("wifi", "lan", "other"):
         cands.append(f"{gw}:9090")

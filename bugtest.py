@@ -1685,6 +1685,59 @@ def _table(head, rows):
 MD_ROW_LIMIT = 40
 
 
+def result_text(variants, limit=12, lazy_limit=5):
+    """Hasil uji sebagai teks polos, sama dengan tampilan terminal (tanpa warna): per node config asli, jumlah lolos
+    per field, varian tercepat, dan tabel per metode untuk Lazy."""
+    names = {}
+    for v in variants:
+        names.setdefault(v["base"], v["base_name"])
+    out = []
+
+    def ms(v):
+        return f"{v['ms']}ms" if v["ms"] else ""
+
+    for bi in sorted(names):
+        base = next((v for v in variants if v["base"] == bi and v["kind"] == "base"), None)
+        out.append(f"  {names[bi]}")
+        if base:
+            if base["ok"]:
+                out.append(f"    config asli : ✓ OK {ms(base)}".rstrip())
+            else:
+                out.append(f"    config asli : ✗ gagal {base['reason']}")
+        for kind in RESULT_KINDS:
+            rows = [v for v in variants if v["base"] == bi and v["kind"] == kind]
+            if not rows:
+                continue
+            good = sorted((v for v in rows if v["ok"]), key=lambda v: (v["ms"] or 10 ** 9, v["id"]))
+            label = FIELD_LABEL.get(kind, "Gabungan")
+            out.append(f"    {label:<11} : {len(good)}/{len(rows)} lolos")
+            if kind == "lazy":
+                for v in good[:lazy_limit]:
+                    lz = v["fields"]["lazy"]
+                    out.append(f"      ✓ {lz['method']} · port {lz['port']} {ms(v)}".rstrip())
+                    out.append(f"        address {lz['addr']}")
+                    out.append(f"        host    {lz['host'] or '-'}")
+                    out.append(f"        sni     {lz['sni'] or '-'}")
+                    if lz.get("path"):
+                        out.append(f"        path    {lz['path']}")
+                if len(good) > lazy_limit:
+                    out.append(f"      ... +{len(good) - lazy_limit} lainnya (lihat bug-ok.yaml)")
+                out.append("      per metode (S=server B=bug IP=IP edge W=bug.server):")
+                for r in lazy_summary(rows):
+                    out.append(f"      {'✓' if r['ok'] else '✗'} {r['method']:<18} {r['ok']}/{r['tested']}")
+                continue
+            for v in good[:limit]:
+                out.append(f"      ✓ {describe_fields(v):<34} {ms(v):>7}".rstrip())
+            if len(good) > limit:
+                out.append(f"      ... +{len(good) - limit} lainnya (lihat bug-ok.yaml)")
+    n_ok = len(passing(variants))
+    n_tested = sum(1 for v in variants if v["kind"] != "base")
+    out += ["", f"  {n_ok} varian lolos dari {n_tested} diuji"]
+    if any(v["kind"] == "base" and not v["ok"] for v in variants) and n_ok == 0:
+        out.append("  Config asli juga gagal — server/UUID mungkin mati atau jaringan ini memblokirnya; varian ikut gagal karena itu.")
+    return "\n".join(out)
+
+
 def report_markdown(variants, modes, skipped=(), meta=None, recs=None, changes=None, operator=None):
     """Laporan Uji Bug dalam Markdown: tabel ringkasan, rekomendasi, perubahan dari riwayat, rincian per node."""
     meta = meta or {}
@@ -1701,6 +1754,8 @@ def report_markdown(variants, modes, skipped=(), meta=None, recs=None, changes=N
     tested = [v for v in variants if v["kind"] != "base"]
     n_ok = sum(1 for v in tested if v["ok"])
     L += [f"- **Hasil:** {n_ok} dari {len(tested)} varian lolos ({len(names)} node)", ""]
+
+    L += ["## Hasil Uji", "", "Sama dengan tampilan di terminal.", "", "```text", result_text(variants), "```", ""]
 
     L += ["## Ringkasan per node", ""]
     rows = []
@@ -1756,7 +1811,8 @@ def report_markdown(variants, modes, skipped=(), meta=None, recs=None, changes=N
                     [[r["method"], r["pattern"], f"{r['ok']}/{r['tested']}",
                       f"{r['best']} ms" if r["best"] else "—"] for r in sm]) + [""]
 
-    L += ["## Rincian per node", ""]
+    L += ["## Rincian lengkap per node", "",
+          "Tabel lengkap (sampai %d varian lolos per kelompok) dan alasan gagal terbanyak." % MD_ROW_LIMIT, ""]
     for bi in sorted(names):
         L += [f"### {names[bi]}", ""]
         base = next((v for v in variants if v["base"] == bi and v["kind"] == "base"), None)

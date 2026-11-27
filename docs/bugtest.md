@@ -131,7 +131,7 @@ Field **Phantom** menguji kandidat **domain bug** untuk klien PhantomNG (patch P
 | `custom-phantom.yaml` | Varian Phantom yang lolos (SNI = bug, Host = domain server) |
 | `bug-ok-phantom-uri.txt` | Varian Phantom sebagai link `sni=phantom:<server>:<bug>:rand` untuk **PhantomNG** (hanya dibuat bila ada varian Phantom yang lolos) |
 | `bug-best.yaml` | **Rekomendasi**: satu varian terbaik per node (hanya dibuat bila ada yang lolos) |
-| `report.md` | Laporan Markdown: tabel ringkasan per node, ⭐ rekomendasi, ⚠️ dulu lolos sekarang gagal, ✨ baru lolos, tabel metode Lazy, dan rincian per node (varian lolos dalam tabel; yang gagal dikelompokkan per alasan). Menggantikan `report.json` dan `report.txt` |
+| `report.md` | Laporan Markdown. Urutan: **Hasil Uji** (sama persis dengan tampilan terminal: config asli, lolos per field, varian tercepat, tabel per metode Lazy), lalu ringkasan per node, ⭐ rekomendasi, ⚠️ dulu lolos sekarang gagal, ✨ baru lolos, tabel metode Lazy, dan **rincian lengkap per node** (varian lolos dalam tabel; yang gagal dikelompokkan per alasan). Menggantikan `report.json` dan `report.txt` |
 
 ## Profil bug per operator dan rekomendasi
 

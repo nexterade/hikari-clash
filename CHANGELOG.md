@@ -3,6 +3,17 @@
 Versi aplikasi mengikuti [Semantic Versioning](https://semver.org/lang/id/); aturan bump ada di [CLAUDE.md](CLAUDE.md).
 Penomoran template (`config_v*.yaml`) terpisah — lihat [docs/template-changelog.md](docs/template-changelog.md).
 
+## [0.13.0] - 2026-11-27
+
+### Diubah
+- **Box Utilities: semua pertanyaan y/n default Ya** (`Setuju? (Y/n)`, tawaran restart/start, "Tampilkan teks penuh?", "Pasang dashboard UI?", dan "Pasang ke Box sekarang?" setelah generate). Enter = setuju; perintah root tetap ditampilkan sebelum ditanya.
+- **`report.md` dimulai dengan "Hasil Uji" yang sama persis dengan tampilan terminal** (config asli, lolos per field, varian tercepat, tabel per metode Lazy), baru diikuti ringkasan, rekomendasi, perubahan dari riwayat, dan rincian lengkap per node.
+
+## [0.12.1] - 2026-11-27
+
+### Diperbaiki
+- Banner menyatakan "Box Tidak Aktif" padahal Box jalan, setelah memakai Inspector Live. Status hanya dicek ke `127.0.0.1:9090` dengan secret template; kalau Box memakai controller/secret lain (mis. config sniffer), core dianggap mati (di Termux tanpa root proses core tidak terlihat). Sekarang controller yang dipakai di Inspector Live diingat selama sesi, dan `external-controller` + `secret` dari config hasil generate terbaru (`hasil/**/*.yaml`) ikut dicoba.
+
 ## [0.12.0] - 2026-11-27
 
 ### Ditambahkan
