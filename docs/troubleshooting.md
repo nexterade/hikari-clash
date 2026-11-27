@@ -11,7 +11,7 @@
 | `PyYAML belum terpasang` | Library belum ada | `pip install pyyaml` |
 | Semua node dari `active.yaml` tidak punya ping / *timed out*, padahal node yang sama jalan di DarkTunnel/HTTP Custom | `skip-cert-verify: false` + SNI bug (mis. `instagram.com`) → sertifikat server tidak cocok → handshake TLS gagal. Biasanya karena link membawa `allowInsecure=0` / `insecure=0` | Pakai script versi ini (SNI custom otomatis `true`, juga saat regenerate node lama). Manual: ubah ke `skip-cert-verify: true` di `proxy/active.yaml` lalu reload core |
 | Dashboard minta secret | Secret default `hikari`, acak, atau dari LuCI | Lihat ringkasan setelah generate; di Nikki/OpenClash pakai secret dari LuCI |
-| Emoji node tidak sesuai `emoji.json` | JSON rusak (mis. koma berlebih di akhir) | Script sekarang memberi peringatan saat start & di Check Status; perbaiki filenya atau Reset lewat menu `2 → 4 → R` |
+| Emoji node tidak sesuai `emoji.json` | JSON rusak (mis. koma berlebih di akhir), atau `emoji.json` masih format lama (`emojis: [...]`, acak) | Script memberi peringatan saat start & di Check Status; perbaiki filenya atau Reset lewat menu `2 → 4 → R` |
 | Port bentrok / core gagal start | Dua port sama | Menu `4` (Validasi) menunjukkan port ganda |
 | Rule-provider gagal download | GitHub raw lambat/terblokir | Mode Offline, atau pakai `proxy:` pada provider |
 | `transport 'xhttp' belum didukung` | Transport belum ada di parser | Pakai node dengan ws/grpc/tcp, atau tambahkan manual di YAML |

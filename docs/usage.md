@@ -61,18 +61,26 @@ Catatan: info otomatis mati kalau output bukan terminal (pipe/tes), data di-cach
 2. **Preview**: lihat daftar node. Aksi: `[T]` tambah · `[H]` hapus (mis. `1,3`) · `[U]` **uji bug/custom SNI·Host·Address** (banyak sekaligus, mode TCP/Mihomo/V2Ray — lihat [bugtest.md](bugtest.md)) · `[L]` lanjut · `[B]` batal.
    Baris yang gagal ditampilkan beserta alasannya (UUID kosong, transport belum didukung, dll). Varian yang lolos uji muncul sebagai baris `VARIAN` dan ikut diproses saat `[L]`.
 3. **Pilih platform**: `B` Box · `N` Nikki · `O` OpenClash.
-4. **Pilih provider**: `active.yaml` atau `trial.yaml`. Jika sudah berisi node, pilih **Ganti** atau **Tambahkan**.
-5. **Mode rule-provider**: ikuti template (auto-update GitHub) atau **Offline** (file lokal saja).
-6. **Secret dashboard**: `[1]` ikuti template (default: `hikari`) atau `[2]` acak.
-7. Selesai. Script menampilkan lokasi hasil, hasil validasi, dan secret yang dipakai.
+4. **Pilih provider**: `active.yaml` atau `trial.yaml`.
+5. **Operator / ISP**: pilih `[1]` xl · `[2]` axis · `[3]` smartfren · `[4]` telkomsel · `[5]` byu · `[6]` indosat · `[7]` three, atau `[8]` ketik nama sendiri. Operator menentukan nama file dan folder provider:
+   - config → `hasil/full_config_<platform>/<operator>.yaml` (mis. `xl.yaml`, `byu.yaml`) — **bukan** `config.yaml`, jadi tiap generate tidak saling menimpa;
+   - provider node → `proxy/<operator>/active.yaml` (OpenClash: `proxy_provider/<operator>/`), dan path di dalam config otomatis ikut (`/proxy/xl/`, `/proxy/axis/`, `/proxy/smartfren/`, `/proxy/telkomsel/`, `/proxy/byu/`, `/proxy/indosat/`, `/proxy/three/`);
+   - Enter = operator yang terakhir dipakai (tersimpan di `settings.json`); belum ada → wajib diisi;
+   - `xl` otomatis memasang DNS ISP XL (Nikki/OpenClash); operator lain tanpa DNS ISP.
+   Jika `<operator>/<provider>` sudah berisi node, pilih **Ganti** atau **Tambahkan**. `free.yaml` dan `subs.yaml` tetap bersama di `proxy/` (bukan per operator).
+6. **Mode rule-provider**: ikuti template (auto-update GitHub) atau **Offline** (file lokal saja).
+7. **Secret dashboard**: `[1]` ikuti template (default: `hikari`) atau `[2]` acak.
+8. Selesai. Script menampilkan lokasi hasil, hasil validasi, dan secret yang dipakai.
+
+> **Input asal ditolak.** Semua pilihan di alur ini memakai validasi: jawaban di luar pilihan (mis. `x`, `g`) menampilkan pesan dan ditanya ulang — tidak lagi diproses diam-diam sebagai Enter/default. Enter hanya berlaku di prompt yang menampilkan `Enter=...`.
 
 ## Regenerate dari node tersimpan
 
-Menu `1 → 3`. Kamu mengubah template, DNS, profil ISP, emoji, atau secret dan ingin config baru **tanpa paste URI lagi**? Script membaca node dari `hasil/full_config_*/proxy*/active.yaml` dan `trial.yaml`, lalu membangun ulang `config.yaml` + ruleset dari template yang sedang aktif.
+Menu `1 → 3`. Kamu mengubah template, DNS, profil ISP, emoji, atau secret dan ingin config baru **tanpa paste URI lagi**? Script membaca node dari `hasil/full_config_*/proxy*/<operator>/active.yaml` dan `trial.yaml` (juga layout lama `proxy/active.yaml`), lalu membangun ulang `<operator>.yaml` + ruleset dari template yang sedang aktif.
 
-- **`[1]…[n]`** — pilih satu sumber (mis. `nikki/active.yaml`, lengkap dengan jumlah node & waktu ubah). Enter = tetap di platform/provider yang sama, jadi file node-nya **tidak** ditanya timpa/tambah. Pilih platform lain untuk menyalin node ke sana (format node sama di semua platform).
-- **`[A]`** — bangun ulang semua sumber sekaligus dengan pilihan baku: rule-provider & secret ikut template, profil ISP dari `settings.json`.
-- Nama node dipakai apa adanya (emoji tidak ditambah lagi), dan node di provider lain tidak disentuh.
+- **`[1]…[n]`** — pilih satu sumber (mis. `nikki/xl/active.yaml`, lengkap dengan jumlah node & waktu ubah). Operator dipakai dari folder asal (Enter), atau pilih operator lain untuk menyalin node ke sana. Enter = tetap di platform/provider yang sama, jadi file node-nya **tidak** ditanya timpa/tambah. Pilih platform lain untuk menyalin node ke sana (format node sama di semua platform).
+- **`[A]`** — bangun ulang semua sumber sekaligus dengan pilihan baku: rule-provider & secret ikut template, operator dari folder asal masing-masing.
+- Nama node dipakai apa adanya; hanya node yang **belum** berawalan emoji (mis. varian baru dari Uji Bug) yang diberi emoji sesuai metodenya. Node di provider lain tidak disentuh.
 - Setelah memilih satu sumber ada aksi **`[U]` Uji bug / custom** (SNI · Host · Address) sebelum `[L]` Lanjut — varian yang lolos ditambahkan (atau mengganti node asli) lalu ikut ditulis ke provider. Lihat [bugtest.md](bugtest.md).
 
 ## Free node (☘️ FREE NODE)
@@ -94,4 +102,16 @@ Menu `1 → 2`: paste YAML, atau pilih file provider hasil generate. Hasil bisa 
   - **Profil ISP** — lihat [DNS leak & provider XL Axiata](tips.md).
   - **Mode Anti-Blokir** (`2 → 3 → 5`) — mengubah `nameserver`, `fallback`, `proxy-server-nameserver`, `direct-nameserver` jadi DoH berbasis IP (Cloudflare/Google), sehingga tidak ada query DNS polos port 53 yang bisa dibelokkan ISP. Pilihan `[2]` membiarkan `proxy-server-nameserver` apa adanya (kalau node timeout). Idempoten: kalau sudah sama, tidak mengubah apa-apa.
   - Aturan per field: `default-nameserver` **harus IP** (ditolak kalau bukan); `nameserver`/`fallback` diperingatkan kalau tidak terenkripsi; `proxy-server-nameserver` diperingatkan kalau terenkripsi semua. Selalu ada preview `-`/`+` dan konfirmasi sebelum menulis, plus backup `.bak`.
-- **Emoji Node**: lihat daftar emoji, `[A]` tambah, `[H]` hapus (nomor), `[T]` nyalakan/matikan, `[R]` reset ke bawaan. Tersimpan di `emoji.json`.
+- **Emoji Node**: emoji **mengikuti metode node** (bukan acak). `[E]` ubah emoji satu metode (nomor + emoji baru), `[T]` nyalakan/matikan, `[R]` reset ke bawaan. Tersimpan di `emoji.json` (`{"enabled": true, "methods": {...}}`; format lama `emojis: [...]` diabaikan dengan peringatan).
+
+  | Emoji | Metode | Emoji | Metode |
+  |---|---|---|---|
+  | 🌠 | node asli, tanpa custom | 🏙️ | `wildcard` |
+  | 🌌 | node asli CloudFront, tanpa custom | 🌇 | `wildcard-sni` (juga dipakai `wildcard-ip`) |
+  | 🎬 | `bug-sni` | 🌁 | `host-bug` |
+  | 💭 | `bug-addr` | 🪲 | `host-bug-sni` |
+  | 🐬 | `ip-edge` | 🧸 | `ganti-path` (semua `path-*`) |
+  | ☕ | `sni-ip` (juga `host-ip`) | 🏞️ | `bug-addr-sni` |
+  | 🏖️ | `ip-bug-sni` | | |
+
+  Metode dibaca dari tag di nama node hasil Uji Bug (`Nama [bug-sni:instagram.com:443]`). Node CloudFront dikenali dari server/SNI/Host `*.cloudfront.net` atau nama yang memuat "cloudfront". Varian `http-*` mengikuti metode induknya; tag `[port:…]`, `[alpn:…]`, `[fp:…]`, `[combo]` tetap dianggap node asli.

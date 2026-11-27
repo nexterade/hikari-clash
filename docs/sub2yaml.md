@@ -10,7 +10,7 @@ Menu `1 → 4`. Mengisi `proxy/free.yaml` — provider `📄 Free` yang dipakai 
 2. **Platform**: `B` Box · `N` Nikki · `O` OpenClash · `A` semua (default). Nama folder mengikuti platform: `proxy/` untuk Box & Nikki, `proxy_provider/` untuk OpenClash.
 3. **Mode**: **Ganti** isi `free.yaml` (yang lama dibackup `.bak`) atau **Tambahkan**.
 4. Node divalidasi: wajib punya `name`, `type`, `server`, `port` (yang tidak lengkap dibuang dan dilaporkan); nama yang bentrok dengan group template atau node di `active.yaml`/`trial.yaml` otomatis jadi `Nama (2)`. Emoji acak **tidak** ditambahkan (nama dari sub2yaml dipakai apa adanya).
-5. `config.yaml` tidak perlu di-generate ulang. Restart core (atau update provider dari dashboard) supaya node baru terbaca. Generate/Regenerate berikutnya tidak menimpa `free.yaml`.
+5. Config (`<operator>.yaml`) tidak perlu di-generate ulang. Restart core (atau update provider dari dashboard) supaya node baru terbaca. Generate/Regenerate berikutnya tidak menimpa `free.yaml`.
 
 ### sub2yaml.py
 

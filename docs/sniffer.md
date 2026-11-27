@@ -6,13 +6,17 @@ Config khusus **mengintip koneksi**, bukan menerowongnya: **tanpa node, tanpa pr
 
 | Submenu | Fungsi |
 |---|---|
-| **1. Generate Config** | Bangun `hasil/sniffer/<platform>/config.yaml` dari `template/sniffer_only.yaml` untuk Box / Nikki / OpenClash (opsional: ASN, secret acak). Hanya `config.yaml` yang perlu disalin ke perangkat; folder provider tidak ada |
-| **2. Inspector Live** | Membaca `/connections` dari core yang sedang jalan, mencetak koneksi baru (mode ringkas atau detail), lalu ringkasan sesi dan ekspor CSV/JSON/**Markdown** ke `hasil/sniffer/` |
+| **1. Generate Config** | Bangun `hasil/sniffer/<platform>/sniffer-<nama>.yaml` dari `template/sniffer_only.yaml` untuk Box / Nikki / OpenClash (opsional: ASN, secret acak). Kamu ditanya **nama**: `three` → `sniffer-three.yaml`; Enter = `config.yaml` (menimpa yang lama). Hanya file itu yang perlu disalin ke perangkat; folder provider tidak ada |
+| **2. Inspector Live** | Membaca `/connections` dari core yang sedang jalan, mencetak koneksi baru (mode ringkas atau detail), lalu ringkasan sesi dan ekspor CSV/JSON/**Markdown** ke `hasil/sniffer/`. Sebelum menyimpan kamu ditanya **nama hasil**: `instagram` → `instagram_20261126_132543.csv/.json/.md` (Enter = `koneksi`) |
 | **3. Update CIDR CDN** | Unduh daftar resmi Cloudflare (`cloudflare.com/ips-v4`, `ips-v6`) dan CloudFront (AWS `ip-ranges.json`, layanan `CLOUDFRONT`) ke cache lokal. Memakai kuota reguler, ukuran `ip-ranges.json` beberapa MB |
 
 | **4. Penangkap Path** | Proxy lokal `httpcatch.py` yang mencatat **URL path**, redirect (`Location`), status dan header CDN dari HTTP polos. Lihat [Penangkap path](#penangkap-path-bug-catcher) |
 
-**Laporan Markdown (`koneksi_<waktu>.md`):** dibuat otomatis saat sesi inspector disimpan. Isinya hanya koneksi yang **menerima data** (download > 0 B), koneksi serupa digabung (aplikasi + protokol + port + host + chain; IP-nya dikumpulkan), upload dan download dijumlahkan, lalu ditutup dengan daftar kandidat SNI, Address (`host:port`), dan wildcard domain format rule-set Mihomo. Kolom Catatan menandai `HTTP polos`, `respons kecil` (bisa redirect/halaman operator), `host dari DNS, bukan SNI`, dan `tanpa SNI`. Untuk rekaman lama: `python3 sniffer.py laporan koneksi_XXXX.json [keluaran.md]` (JSON atau CSV). Kandidat bukan jaminan gratis; buktinya paling kuat kalau direkam di SIM tanpa kuota reguler.
+**Laporan Markdown (`<nama>_<tanggal>_<jam>.md`, mis. `instagram_20261126_132543.md`; tanpa nama: `koneksi_…`):** dibuat otomatis saat sesi inspector disimpan. Isinya hanya koneksi yang **menerima data** (download > 0 B), koneksi serupa digabung (aplikasi + protokol + port + host + chain; IP-nya dikumpulkan), upload dan download dijumlahkan, lalu ditutup dengan daftar kandidat SNI, Address (`host:port`), dan wildcard domain format rule-set Mihomo. Kolom Catatan menandai `HTTP polos`, `respons kecil` (bisa redirect/halaman operator), `host dari DNS, bukan SNI`, dan `tanpa SNI`. Untuk rekaman lama: `python3 sniffer.py laporan <nama>_XXXX.json [keluaran.md]` (JSON atau CSV). Kandidat bukan jaminan gratis; buktinya paling kuat kalau direkam di SIM tanpa kuota reguler.
+
+**Dipakai lagi di Uji Bug:** file hasil sniffer (`.json`, atau `.csv` bila tidak ada `.json`, dan log path `.jsonl`; laporan `.md` tidak ditampilkan) muncul sebagai daftar bernomor di Uji Bug → [Mode Lazy dan field biasa](bugtest.md#kandidat-dari-hasil-sniffer). Hanya koneksi yang menerima data yang diambil.
+
+Log penangkap path memakai nama `<nama>_path_<tanggal>_<jam>.md/.jsonl` (tanpa nama: `path_…`).
 
 ## Penangkap path (bug catcher)
 

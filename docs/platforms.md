@@ -14,20 +14,22 @@ Salin **semua isi folder** ke:
 /data/adb/box/clash/
 ```
 
+Config bernama sesuai operator (`xl.yaml`, `byu.yaml`, …). Kalau Box-mu membaca `config.yaml`, salin/ganti nama file operator yang mau dipakai jadi `config.yaml` (dugaan: sesuaikan dengan `settings.ini` Box-mu).
+
 ### 🐧 Nikki → `hasil/full_config_nikki/`
 
 | Salin | Ke |
 |---|---|
-| `config.yaml` | `/etc/nikki/profiles/` |
+| `<operator>.yaml` (mis. `xl.yaml`) | `/etc/nikki/profiles/` |
 | folder `proxy/` dan `ruleset/` | `/etc/nikki/run/` |
 
-*Jangan dibalik — Nikki memisahkan profile dan file yang berjalan.*
+*Jangan dibalik — Nikki memisahkan profile dan file yang berjalan.* Folder `proxy/` berisi satu subfolder per operator (`proxy/xl/active.yaml`); path di `xl.yaml` sudah menunjuk ke sana.
 
 ### 🐧 OpenClash → `hasil/full_config_openclash/`
 
 | Salin | Ke |
 |---|---|
-| `config.yaml` | `/etc/openclash/config/` |
+| `<operator>.yaml` (mis. `xl.yaml`) | `/etc/openclash/config/` |
 | folder `proxy_provider/` dan `rule_provider/` | `/etc/openclash/` |
 
 Pindahkan file ke OpenWrt pakai SFTP/WinSCP/scp, atau file manager yang punya akses root.

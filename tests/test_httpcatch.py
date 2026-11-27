@@ -337,7 +337,7 @@ class SnifferIntegration(unittest.TestCase):
         probe.close()
         origin = Origin()
         self.addCleanup(origin.close)
-        answers = iter(["", str(port)])
+        answers = iter(["", str(port), "instagram"])
         calls = {"n": 0}
         real_sleep = time.sleep
 
@@ -368,6 +368,7 @@ class SnifferIntegration(unittest.TestCase):
             names = sorted(os.listdir(d))
             self.assertTrue(any(n.endswith(".md") for n in names), names)
             self.assertTrue(any(n.endswith(".jsonl") for n in names), names)
+            self.assertTrue(all(n.startswith("instagram_path_") for n in names), names)   # nama pilihan pengguna
             with open(os.path.join(d, [n for n in names if n.endswith(".md")][0]), encoding="utf-8") as f:
                 md = f.read()
             self.assertIn("xlsmart.co.id/id", md)

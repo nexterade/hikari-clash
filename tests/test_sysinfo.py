@@ -440,7 +440,8 @@ class Rendering(Base):
         net = {**self.NET, "iface": "rmnet_data1", "kind": "data", "operator": "XL Axiata / by.U"}
         t = self.text(self.info(net=net), {**si.load_prefs(), "operator": "by.U"})
         self.assertIn("Jaringan : Data  (rmnet_data1 · by.U)", t)
-        self.assertNotIn("XL Axiata", t)
+        jar = [ln for ln in t.splitlines() if ln.strip().startswith("Jaringan")][0]
+        self.assertNotIn("XL Axiata", jar)                  # baris Lokasi memang memuat ISP dari lookup IP publik
         os.environ["HIKARI_OPERATOR"] = "Telkomsel"
         self.assertEqual(si.load_prefs()["operator"], "Telkomsel")
 

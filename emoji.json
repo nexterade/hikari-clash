@@ -1,26 +1,18 @@
 {
   "enabled": true,
-  "emojis": [
-    "🦊",
-    "🎿",
-    "💟",
-    "🩻",
-    "💭",
-    "🔮",
-    "🐠",
-    "🍂",
-    "🐣",
-    "🧢",
-    "🪭",
-    "🍞",
-    "☕",
-    "🍕",
-    "🍟",
-    "🛋️",
-    "🏙️",
-    "🌃",
-    "🌠",
-    "🌌",
-    "⛱️"
-  ]
+  "methods": {
+    "original": "🌠",
+    "cloudfront": "🌌",
+    "bug-sni": "🎬",
+    "bug-addr": "💭",
+    "ip-edge": "🐬",
+    "sni-ip": "☕",
+    "bug-addr-sni": "🏞️",
+    "ip-bug-sni": "🏖️",
+    "wildcard": "🏙️",
+    "wildcard-sni": "🌇",
+    "host-bug": "🌁",
+    "host-bug-sni": "🪲",
+    "ganti-path": "🧸"
+  }
 }

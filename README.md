@@ -49,7 +49,7 @@ Ngatur config Mihomo di tiga platform itu ribet: port beda, path beda, fitur And
 | 🔄 **Dua arah** | `vless://` `vmess://` `trojan://` ⇄ YAML Clash. Support WS, gRPC, HTTPUpgrade, H2, TLS, **Reality + flow/fingerprint**, ALPN, `allowInsecure`, IPv6 |
 | 🎯 **Preview & edit** | Tabel preview, hapus/tambah node, baris gagal ditampilkan **lengkap dengan alasannya** |
 | 🧬 **Anti duplikat** | Nama node kembar otomatis jadi `Nama (2)`, `Nama (3)` |
-| 🦊 **Emoji otomatis** | Tiap node diawali emoji acak: `Singapore` → `🦊 Singapore`. Daftar emoji bisa diedit di menu |
+| 🌠 **Emoji per metode** | Emoji node mengikuti metodenya, bukan acak: `Singapore` → `🌠 Singapore` (asli), `🌌` (CloudFront), `🎬` bug-sni, `💭` bug-addr, … Bisa diedit di menu |
 | 🛠️ **Auto-patch platform** | Port, DNS listen, `tun`, path provider, controller, rule WIFI disesuaikan per platform |
 | ✅ **Validator** | Cek group/rule/provider, file provider, port bentrok, controller tanpa secret, DNS rawan, dll |
 | 🔌 **Mode Offline** | Ubah semua rule-provider `http` → `file` (tanpa update GitHub) |
@@ -104,7 +104,7 @@ flowchart LR
     Z --> V
 ```
 
-Pipeline: `template → parse YAML → patch per platform → validasi → tulis config.yaml`.
+Pipeline: `template → parse YAML → patch per platform → validasi → tulis <operator>.yaml` (mis. `xl.yaml`, `byu.yaml`).
 
 ---
 
@@ -176,13 +176,13 @@ python hikari_converter.py
 [Q] Exit
 ```
 
-Alur singkat: **paste link** → **preview** → pilih **platform** (`B` Box · `N` Nikki · `O` OpenClash) dan provider → salin hasil dari `hasil/` ke perangkat.
+Alur singkat: **paste link** → **preview** → pilih **platform** (`B` Box · `N` Nikki · `O` OpenClash), provider, dan **operator** (xl, axis, smartfren, telkomsel, byu, indosat, three, atau nama sendiri) → salin hasil dari `hasil/` ke perangkat. Tiap operator punya file sendiri (`xl.yaml`) dan folder provider sendiri (`proxy/xl/`), jadi hasil beberapa operator tidak saling menimpa.
 
 | Platform | Folder hasil | Salin ke |
 |---|---|---|
 | 📱 Box | `hasil/full_config_box/` (semua isi) | `/data/adb/box/clash/` |
-| 🐧 Nikki | `hasil/full_config_nikki/` | `config.yaml` → `/etc/nikki/profiles/`; `proxy/` + `ruleset/` → `/etc/nikki/run/` |
-| 🐧 OpenClash | `hasil/full_config_openclash/` | `config.yaml` → `/etc/openclash/config/`; `proxy_provider/` + `rule_provider/` → `/etc/openclash/` |
+| 🐧 Nikki | `hasil/full_config_nikki/` | `<operator>.yaml` → `/etc/nikki/profiles/`; `proxy/` + `ruleset/` → `/etc/nikki/run/` |
+| 🐧 OpenClash | `hasil/full_config_openclash/` | `<operator>.yaml` → `/etc/openclash/config/`; `proxy_provider/` + `rule_provider/` → `/etc/openclash/` |
 
 Langkah rinci tiap menu: [docs/usage.md](docs/usage.md). Detail pemasangan & beda output per platform: [docs/platforms.md](docs/platforms.md).
 

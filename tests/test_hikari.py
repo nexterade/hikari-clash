@@ -43,43 +43,114 @@ class Paths(unittest.TestCase):
 
 
 class Emoji(unittest.TestCase):
+    EXPECT = {"original": "🌠", "cloudfront": "🌌", "bug-sni": "🎬", "bug-addr": "💭", "ip-edge": "🐬", "sni-ip": "☕",
+              "bug-addr-sni": "🏞️", "ip-bug-sni": "🏖️", "wildcard": "🏙️", "wildcard-sni": "🌇", "host-bug": "🌁",
+              "host-bug-sni": "🪲", "ganti-path": "🧸"}
+
+    def test_default_map_matches_spec(self):
+        self.assertEqual(h.DEFAULT_EMOJI_MAP, self.EXPECT)
+
     def test_emoji_json_valid_and_matches_default(self):
         with open(os.path.join(ROOT, "emoji.json"), encoding="utf-8") as f:
             data = json.load(f)                              # harus valid (dulu trailing comma)
-        self.assertEqual(data["emojis"], h.DEFAULT_EMOJIS)
-        self.assertEqual(len(h.DEFAULT_EMOJIS), 21)
-        self.assertNotIn("🧊", h.DEFAULT_EMOJIS)             # dipakai nama group 🧊 KEYRING (v1.2)
+        self.assertEqual(data["methods"], h.DEFAULT_EMOJI_MAP)
+        self.assertTrue(data["enabled"])
 
     def test_loaded_from_file_without_warning(self):
         cfg = h.load_emoji_cfg()
-        self.assertEqual(cfg["emojis"], h.DEFAULT_EMOJIS)
+        self.assertEqual(cfg["methods"], h.DEFAULT_EMOJI_MAP)
         self.assertEqual(h.EMOJI_WARNING, "")
 
     def test_broken_json_warns_not_silent(self):
         old = h.EMOJI_PATH
         with tempfile.TemporaryDirectory() as d:
-            for text, expect_list in (('{"enabled": true, "emojis": ["🦊", "🎿",]}', ["🦊", "🎿"]),
-                                      ("{rusak", h.DEFAULT_EMOJIS)):
+            for text, expect in (('{"enabled": true, "methods": {"original": "🦊",}}', "🦊"),
+                                 ("{rusak", h.DEFAULT_EMOJI_MAP["original"])):
                 p = os.path.join(d, "e.json")
                 open(p, "w", encoding="utf-8").write(text)
                 h.EMOJI_PATH = p
                 try:
-                    self.assertEqual(h.load_emoji_cfg()["emojis"], expect_list)
+                    self.assertEqual(h.load_emoji_cfg()["methods"]["original"], expect)
                     self.assertTrue(h.EMOJI_WARNING)
                 finally:
                     h.EMOJI_PATH = old
         h.load_emoji_cfg()
 
-    def test_no_clash_with_group_names(self):
-        tpl = h.load_template_cfg()
-        names = " ".join(str(g["name"]) for g in tpl["proxy-groups"]) + " " + " ".join(str(p["name"]) for p in tpl["proxies"])
-        for e in h.DEFAULT_EMOJIS:
-            self.assertNotIn(e, names)
+    def test_legacy_random_list_ignored_with_warning(self):
+        old = h.EMOJI_PATH
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "e.json")
+            open(p, "w", encoding="utf-8").write('{"enabled": true, "emojis": ["🦊", "🎿"]}')
+            h.EMOJI_PATH = p
+            try:
+                self.assertEqual(h.load_emoji_cfg()["methods"], h.DEFAULT_EMOJI_MAP)
+                self.assertIn("format lama", h.EMOJI_WARNING)
+            finally:
+                h.EMOJI_PATH = old
+        h.load_emoji_cfg()
 
-    def test_apply_emoji(self):
-        n = [h.convert_line(VLESS)]
+    def test_no_clash_with_group_names(self):
+        # nama LENGKAP node tidak boleh sama dengan nama group/proxy template; 🐬 (ip-edge, pilihan pemilik) memang
+        # sama dengan awalan group "🐬 HIJACK" — hanya mirip secara visual.
+        tpl = h.load_template_cfg()
+        names = {str(g["name"]) for g in tpl["proxy-groups"]} | {str(p["name"]) for p in tpl["proxies"]}
+        for e in h.DEFAULT_EMOJIS:
+            self.assertNotIn(f"{e} Singapore", names)
+        used = " ".join(n.split(" ")[0] for n in names)
+        for e in h.DEFAULT_EMOJIS:
+            if e != "🐬":
+                self.assertNotIn(e, used)
+
+    def _method(self, name, **extra):
+        return h.node_method(dict({"name": name, "server": "a.example", "type": "vless"}, **extra))
+
+    def test_apply_emoji_original_and_cloudfront(self):
+        n = [h.convert_line(VLESS), {"name": "CF", "server": "d111.cloudfront.net"},
+             {"name": "Plain", "server": "x", "servername": "dxyz.cloudfront.net"}]
         h.apply_emoji(n)
-        self.assertIn(n[0]["name"].split(" ")[0], h.DEFAULT_EMOJIS)
+        self.assertEqual(n[0]["name"].split(" ")[0], "🌠")
+        self.assertEqual(n[1]["name"], "🌌 CF")
+        self.assertEqual(n[2]["name"], "🌌 Plain")
+
+    def test_method_from_lazy_tag(self):
+        for tag, key in (("bug-sni:a.com:443", "bug-sni"), ("bug-addr:a.com:443", "bug-addr"),
+                         ("ip-edge:1.2.3.4:443", "ip-edge"), ("sni-ip:1.2.3.4:443", "sni-ip"),
+                         ("bug-addr-sni:a.com:443", "bug-addr-sni"), ("ip-bug-sni:a.com1.2.3.4:443", "ip-bug-sni"),
+                         ("wildcard:a.com:443", "wildcard"), ("host-bug:a.com:80", "host-bug"),
+                         ("host-bug-sni:a.com:443", "host-bug-sni"), ("path-host-bug:a.com/en:443", "ganti-path"),
+                         ("http-path-bug-addr:a.com/en:80", "ganti-path"), ("http-bug-addr:a.com:80", "bug-addr"),
+                         ("sni:a.com", "bug-sni"), ("host:a.com", "host-bug"), ("addr:a.com", "bug-addr"),
+                         ("addr:13.35.1.58", "ip-edge"), ("path:/x", "ganti-path")):
+            self.assertEqual(self._method(f"SG [{tag}]"), key, tag)
+
+    def test_unknown_tag_stays_original(self):
+        self.assertEqual(self._method("SG [VIP]"), "original")
+        self.assertEqual(self._method("SG [combo]"), "original")
+        self.assertEqual(self._method("SG [port:8443]"), "original")
+
+    def test_custom_cloudfront_node_uses_method_emoji(self):
+        n = [{"name": "SG [bug-sni:a.com:443]", "server": "d1.cloudfront.net"}]
+        h.apply_emoji(n)
+        self.assertTrue(n[0]["name"].startswith("🎬 "))
+
+    def test_existing_emoji_kept_and_disabled_skips(self):
+        n = [{"name": "🇸🇬 SG"}]
+        self.assertEqual(h.apply_emoji(n), 0)
+        self.assertEqual(n[0]["name"], "🇸🇬 SG")
+        cfg = {"enabled": False, "methods": dict(h.DEFAULT_EMOJI_MAP)}
+        m = [{"name": "X"}]
+        self.assertEqual(h.apply_emoji(m, cfg), 0)
+
+    def test_user_override_used(self):
+        cfg = {"enabled": True, "methods": dict(h.DEFAULT_EMOJI_MAP, original="🦊")}
+        n = [{"name": "X"}]
+        h.apply_emoji(n, cfg)
+        self.assertEqual(n[0]["name"], "🦊 X")
+
+    def test_deterministic_not_random(self):
+        a = [{"name": f"N{i}"} for i in range(30)]
+        h.apply_emoji(a)
+        self.assertEqual({x["name"].split(" ")[0] for x in a}, {"🌠"})
 
 
 class Template(unittest.TestCase):
@@ -716,7 +787,8 @@ class TemplateV12(unittest.TestCase):
     def test_no_group_name_collides_with_node_emoji(self):
         used = "".join(g["name"].split(" ")[0] for g in self.cfg["proxy-groups"])
         for e in h.DEFAULT_EMOJIS:
-            self.assertNotIn(e, used)
+            if e != "🐬":                         # 🐬 = ip-edge (pilihan pemilik), mirip visual dengan group 🐬 HIJACK
+                self.assertNotIn(e, used)
 
 
 class TemplateV11(unittest.TestCase):

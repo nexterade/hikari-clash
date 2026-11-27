@@ -3,6 +3,48 @@
 Versi aplikasi mengikuti [Semantic Versioning](https://semver.org/lang/id/); aturan bump ada di [CLAUDE.md](CLAUDE.md).
 Penomoran template (`config_v*.yaml`) terpisah — lihat [docs/template-changelog.md](docs/template-changelog.md).
 
+## [0.10.0] - 2026-11-27
+
+### Ditambahkan
+- **Operator/ISP saat generate** (Convert & Regenerate): setelah memilih platform dan provider, kamu ditanya operator
+  (xl, axis, smartfren, telkomsel, byu, indosat, three, atau nama sendiri). Config disimpan sebagai `<operator>.yaml`
+  (`xl.yaml`, `byu.yaml`, …) — tidak lagi selalu `config.yaml`, jadi generate berikutnya tidak saling menimpa. Enter = operator
+  terakhir (disimpan di `settings.json`).
+- **Nama config sniffer**: Generate Config (Sniffer Only) menanyakan nama; `three` → `sniffer-three.yaml`, kosong → `config.yaml`.
+- **Nama hasil sniffer**: sebelum menyimpan, Inspector Live dan Penangkap Path menanyakan nama; `instagram` →
+  `instagram_<tanggal>_<jam>.csv/.json/.md` (log path: `instagram_path_<tanggal>_<jam>.*`). Kosong → `koneksi_…` / `path_…` seperti sebelumnya.
+- **Daftar file hasil sniffer di Uji Bug** (Mode Lazy dan field biasa): tiap prompt kandidat menampilkan file di
+  `hasil/sniffer/` yang bisa dipilih (boleh beberapa) dan digabung dengan kandidat yang ditempel. Hanya koneksi yang menerima data
+  yang diambil (domain, IP, port, path sesuai field).
+- **Emoji per metode node** menggantikan emoji acak: 🌠 asli, 🌌 CloudFront asli, 🎬 bug-sni, 💭 bug-addr, 🐬 ip-edge, ☕ sni-ip,
+  🏞️ bug-addr-sni, 🏖️ ip-bug-sni, 🏙️ wildcard, 🌇 wildcard-sni, 🌁 host-bug, 🪲 host-bug-sni, 🧸 ganti-path. Metode dibaca dari tag
+  nama varian Uji Bug. Menu Emoji Node kini mengubah emoji per metode.
+
+### Diubah
+- **Folder provider per operator**: `proxy/<operator>/active.yaml` dan `trial.yaml` (OpenClash: `proxy_provider/<operator>/`); path
+  `proxy-providers` di dalam config ikut (`/proxy/xl/`, `/proxy/axis/`, …). `free.yaml` dan `subs.yaml` tetap bersama di `proxy/`.
+  Layout lama (`proxy/active.yaml` + `config.yaml`) tetap terbaca dan bisa di-regenerate.
+- **Profil ISP** pada alur generate digantikan pertanyaan operator: `xl` memasang DNS ISP XL (Nikki/OpenClash), operator lain tanpa DNS ISP.
+- **Laporan Uji Bug** kini `report.json` (JSON berindent, kunci Indonesia, terbaca manusia) — menggantikan `report.txt`.
+- **Regenerate** kini juga memberi emoji pada node yang belum berawalan emoji (mis. varian baru dari Uji Bug).
+- `emoji.json` berformat `{"enabled", "methods"}`; format lama (`emojis: [...]`) diabaikan dengan peringatan.
+- Status Full Config dan Config Tester menampilkan semua `<operator>.yaml`.
+
+### Diperbaiki
+- **Input asal tidak lagi diproses diam-diam** (mis. `x`, `e`, `g` pada Mode Rule-Provider/Secret/ISP dulu dianggap Enter): pilihan
+  di alur generate, Regenerate, Uji Bug (node/field/mode/timeout/port), Sniffer, DNS, Rule-Provider Converter, dan konfirmasi y/n kini
+  menolak jawaban di luar pilihan dan bertanya ulang.
+- `[T]` Tambah node di Preview Convert menimpa daftar varian Uji Bug dengan teks sehingga bisa crash saat lanjut.
+- Tes `test_operator_pref_overrides_detected_sim` (sysinfo) salah menganggap "XL Axiata" tidak boleh muncul di mana pun, padahal baris
+  Lokasi memuat ISP dari lookup IP publik; kini hanya memeriksa baris Jaringan.
+
+### Batasan
+- Mapping emoji untuk metode yang tidak ada di daftar pemilik adalah dugaan: `wildcard-ip` → 🌇, `host-ip` → ☕, `http-*` mengikuti
+  metode induknya, semua `path-*` → 🧸; tag `[port:…]`/`[alpn:…]`/`[fp:…]`/`[combo]` dianggap node asli. Metode `wildcard-sni` belum ada di
+  Mode Lazy (hanya `wildcard` dan `wildcard-ip`). Semua bisa diubah di `emoji.json` / `EMOJI_METHOD_ALIAS`.
+- Box membaca `config.yaml`? Tidak diverifikasi di perangkat; kalau ya, ganti nama `<operator>.yaml` saat memasang.
+- Belum diuji di perangkat/core nyata; yang teruji: tes otomatis (alur menu dengan input terskrip).
+
 ## [0.9.0] - 2026-11-26
 
 ### Diperbaiki

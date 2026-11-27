@@ -666,10 +666,11 @@ class MenuFlow(unittest.TestCase):
     """Menjalankan feature_convert_to_clash / feature_regenerate dengan input terskrip + server WS lokal."""
 
     def setUp(self):
-        self._saved = (h.BASE_DIR, h.BUGTEST_DIR, h.SETTINGS_PATH)
+        self._saved = (h.BASE_DIR, h.BUGTEST_DIR, h.SETTINGS_PATH, h.SNIFFER_OUT_DIR)
         self._tmp = tempfile.TemporaryDirectory()
         h.BASE_DIR = os.path.join(self._tmp.name, "hasil")
         h.BUGTEST_DIR = os.path.join(h.BASE_DIR, "bugtest")
+        h.SNIFFER_OUT_DIR = os.path.join(h.BASE_DIR, "sniffer")      # kosong: tidak ada daftar file sniffer di alur uji
         h.SETTINGS_PATH = os.path.join(self._tmp.name, "settings.json")
         os.makedirs(h.BASE_DIR)
         self.srv = WsServer(good_host={"good.example", "cdn1.example", "cdn2.example"})
@@ -678,7 +679,7 @@ class MenuFlow(unittest.TestCase):
 
     def tearDown(self):
         self.srv.close()
-        h.BASE_DIR, h.BUGTEST_DIR, h.SETTINGS_PATH = self._saved
+        h.BASE_DIR, h.BUGTEST_DIR, h.SETTINGS_PATH, h.SNIFFER_OUT_DIR = self._saved
         self._tmp.cleanup()
 
     def run_flow(self, fn, inputs):
@@ -701,9 +702,9 @@ class MenuFlow(unittest.TestCase):
         self.assertEqual(list(it), [], "input skrip tidak terpakai semua -> alur menu bergeser")
         return out.getvalue()
 
-    def active_names(self, plat="box"):
+    def active_names(self, plat="box", operator="xl"):
         import yaml
-        p = os.path.join(h.BASE_DIR, h.PLATFORMS[plat]["out"], h.PLATFORMS[plat]["proxy_dir"], "active.yaml")
+        p = os.path.join(h.BASE_DIR, h.PLATFORMS[plat]["out"], h.PLATFORMS[plat]["proxy_dir"], operator, "active.yaml")
         return [n["name"] for n in yaml.safe_load(open(p, encoding="utf-8"))["proxies"]]
 
     def bug_dir(self):
@@ -716,7 +717,7 @@ class MenuFlow(unittest.TestCase):
                    "1", "", "", ""]                               # mode TCP, timeout default, DNS operator (lewati), mulai
 
     def test_convert_flow_adds_variants_and_writes_outputs(self):
-        inputs = [self.uri, ""] + self.FLOW_PREFIX + ["", "1", "l", "b", "1", "", "", ""]
+        inputs = [self.uri, ""] + self.FLOW_PREFIX + ["", "1", "l", "b", "1", "xl", "", "", ""]
         out = self.run_flow(h.feature_convert_to_clash, inputs)
         self.assertIn("[U] Uji bug", out)
         self.assertIn("2/3 lolos", out)                          # host: cdn1, cdn2 lolos; bad ditolak
@@ -726,8 +727,9 @@ class MenuFlow(unittest.TestCase):
         self.assertTrue(any("[host:cdn1.example]" in n for n in names))
         self.assertFalse(any("bad.example" in n for n in names))
         d = self.bug_dir()
-        for f in ("custom-host.yaml", "custom-address.yaml", "custom-combined.yaml", "bug-ok.yaml", "bug-ok-uri.txt", "report.txt"):
+        for f in ("custom-host.yaml", "custom-address.yaml", "custom-combined.yaml", "bug-ok.yaml", "bug-ok-uri.txt", "report.json"):
             self.assertTrue(os.path.isfile(os.path.join(d, f)), f)
+        self.assertFalse(os.path.exists(os.path.join(d, "report.txt")))      # laporan kini JSON
         uris = open(os.path.join(d, "bug-ok-uri.txt"), encoding="utf-8").read().split()
         self.assertEqual(len(uris), 4)
         self.assertTrue(all(u.startswith("vless://") for u in uris))
@@ -737,17 +739,17 @@ class MenuFlow(unittest.TestCase):
             self.assertEqual(n["type"], "vless")
 
     def test_convert_flow_replace_drops_original(self):
-        inputs = [self.uri, ""] + self.FLOW_PREFIX + ["", "2", "l", "b", "1", "", "", ""]
+        inputs = [self.uri, ""] + self.FLOW_PREFIX + ["", "2", "l", "b", "1", "xl", "", "", ""]
         self.run_flow(h.feature_convert_to_clash, inputs)
         names = self.active_names()
         self.assertEqual(len(names), 4)
         self.assertNotIn("HIKARI WS", [n.split(" ", 1)[-1] for n in names])      # node asli diganti
 
     def test_convert_flow_dont_use_keeps_only_original(self):
-        inputs = [self.uri, ""] + self.FLOW_PREFIX + ["", "3", "l", "b", "1", "", "", ""]
+        inputs = [self.uri, ""] + self.FLOW_PREFIX + ["", "3", "l", "b", "1", "xl", "", "", ""]
         self.run_flow(h.feature_convert_to_clash, inputs)
         self.assertEqual(len(self.active_names()), 1)
-        self.assertTrue(os.path.isfile(os.path.join(self.bug_dir(), "report.txt")))     # file hasil tetap ada
+        self.assertTrue(os.path.isfile(os.path.join(self.bug_dir(), "report.json")))    # file hasil tetap ada
 
     def test_cancel_candidates_returns_to_preview(self):
         inputs = [self.uri, "", "u", "2", "batal", "b"]
@@ -762,7 +764,7 @@ class MenuFlow(unittest.TestCase):
 
     def test_delete_variant_number_in_preview(self):
         # hapus varian nomor 2 (varian pertama) lewat [H], lalu lanjut
-        inputs = [self.uri, ""] + self.FLOW_PREFIX + ["", "1", "h", "2", "l", "b", "1", "", "", ""]
+        inputs = [self.uri, ""] + self.FLOW_PREFIX + ["", "1", "h", "2", "l", "b", "1", "xl", "", "", ""]
         self.run_flow(h.feature_convert_to_clash, inputs)
         self.assertEqual(len(self.active_names()), 4)
 
@@ -784,10 +786,11 @@ class MenuFlow(unittest.TestCase):
         self.assertIn("✗ http-host-ip", out)
         self.assertNotIn("gabungan terbaik", out)                        # Lazy tidak punya langkah gabungan
         d = self.bug_dir()
-        for f in ("custom-lazy.yaml", "bug-ok.yaml", "bug-ok-uri.txt", "report.txt"):
+        for f in ("custom-lazy.yaml", "bug-ok.yaml", "bug-ok-uri.txt", "report.json"):
             self.assertTrue(os.path.isfile(os.path.join(d, f)), f)
-        with open(os.path.join(d, "report.txt"), encoding="utf-8") as f:
-            self.assertIn("=== Ringkasan metode Lazy ===", f.read())
+        with open(os.path.join(d, "report.json"), encoding="utf-8") as f:
+            rep = json.load(f)
+        self.assertIn("metode", rep["ringkasan_lazy"])
         with open(os.path.join(d, "bug-ok-uri.txt"), encoding="utf-8") as f:
             uris = f.read().split()
         self.assertEqual(len(uris), 2)
@@ -808,7 +811,7 @@ class MenuFlow(unittest.TestCase):
         _, _, _, error = h.setup_full_config([h.convert_line(self.uri)], "active.yaml", "box")
         self.assertIsNone(error)
         # pilih sumber 1 -> [U] -> Host saja -> TCP -> tambahkan -> [L] -> platform/target Enter -> sisanya default
-        inputs = ["1", "u", "2", "cdn1.example cdn2.example bad.example", "", "1", "", "", "", "1", "l", "", "", "", "", ""]
+        inputs = ["1", "u", "2", "cdn1.example cdn2.example bad.example", "", "1", "", "", "", "1", "l", "", "", "xl", "", "", ""]
         out = self.run_flow(h.feature_regenerate, inputs)
         self.assertIn("2 varian ditambahkan", out)
         self.assertEqual(len(self.active_names()), 3)
@@ -816,7 +819,7 @@ class MenuFlow(unittest.TestCase):
     def test_regenerate_flow_skip_test(self):
         _, _, _, error = h.setup_full_config([h.convert_line(self.uri)], "active.yaml", "box")
         self.assertIsNone(error)
-        self.run_flow(h.feature_regenerate, ["1", "", "", "", "", "", ""])
+        self.run_flow(h.feature_regenerate, ["1", "", "", "", "xl", "", "", ""])
         self.assertEqual(len(self.active_names()), 1)
         self.assertFalse(os.path.isdir(h.BUGTEST_DIR))
 
@@ -840,11 +843,15 @@ class Outputs(unittest.TestCase):
             nodes = json.load(open(os.path.join(d, "custom-sni.yaml")))["proxies"]
             self.assertEqual(nodes[0]["name"], "T [sni:a.com]")
             self.assertFalse(any(k.startswith("_") for k in nodes[0]))
-            rep = open(os.path.join(d, "report.txt"), encoding="utf-8").read()
-            self.assertIn("config asli: OK", rep)
-            self.assertIn("SNI: 1/2 lolos", rep)
-            self.assertIn("sni=b.com", rep)
-            self.assertIn("dilewati SNI: node tanpa TLS", rep)
+            self.assertFalse(os.path.exists(os.path.join(d, "report.txt")))
+            rep = json.load(open(os.path.join(d, "report.json"), encoding="utf-8"))
+            first = rep["node"][0]
+            self.assertEqual(first["config_asli"]["status"], "OK")
+            self.assertEqual((first["hasil"]["SNI"]["lolos"], first["hasil"]["SNI"]["diuji"]), (1, 2))
+            self.assertTrue(any(x["detail"] == "sni=b.com" and x["status"] == "gagal" for x in first["hasil"]["SNI"]["varian"]))
+            self.assertEqual(rep["node"][1]["dilewati"][0]["bagian"], "SNI")
+            self.assertIn("node tanpa TLS", rep["node"][1]["dilewati"][0]["alasan"])
+            self.assertIn("\n  ", open(os.path.join(d, "report.json"), encoding="utf-8").read())   # indent: terbaca manusia
 
 
 if __name__ == "__main__":
@@ -1228,10 +1235,11 @@ class PhantomTcpVerify(unittest.TestCase):
             body = f.read()
         self.assertNotIn("_phantom", body)
         self.assertIn("bug.example", body)
-        with open(os.path.join(out, "report.txt"), encoding="utf-8") as f:
-            rep = f.read()
-        self.assertIn("catatan Phantom", rep)
-        self.assertIn("-- Phantom: 1/2 lolos", rep)
+        with open(os.path.join(out, "report.json"), encoding="utf-8") as f:
+            rep = json.load(f)
+        self.assertTrue(any("Phantom" in x for x in rep["catatan"]))
+        ph = rep["node"][0]["hasil"]["Phantom"]
+        self.assertEqual((ph["lolos"], ph["diuji"]), (1, 2))
 
 
 
@@ -1452,10 +1460,10 @@ class LazyBuild(unittest.TestCase):
         self.assertEqual((sm["bug-addr"]["ok"], sm["bug-addr"]["tested"]), (0, 2))
         self.assertEqual(sm["bug-sni"]["pattern"], "addr=S host=S sni=B")
         self.assertEqual([r["method"] for r in b.lazy_summary(vs)][:2], ["bug-sni", "bug-addr"])   # urutan tabel metode
-        rep = b.report_text(vs, ["tcp"])
-        self.assertIn("-- Lazy:", rep)
-        self.assertIn("=== Ringkasan metode Lazy ===", rep)
-        self.assertIn("✓ bug-sni", rep); self.assertIn("✗ bug-addr", rep)
+        rep = b.report_data(vs, ["tcp"])
+        self.assertIn("Lazy", rep["node"][0]["hasil"])
+        by_method = {r["metode"]: r["status"] for r in rep["ringkasan_lazy"]["metode"]}
+        self.assertEqual((by_method["bug-sni"], by_method["bug-addr"]), ("lolos", "gagal"))
         self.assertEqual(b.passing(vs)[0]["kind"], "lazy")
         with tempfile.TemporaryDirectory() as d:
             files = dict(b.write_outputs(vs, ["tcp"], d, lambda ns: json.dumps(ns)))

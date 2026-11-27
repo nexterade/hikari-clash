@@ -34,8 +34,8 @@ hikari-clash/
 │   ├── config_v0.3.yaml         # Template master lama (dibiarkan utuh)
 │   └── template.yaml            # (otomatis) salinan kerja, dibuat saat kamu edit lewat menu
 ├── subscription.yaml            # Node gratis (100 node, dibuat sub2yaml.py) — URL raw-nya dipakai provider 📑 Keyring
-├── emoji.json                   # Daftar emoji nama node (edit lewat menu atau langsung di file)
-├── settings.json                # (otomatis, tidak di-commit) pengaturan pengguna: profil ISP
+├── emoji.json                   # Emoji nama node per metode ({"enabled", "methods"}; edit lewat menu atau langsung di file)
+├── settings.json                # (otomatis, tidak di-commit) pengaturan pengguna: profil ISP, operator terakhir
 ├── ruleset/                     # Ruleset (WAJIB): *.yaml & *.mrs
 ├── archive/                     # Template lama v0.1/v0.2 + port-games versi penuh
 ├── tests/                       # Tes otomatis: python3 -m unittest discover -s tests
@@ -47,10 +47,9 @@ hikari-clash/
 │   └── img/                     #   Screenshot untuk README
 ├── AUDIT.md                     # Perbandingan template, temuan audit, saran
 └── hasil/                       # (otomatis) hasil generate
-    ├── full_config_box/
-    ├── full_config_nikki/
-    ├── full_config_openclash/
-    ├── bugtest/<tanggal_jam>/   # hasil Uji Bug: custom-*.yaml (termasuk custom-lazy / custom-phantom), bug-ok.yaml, bug-ok-uri.txt, bug-ok-phantom-uri.txt, report.txt
+    ├── full_config_<platform>/  # box / nikki / openclash: <operator>.yaml (xl.yaml, byu.yaml, …), proxy/<operator>/active.yaml + trial.yaml, proxy/free.yaml + subs.yaml, ruleset/
+    ├── sniffer/                 # config sniffer: <platform>/sniffer-<nama>.yaml (atau config.yaml); hasil: <nama>_<tanggal>_<jam>.csv/.json/.md, <nama>_path_….jsonl/.md
+    ├── bugtest/<tanggal_jam>/   # hasil Uji Bug: custom-*.yaml (termasuk custom-lazy / custom-phantom), bug-ok.yaml, bug-ok-uri.txt, bug-ok-phantom-uri.txt, report.json
     └── rules/                   # hasil Rule-Provider Converter (menu 5)
 ```
 

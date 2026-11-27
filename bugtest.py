@@ -1485,51 +1485,65 @@ def summarize(variants):
 # =====================================================================
 #  Keluaran
 # =====================================================================
-def report_text(variants, modes, skipped=(), meta=None):
+def report_data(variants, modes, skipped=(), meta=None):
+    """Laporan Uji Bug sebagai dict yang enak dibaca manusia (ditulis ke report.json dengan indent)."""
     meta = meta or {}
-    L = ["HIKARI /.CLASH — Bug Test", f"waktu  : {meta.get('when', time.strftime('%Y-%m-%d %H:%M:%S'))}",
-         "mode   : " + " + ".join(MODE_LABEL[m] for m in MODES if m in modes)]
+    rep = {"aplikasi": "HIKARI /.CLASH — Bug Test",
+           "waktu": meta.get("when", time.strftime("%Y-%m-%d %H:%M:%S")),
+           "mode": [MODE_LABEL[m] for m in MODES if m in modes]}
     if meta.get("test_url") and any(m in modes for m in ("mihomo", "v2ray")):
-        L.append(f"url tes: {meta['test_url']}")
-    L.append("")
+        rep["url_tes"] = meta["test_url"]
     names = {}
     for v in variants:
         names.setdefault(v["base"], v["base_name"])
+    tested = [v for v in variants if v["kind"] != "base"]
+    rep["ringkasan"] = {"node": len(names), "varian_diuji": len(tested), "varian_lolos": sum(1 for v in tested if v["ok"])}
+    notes = []
     if any(v["node"].get(PH) for v in variants):
-        L += ["catatan Phantom: mode TCP/TLS dan V2Ray/Xray memverifikasi sertifikat terhadap domain server;",
-              "                 mode Mihomo tidak bisa (hanya skip-cert-verify), jadi lolos di Mihomo bukan bukti sertifikat cocok.", ""]
+        notes.append("Phantom: mode TCP/TLS dan V2Ray/Xray memverifikasi sertifikat terhadap domain server; "
+                     "mode Mihomo tidak bisa (hanya skip-cert-verify), jadi lolos di Mihomo bukan bukti sertifikat cocok.")
+    if notes:
+        rep["catatan"] = notes
+    nodes = []
     for bi in sorted(names):
-        L.append(f"=== {names[bi]} ===")
+        entry = {"nama": names[bi]}
         base = next((v for v in variants if v["base"] == bi and v["kind"] == "base"), None)
         if base:
-            L.append(f"  config asli: {'OK' if base['ok'] else 'GAGAL'}"
-                     + (f" {base['ms']}ms" if base["ms"] else "") + ("" if base["ok"] else f"  ({base['reason']})"))
-        for s in skipped:
-            if s[0] == bi:
-                L.append(f"  dilewati {FIELD_LABEL[s[2]]}: {s[3]}")
+            entry["config_asli"] = {"status": "OK" if base["ok"] else "GAGAL", "ms": base["ms"] or None,
+                                    "alasan": "" if base["ok"] else base["reason"]}
+        skip = [{"bagian": FIELD_LABEL[s[2]], "alasan": s[3]} for s in skipped if s[0] == bi]
+        if skip:
+            entry["dilewati"] = skip
+        hasil = {}
         for kind in RESULT_KINDS:
             rows = [v for v in variants if v["base"] == bi and v["kind"] == kind]
             if not rows:
                 continue
-            ok_n = sum(1 for v in rows if v["ok"])
-            L.append(f"  -- {FIELD_LABEL.get(kind, 'Gabungan')}: {ok_n}/{len(rows)} lolos")
-            for v in sorted(rows, key=lambda v: (not v["ok"], v["ms"] or 10 ** 9, v["id"])):
-                tail = f"{v['ms']}ms" if v["ok"] and v["ms"] else v["reason"]
-                L.append(f"     {'✓' if v['ok'] else '✗'} {describe_fields(v):<48} {tail}")
-        L.append("")
+            rows.sort(key=lambda v: (not v["ok"], v["ms"] or 10 ** 9, v["id"]))
+            hasil[FIELD_LABEL.get(kind, "Gabungan")] = {
+                "lolos": sum(1 for v in rows if v["ok"]), "diuji": len(rows),
+                "varian": [{"status": "lolos" if v["ok"] else "gagal", "detail": describe_fields(v),
+                            "ms": v["ms"] if v["ok"] and v["ms"] else None,
+                            "alasan": "" if v["ok"] else v["reason"]} for v in rows]}
+        entry["hasil"] = hasil
+        nodes.append(entry)
+    rep["node"] = nodes
     sm = lazy_summary(variants)
     if sm:
-        L += ["=== Ringkasan metode Lazy ===", "  S=domain server  B=bug  IP=IP edge  W=<bug>.<server>"]
-        for r in sm:
-            best = f"  terbaik {r['best']}ms" if r["best"] else ""
-            L.append(f"  {'✓' if r['ok'] else '✗'} {r['method']:<15} {r['pattern']:<30} {r['ok']}/{r['tested']} lolos{best}")
-        L.append("")
-    return "\n".join(L).rstrip() + "\n"
+        rep["ringkasan_lazy"] = {
+            "keterangan": "S=domain server  B=bug  IP=IP edge  W=<bug>.<server>",
+            "metode": [{"metode": r["method"], "pola": r["pattern"], "status": "lolos" if r["ok"] else "gagal",
+                        "lolos": r["ok"], "diuji": r["tested"], "terbaik_ms": r["best"]} for r in sm]}
+    return rep
+
+
+def report_json(variants, modes, skipped=(), meta=None):
+    return json.dumps(report_data(variants, modes, skipped, meta), ensure_ascii=False, indent=2) + "\n"
 
 
 def write_outputs(variants, modes, out_dir, dump, skipped=(), meta=None):
     """Tulis hasil ke out_dir: custom-<field>.yaml (hanya yang punya varian lolos), custom-combined.yaml,
-    bug-ok.yaml (semua yang lolos) dan report.txt. dump(list_node) -> teks YAML. Return [(nama_file, jumlah_node)]."""
+    bug-ok.yaml (semua yang lolos) dan report.json (JSON yang terbaca manusia). dump(list_node) -> teks YAML. Return [(nama_file, jumlah_node)]."""
     os.makedirs(out_dir, exist_ok=True)
     written = []
 
@@ -1545,7 +1559,7 @@ def write_outputs(variants, modes, out_dir, dump, skipped=(), meta=None):
             put(FIELD_FILE[kind], nodes)
     if ok:
         put("bug-ok.yaml", [clean_node(v["node"]) for v in ok])
-    with open(os.path.join(out_dir, "report.txt"), "w", encoding="utf-8") as f:
-        f.write(report_text(variants, modes, skipped, meta))
-    written.append(("report.txt", 0))
+    with open(os.path.join(out_dir, "report.json"), "w", encoding="utf-8") as f:
+        f.write(report_json(variants, modes, skipped, meta))
+    written.append(("report.json", 0))
     return written

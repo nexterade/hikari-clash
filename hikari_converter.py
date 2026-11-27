@@ -56,10 +56,42 @@ SNIFFER_ASN_URL = "https://github.com/xishang0128/geoip/releases/download/latest
 DEFAULT_SKIP_CERT_VERIFY = True
 
 EMOJI_PATH = os.path.join(SCRIPT_DIR, "emoji.json")        # daftar emoji nama node (bisa diedit lewat menu)
-# Daftar bawaan = isi emoji.json bawaan repo (dipakai kalau file hilang / rusak / di-Reset lewat menu).
-# Sengaja tanpa emoji yang dipakai nama group di template (🧩 🗳️ 💫 📄 📑 🌳 👾 💤 💕 🍪 🧊 ☘️ 🎮 ✂️ 🐬).
-DEFAULT_EMOJIS = ["🦊", "🎿", "💟", "🩻", "💭", "🔮", "🐠", "🍂", "🐣", "🧢", "🪭",
-                  "🍞", "☕", "🍕", "🍟", "🛋️", "🏙️", "🌃", "🌠", "🌌", "⛱️"]
+# Emoji nama node mengikuti METODE node (bukan acak). Bawaan = isi emoji.json bawaan repo
+# (dipakai kalau file hilang / rusak / di-Reset lewat menu). Catatan: 🐬 juga dipakai nama group "🐬 HIJACK" di template
+# (hanya mirip secara visual; nama lengkap node tetap beda).
+DEFAULT_EMOJI_MAP = {
+    "original":     "🌠",   # node asli tanpa custom
+    "cloudfront":   "🌌",   # node asli CloudFront tanpa custom
+    "bug-sni":      "🎬",
+    "bug-addr":     "💭",
+    "ip-edge":      "🐬",
+    "sni-ip":       "☕",
+    "bug-addr-sni": "🏞️",
+    "ip-bug-sni":   "🏖️",
+    "wildcard":     "🏙️",
+    "wildcard-sni": "🌇",
+    "host-bug":     "🌁",
+    "host-bug-sni": "🪲",
+    "ganti-path":   "🧸",
+}
+EMOJI_METHOD_LABEL = {
+    "original": "node asli, tanpa custom", "cloudfront": "node asli CloudFront, tanpa custom",
+    "bug-sni": "SNI = bug", "bug-addr": "Address = bug", "ip-edge": "Address = IP edge CDN",
+    "sni-ip": "SNI = IP", "bug-addr-sni": "Address + SNI = bug", "ip-bug-sni": "IP edge + SNI = bug",
+    "wildcard": "Host/SNI = <bug>.<server>", "wildcard-sni": "wildcard + varian IP edge",
+    "host-bug": "Host = bug", "host-bug-sni": "Host + SNI = bug", "ganti-path": "path diganti awalan bug",
+}
+DEFAULT_EMOJIS = list(DEFAULT_EMOJI_MAP.values())          # daftar datar (kompatibilitas / tes)
+# Metode Lazy (bugtest.py) yang namanya tidak ada di daftar emoji dipetakan ke kunci terdekat.
+EMOJI_METHOD_ALIAS = {
+    "host-ip": "sni-ip", "wildcard-ip": "wildcard-sni",
+    "http-direct": "original", "http-bug-addr": "bug-addr", "http-ip-edge": "ip-edge", "http-host-ip": "sni-ip",
+    "http-wildcard": "wildcard", "http-wildcard-ip": "wildcard-sni", "http-host-bug": "host-bug",
+    "path-bug-addr": "ganti-path", "path-bug-addr-sni": "ganti-path", "path-host-bug": "ganti-path",
+    "path-host-bug-sni": "ganti-path", "http-path-bug-addr": "ganti-path", "http-path-host-bug": "ganti-path",
+    # tag uji per-field (Uji Bug mode biasa): [sni:x] [host:x] [addr:x] [path:x] [phantom:x]
+    "sni": "bug-sni", "host": "host-bug", "addr": "bug-addr", "path": "ganti-path", "phantom": "bug-sni",
+}
 
 NIKKI_RUN_DIR = "/etc/nikki/run"
 WIFI_PROVIDER = "WifiClients"
@@ -112,10 +144,30 @@ ISP_PROFILES = {
 ISP_FIELD_CHOICES = ["default-nameserver", "proxy-server-nameserver", "direct-nameserver", "fallback"]
 ISP_PLATFORMS = ("nikki", "openclash")      # profil ISP hanya disuntik ke platform ini
 
+# Operator/ISP: menentukan nama file config (<operator>.yaml) dan folder provider (proxy/<operator>/).
+OPERATORS = {"xl": "XL", "axis": "Axis", "smartfren": "Smartfren", "telkomsel": "Telkomsel",
+             "byu": "by.U", "indosat": "Indosat", "three": "Three"}
+OPERATOR_ISP = {"xl": "xl"}                 # operator -> profil DNS ISP (ISP_PROFILES); lainnya = "none"
+
+
+def safe_name(raw):
+    """Nama aman untuk file/folder: huruf kecil, spasi -> '-', hanya a-z 0-9 . _ -. Kosong kalau tidak ada yang tersisa."""
+    s = re.sub(r"\s+", "-", str(raw or "").strip().lower())
+    s = re.sub(r"[^a-z0-9._-]", "", s).strip(".-_")
+    return s[:40]
+
+
+def config_filename(operator=None):
+    return f"{operator}.yaml" if operator else "config.yaml"
+
+
+def isp_for_operator(operator):
+    return OPERATOR_ISP.get(operator or "", "none")
+
 
 def load_settings():
     """{'isp': id, 'isp_fields': [...]} dari settings.json; nilai tidak valid -> default."""
-    cfg = {"isp": "none", "isp_fields": []}
+    cfg = {"isp": "none", "isp_fields": [], "operator": ""}
     try:
         data = json.loads(read_text(SETTINGS_PATH))
     except (OSError, ValueError):
@@ -126,6 +178,8 @@ def load_settings():
         fl = data.get("isp_fields")
         if isinstance(fl, list):
             cfg["isp_fields"] = [f for f in fl if f in ISP_FIELD_CHOICES]
+        if isinstance(data.get("operator"), str):
+            cfg["operator"] = safe_name(data["operator"])      # operator terakhir yang dipakai saat generate
     return cfg
 
 
@@ -207,6 +261,34 @@ def ask(prompt):
     except EOFError:
         print()
         raise SystemExit(0)
+
+
+def ask_choice(prompt, valid, default=None, cancel=()):
+    """Tanya sampai jawabannya salah satu dari `valid` (tanpa beda huruf besar/kecil). Enter = `default` kalau ada.
+    Jawaban asal TIDAK diproses diam-diam: tampil pesan dan ditanya lagi. `cancel` = jawaban yang dikembalikan apa adanya.
+    Return jawaban (huruf kecil)."""
+    ok_set = {str(v).lower() for v in valid}
+    stop = {str(v).lower() for v in cancel}
+    while True:
+        raw = ask(prompt).strip().lower()
+        if not raw and default is not None:
+            return str(default).lower()
+        if raw in ok_set or raw in stop:
+            return raw
+        err(f"Pilihan '{truncate(raw, 20)}' tidak valid. Pilih: " + ", ".join(sorted(ok_set | stop)) + ("" if default is None else " (atau Enter)") + ".")
+
+
+def ask_yn(prompt, default=False):
+    """Ya/tidak. Enter = default; jawaban selain y/ya/n/tidak ditolak dan ditanya ulang. Return bool."""
+    while True:
+        raw = ask(prompt).strip().lower()
+        if not raw:
+            return default
+        if raw in ("y", "ya", "yes"):
+            return True
+        if raw in ("n", "t", "tidak", "no"):
+            return False
+        err(f"'{truncate(raw, 20)}' bukan jawaban y/n.")
 
 
 def pause(msg="Tekan Enter untuk kembali..."):
@@ -418,12 +500,12 @@ EMOJI_WARNING = ""      # diisi load_emoji_cfg() kalau emoji.json bermasalah; di
 
 
 def load_emoji_cfg():
-    """{'enabled': bool, 'emojis': [str]} dari emoji.json.
-    File tidak ada -> default. JSON rusak -> coba perbaiki koma berlebih (trailing comma), kalau tetap gagal
-    pakai default; keduanya meninggalkan pesan di EMOJI_WARNING (tidak lagi diam-diam)."""
+    """{'enabled': bool, 'methods': {kunci_metode: emoji}} dari emoji.json.
+    File tidak ada -> default. JSON rusak -> coba perbaiki koma berlebih, kalau tetap gagal pakai default.
+    Kunci yang hilang diisi default. Format lama ({"emojis": [...]}, acak) diabaikan dengan pesan di EMOJI_WARNING."""
     global EMOJI_WARNING
     EMOJI_WARNING = ""
-    cfg = {"enabled": True, "emojis": list(DEFAULT_EMOJIS)}
+    cfg = {"enabled": True, "methods": dict(DEFAULT_EMOJI_MAP)}
     try:
         text = read_text(EMOJI_PATH)
     except OSError:
@@ -435,25 +517,27 @@ def load_emoji_cfg():
             data = json.loads(re.sub(r",(\s*[\]}])", r"\1", text))
             EMOJI_WARNING = f"emoji.json tidak valid ({e}); koma berlebih diabaikan — perbaiki filenya atau simpan ulang lewat menu"
         except ValueError:
-            EMOJI_WARNING = f"emoji.json rusak ({e}); memakai daftar bawaan"
+            EMOJI_WARNING = f"emoji.json rusak ({e}); memakai emoji bawaan"
             return cfg
     if not isinstance(data, dict):
-        EMOJI_WARNING = "emoji.json harus berupa objek {\"enabled\": ..., \"emojis\": [...]}; memakai daftar bawaan"
+        EMOJI_WARNING = "emoji.json harus berupa objek {\"enabled\": ..., \"methods\": {...}}; memakai emoji bawaan"
         return cfg
     if isinstance(data.get("enabled"), bool):
         cfg["enabled"] = data["enabled"]
-    emojis = data.get("emojis", [])
-    items = [e.strip() for e in emojis if isinstance(e, str) and e.strip()] if isinstance(emojis, list) else []
-    if items:
-        cfg["emojis"] = list(dict.fromkeys(items))
-    else:
-        EMOJI_WARNING = EMOJI_WARNING or "emoji.json: daftar 'emojis' kosong/tidak valid; memakai daftar bawaan"
+    methods = data.get("methods")
+    if isinstance(methods, dict):
+        for k, v in methods.items():
+            if k in DEFAULT_EMOJI_MAP and isinstance(v, str) and v.strip():
+                cfg["methods"][k] = v.strip()
+    elif "emojis" in data:
+        EMOJI_WARNING = "emoji.json format lama (daftar emoji acak) diabaikan; kini emoji mengikuti metode node — simpan ulang lewat Edit Configuration → Emoji Node"
     return cfg
 
 
 def save_emoji_cfg(cfg):
     with open(EMOJI_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+        json.dump({"enabled": bool(cfg.get("enabled", True)), "methods": cfg.get("methods") or dict(DEFAULT_EMOJI_MAP)},
+                  f, ensure_ascii=False, indent=2)
         f.write("\n")
 
 
@@ -466,22 +550,64 @@ def starts_with_emoji(name):
     return 0x1F000 <= ord(ch) <= 0x1FAFF or unicodedata.category(ch) in ("So", "Sk")
 
 
+def _node_domains(node):
+    """Semua nama host yang terkait node: server, SNI, Host ws/h2/http."""
+    out = [node.get("server"), node.get("servername"), node.get("sni")]
+    ws = node.get("ws-opts") or {}
+    out.append((ws.get("headers") or {}).get("Host") if isinstance(ws.get("headers"), dict) else None)
+    h2 = node.get("h2-opts") or {}
+    hh = h2.get("host")
+    out += hh if isinstance(hh, list) else [hh]
+    ho = node.get("http-opts") or {}
+    hh = (ho.get("headers") or {}).get("Host") if isinstance(ho.get("headers"), dict) else None
+    out += hh if isinstance(hh, list) else [hh]
+    return [str(x).strip().lower() for x in out if x]
+
+
+def is_cloudfront_node(node):
+    """Node asli CloudFront: server/SNI/Host berakhiran .cloudfront.net, atau namanya menyebut 'cloudfront'."""
+    if "cloudfront" in str(node.get("name", "")).lower():
+        return True
+    return any(d == "cloudfront.net" or d.endswith(".cloudfront.net") for d in _node_domains(node))
+
+
+def node_method(node):
+    """Kunci metode emoji sebuah node (kunci DEFAULT_EMOJI_MAP).
+    Node hasil Uji Bug membawa tag di akhir nama: 'Nama [bug-sni:instagram.com:443]' (Lazy) atau '[sni:x]' (per field).
+    Tag tak dikenal ([port:..], [alpn:..], [combo], teks bebas) = tetap node asli."""
+    m = re.search(r"\[([^\[\]]+)\]\s*$", str(node.get("name", "")))
+    if m:
+        label, _, rest = m.group(1).partition(":")
+        label = label.strip().lower()
+        key = label if label in DEFAULT_EMOJI_MAP else EMOJI_METHOD_ALIAS.get(label)
+        if key == "bug-addr" and label == "addr" and ip_literal(rest.split(":")[0]):
+            key = "ip-edge"                      # [addr:13.35.1.58] = IP edge, bukan bug
+        if key and key not in ("original", "cloudfront"):
+            return key
+    return "cloudfront" if is_cloudfront_node(node) else "original"
+
+
+def ip_literal(text):
+    try:
+        ipaddress.ip_address(str(text).strip("[]"))
+        return True
+    except ValueError:
+        return False
+
+
 def apply_emoji(nodes, cfg=None):
-    """Awali nama node dengan emoji acak: 'Singapore' -> '🦊 Singapore'.
-    Emoji tidak berulang dalam satu batch selama daftar cukup. Nama yang SUDAH diawali emoji
-    (apa pun, mis. '🪟 Rekayasa' atau '🇸🇬 Singapore') dibiarkan, tidak jadi dobel."""
+    """Awali nama node dengan emoji sesuai metodenya: 'Singapore' -> '🌠 Singapore' (asli),
+    'SG [bug-sni:x.com:443]' -> '🎬 SG [...]'. Nama yang SUDAH diawali emoji/simbol dibiarkan (tidak dobel)."""
     cfg = cfg or load_emoji_cfg()
-    emojis = cfg["emojis"]
-    if not cfg["enabled"] or not emojis:
+    if not cfg["enabled"]:
         return 0
-    pool, count = [], 0
+    count = 0
     for node in nodes:
         name = str(node["name"])
-        if starts_with_emoji(name) or any(name.startswith(e) for e in emojis):
+        if starts_with_emoji(name):
             continue
-        if not pool:
-            pool = random.sample(emojis, len(emojis))
-        node["name"] = f"{pool.pop()} {name}"
+        emoji = cfg["methods"].get(node_method(node)) or DEFAULT_EMOJI_MAP["original"]
+        node["name"] = f"{emoji} {name}"
         count += 1
     return count
 
@@ -729,13 +855,18 @@ def dump_yaml(data):
                      default_flow_style=False, width=4096, indent=2)
 
 
-def _remap_path(path, platform):
+def _remap_path(path, platform, operator=None):
+    """./proxy/x -> <prefix><proxy_dir>/x ; provider node pengguna (active/trial) masuk subfolder operator:
+    ./proxy/active.yaml -> <prefix><proxy_dir>/<operator>/active.yaml (free/subs tetap bersama di proxy/)."""
     P = PLATFORMS[platform]
     if not isinstance(path, str):
         return path
     for old, folder in (("./proxy/", P["proxy_dir"]), ("./ruleset/", P["rule_dir"])):
         if path.startswith(old):
-            return f'{P["prefix"]}{folder}/{path[len(old):]}'
+            rest = path[len(old):]
+            if operator and folder == P["proxy_dir"] and rest in USER_NODE_FILES:
+                rest = f"{operator}/{rest}"
+            return f'{P["prefix"]}{folder}/{rest}'
     return path
 
 
@@ -761,7 +892,7 @@ def _drop_wifi(cfg):
     return bool(dropped_groups)
 
 
-def build_config(tpl_text, platform, provider_mode="template", secret_mode="template", isp=None):
+def build_config(tpl_text, platform, provider_mode="template", secret_mode="template", isp=None, operator=None):
     """Return (cfg_dict, notes). provider_mode: 'template' | 'offline' (http -> file lokal). secret_mode: 'template' (apa adanya, boleh kosong) | 'random'."""
     cfg = yaml.safe_load(tpl_text)
     if not isinstance(cfg, dict):
@@ -789,7 +920,7 @@ def build_config(tpl_text, platform, provider_mode="template", secret_mode="temp
     for sect in ("proxy-providers", "rule-providers"):
         for prov in (cfg.get(sect) or {}).values():
             if isinstance(prov, dict) and "path" in prov:
-                prov["path"] = _remap_path(prov["path"], platform)
+                prov["path"] = _remap_path(prov["path"], platform, operator if sect == "proxy-providers" else None)
 
     if provider_mode == "offline":
         n = 0
@@ -1118,8 +1249,9 @@ def save_proxy_yaml(proxies, path):
         f.write(dump_yaml({"proxies": proxies}))
 
 
-def setup_full_config(proxies, target_name, platform, provider_mode="template", write_mode="replace", secret_mode="template", isp=None):
-    """Return (out_dir, notes, issues, error)."""
+def setup_full_config(proxies, target_name, platform, provider_mode="template", write_mode="replace", secret_mode="template", isp=None, operator=None):
+    """Return (out_dir, notes, issues, error). operator (mis. "xl") -> file <operator>.yaml + provider di proxy/<operator>/;
+    tanpa operator -> config.yaml + proxy/ (perilaku lama)."""
     tpl = find_template()
     if not tpl:
         return None, [], [], "template tidak ditemukan (template/template.yaml / template/config_v*.yaml)"
@@ -1128,10 +1260,14 @@ def setup_full_config(proxies, target_name, platform, provider_mode="template", 
 
     P = PLATFORMS[platform]
     out_dir = os.path.join(BASE_DIR, P["out"])
-    proxy_dir = os.path.join(out_dir, P["proxy_dir"])
+    operator = safe_name(operator) or None
+    if operator and isp is None:
+        isp = isp_for_operator(operator)
+    proxy_dir = os.path.join(out_dir, P["proxy_dir"])          # free.yaml / subs.yaml bersama
+    user_dir = os.path.join(proxy_dir, operator) if operator else proxy_dir   # active.yaml / trial.yaml per operator
     try:
-        os.makedirs(proxy_dir, exist_ok=True)
-        cfg, notes = build_config(read_text(tpl), platform, provider_mode, secret_mode, isp)
+        os.makedirs(user_dir, exist_ok=True)
+        cfg, notes = build_config(read_text(tpl), platform, provider_mode, secret_mode, isp, operator)
         masters = list_master_templates()
         if masters and os.path.abspath(tpl) == os.path.abspath(TEMPLATE_PATH):
             have, latest = template_version(tpl), template_version(masters[-1])
@@ -1140,12 +1276,12 @@ def setup_full_config(proxies, target_name, platform, provider_mode="template", 
                              "default terbaru (mis. DNS) belum terpakai; ganti lewat Edit Configuration → Ganti File Template")
 
         # node: dedupe terhadap nama bawaan template (+ node lama kalau mode append)
-        target_path = os.path.join(proxy_dir, target_name)
+        target_path = os.path.join(user_dir, target_name)
         existing = load_provider_nodes(target_path) if write_mode == "append" else []
         nodes = dedupe_names([dict(n) for n in proxies], reserved_names() | {x["name"] for x in existing})
         save_proxy_yaml(existing + nodes, target_path)
 
-        other = os.path.join(proxy_dir, "trial.yaml" if target_name == "active.yaml" else "active.yaml")
+        other = os.path.join(user_dir, "trial.yaml" if target_name == "active.yaml" else "active.yaml")
         if not os.path.exists(other):
             with open(other, "w", encoding="utf-8") as f:
                 f.write("proxies: []\n")
@@ -1173,7 +1309,7 @@ def setup_full_config(proxies, target_name, platform, provider_mode="template", 
             shutil.rmtree(target_rules)
         shutil.copytree(RULESET_SOURCE, target_rules)
 
-        with open(os.path.join(out_dir, "config.yaml"), "w", encoding="utf-8") as f:
+        with open(os.path.join(out_dir, config_filename(operator)), "w", encoding="utf-8") as f:
             f.write(render_config(cfg, platform, "v3"))
     except PermissionError as e:
         return None, [], [], f"PermissionError: {e}. Taruh folder script di /storage/emulated/0/ (bukan ~ Termux)."
@@ -1213,16 +1349,19 @@ def _bug_pick_nodes(nodes):
     for i, n in enumerate(nodes, 1):
         print(f"  {C.CYAN}[{i}]{C.RESET} {truncate(str(n.get('name')), 24):<24} "
               f"{C.DIM}{str(n.get('type', '?')).upper():<6} {truncate(str(n.get('server')), 18)}{C.RESET}")
-    raw = ask(f"{C.YELLOW}Node yang diuji (Enter = semua, atau 1,3) ❯{C.RESET} ").strip()
-    if not raw:
-        return list(range(len(nodes)))
-    try:
-        idx = sorted({int(x) - 1 for x in raw.replace(" ", "").split(",") if x})
-    except ValueError:
-        err("Input tidak valid."); return None
-    if not idx or any(not 0 <= i < len(nodes) for i in idx):
-        err("Nomor di luar daftar."); return None
-    return idx
+    while True:
+        raw = ask(f"{C.YELLOW}Node yang diuji (Enter = semua, atau 1,3; 0 = batal) ❯{C.RESET} ").strip()
+        if not raw:
+            return list(range(len(nodes)))
+        if raw.lower() in ("0", "batal"):
+            return None
+        try:
+            idx = sorted({int(x) - 1 for x in raw.replace(" ", "").split(",") if x})
+        except ValueError:
+            err("Input tidak valid — pakai nomor dipisah koma."); continue
+        if not idx or any(not 0 <= i < len(nodes) for i in idx):
+            err(f"Nomor di luar daftar (1-{len(nodes)})."); continue
+        return idx
 
 
 def _bug_pick_fields():
@@ -1231,16 +1370,129 @@ def _bug_pick_fields():
         print(f"  {C.CYAN}[{i}]{C.RESET} {label:<12} {C.DIM}{hint}{C.RESET}")
     print(f"  {C.CYAN}[L]{C.RESET} {'Lazy':<12} {C.DIM}otomatis: coba semua metode address/port/host/SNI dari bug{C.RESET}")
     print(sep(50))
-    raw = ask(f"{C.YELLOW}Pilih (mis. 1,2,3 — Enter = SNI+Host+Address, L = Lazy) ❯{C.RESET} ").strip() or "1,2,3"
-    if raw.lower() in ("l", "lazy"):
-        return ["lazy"]
-    try:
-        nums = sorted({int(x) for x in raw.replace(" ", "").split(",") if x})
-    except ValueError:
-        err("Input tidak valid."); return None
-    if not nums or any(not 1 <= n <= len(BUG_FIELD_MENU) for n in nums):
-        err("Nomor di luar daftar."); return None
-    return [BUG_FIELD_MENU[n - 1][0] for n in nums]
+    while True:
+        raw = ask(f"{C.YELLOW}Pilih (mis. 1,2,3 — Enter = SNI+Host+Address, L = Lazy, 0 = batal) ❯{C.RESET} ").strip() or "1,2,3"
+        if raw.lower() in ("l", "lazy"):
+            return ["lazy"]
+        if raw.lower() in ("0", "batal"):
+            return None
+        try:
+            nums = sorted({int(x) for x in raw.replace(" ", "").split(",") if x})
+        except ValueError:
+            err("Input tidak valid — pakai nomor dipisah koma, atau L."); continue
+        if not nums or any(not 1 <= n <= len(BUG_FIELD_MENU) for n in nums):
+            err(f"Nomor di luar daftar (1-{len(BUG_FIELD_MENU)})."); continue
+        return [BUG_FIELD_MENU[n - 1][0] for n in nums]
+
+
+# ---------- Daftar file hasil sniffer (dipakai sebagai kandidat Uji Bug) ----------
+SNIFFER_PICK_LIMIT = 15
+
+
+def sniffer_result_files():
+    """File hasil sniffer yang bisa dipakai: [(path, label)] terbaru dulu. Satu entri per rekaman: .json (atau .csv bila
+    .json tidak ada) + log penangkap path .jsonl. File .md (laporan) dan config tidak termasuk."""
+    d = SNIFFER_OUT_DIR
+    out = {}
+    for pattern in ("*.json", "*.csv", "*.jsonl"):
+        for fn in glob.glob(os.path.join(d, pattern)):
+            stem, ext = os.path.splitext(fn)
+            if ext == ".csv" and os.path.isfile(stem + ".json"):
+                continue
+            out[fn] = os.path.basename(fn)
+    return sorted(out.items(), key=lambda kv: os.path.getmtime(kv[0]), reverse=True)
+
+
+def sniffer_file_candidates(path):
+    """Kandidat dari satu file hasil sniffer → {"domains", "ips", "ports", "paths", "bugpaths"} (list unik berurutan).
+    Hanya koneksi yang MENERIMA data (download > 0) untuk .json/.csv. Raise OSError/ValueError bila file tak terbaca."""
+    out = {"domains": [], "ips": [], "ports": [], "paths": [], "bugpaths": []}
+
+    def add(key, val):
+        val = str(val or "").strip()
+        if val and val not in out[key]:
+            out[key].append(val)
+
+    if path.lower().endswith(".jsonl"):
+        hc = _import_tool("httpcatch")
+        if not hc:
+            raise ValueError("httpcatch.py tidak bisa dimuat")
+        events = hc.load_jsonl(path)
+        for e in events:
+            host = str(e.get("host") or "")
+            (add("ips", host) if ip_literal(host) else add("domains", host))
+        for c in hc.bug_candidates(events):
+            add("bugpaths", c)
+            seg = "/" + c.split("/", 1)[1] if "/" in c else ""
+            add("paths", seg)
+        return out
+    sn = _import_tool("sniffer")
+    if not sn:
+        raise ValueError("sniffer.py tidak bisa dimuat")
+    rows = sn.rows_from_file(path)
+    groups, _, _ = sn.aggregate_ok(rows)
+    for g in groups:
+        name = g["name"]
+        if g["kind"] == "IP" or ip_literal(name):
+            add("ips", name)
+        else:
+            add("domains", name)
+        for ip in g.get("ips") or []:
+            add("ips", ip)
+        add("ports", g.get("port"))
+    return out
+
+
+def _sniffer_tokens_for(field, cand):
+    """Pilih bagian kandidat sniffer yang cocok untuk field Uji Bug."""
+    if field == "bug":
+        return cand["domains"] + cand["bugpaths"]
+    if field in ("sni", "host", "phantom"):
+        return cand["domains"]
+    if field == "server":
+        return cand["domains"] + cand["ips"]
+    if field == "ip":
+        return cand["ips"]
+    if field == "port":
+        return cand["ports"]
+    if field == "path":
+        return cand["paths"]
+    return []
+
+
+def _pick_sniffer_tokens(field, label):
+    """Tampilkan daftar file hasil sniffer, minta pilihan (boleh banyak), return list token kandidat (kosong = lewati)."""
+    files = sniffer_result_files()
+    if not files:
+        return []
+    shown = files[:SNIFFER_PICK_LIMIT]
+    while True:
+        print(f"\n  {C.BOLD}Hasil sniffer{C.RESET} {C.DIM}(hasil/sniffer/) — pilih sebagai kandidat {label}:{C.RESET}")
+        for i, (fn, name) in enumerate(shown, 1):
+            when = time.strftime("%d-%m %H:%M", time.localtime(os.path.getmtime(fn)))
+            print(f"  {C.CYAN}[{i}]{C.RESET} {truncate(name, 34):<34} {C.DIM}{when}  {_human_size(os.path.getsize(fn))}{C.RESET}")
+        extra = f"  [L] semua ({len(files)})" if len(files) > len(shown) else ""
+        raw = ask(f"{C.YELLOW}File (nomor, pisah koma{extra}; Enter = lewati) ❯{C.RESET} ").strip().lower()
+        if not raw:
+            return []
+        if raw == "l" and len(files) > len(shown):
+            shown = files; continue
+        try:
+            nums = sorted({int(x) for x in raw.replace(" ", "").split(",") if x})
+        except ValueError:
+            err("Input tidak valid — pakai nomor dipisah koma."); continue
+        if not nums or any(not 1 <= n <= len(shown) for n in nums):
+            err(f"Nomor di luar daftar (1-{len(shown)})."); continue
+        tokens = []
+        for n in nums:
+            fn, name = shown[n - 1]
+            try:
+                tk = _sniffer_tokens_for(field, sniffer_file_candidates(fn))
+            except (OSError, ValueError, Exception) as e:
+                warn(f"{name}: tidak terbaca — {e}"); continue
+            ok(f"{name}: {len(tk)} kandidat")
+            tokens += tk
+        return list(dict.fromkeys(tokens))
 
 
 def _bug_collect_candidates(bt, fields):
@@ -1250,13 +1502,15 @@ def _bug_collect_candidates(bt, fields):
     for f in fields:
         label, hint = labels[f]
         print(); section(f"Kandidat {label}")
+        from_sniffer = _pick_sniffer_tokens(f, label)
         lines = _collect_lines([f"Paste daftar {label}, banyak sekaligus.",
                                 hint,
                                 "Pisah baris/spasi/koma. '@file.txt' = dari file.",
-                                "Enter kosong = selesai. 'batal' = batalkan uji."])
+                                "Enter kosong = selesai" + (" (hasil sniffer terpilih ikut dipakai)." if from_sniffer else ".")
+                                + " 'batal' = batalkan uji."])
         if lines is None:
             return None
-        text, problems = bt.read_candidate_lines(lines)
+        text, problems = bt.read_candidate_lines(from_sniffer + lines)
         for pr in problems:
             warn(f"file tidak terbaca — {pr}")
         good, bad = bt.parse_candidates(f, text)
@@ -1284,10 +1538,11 @@ def _bug_collect_lazy(bt):
                                                               "IP node & hasil resolve domain server ikut dicoba otomatis.",
                                                               "Enter kosong = lewati."])):
         print(); section(title)
+        from_sniffer = _pick_sniffer_tokens(key, label)
         lines = _collect_lines(intro)
         if lines is None:
             return None
-        text, problems = bt.read_candidate_lines(lines)
+        text, problems = bt.read_candidate_lines(from_sniffer + lines)
         for pr in problems:
             warn(f"file tidak terbaca — {pr}")
         good, bad = bt.parse_candidates(key, text)
@@ -1298,8 +1553,12 @@ def _bug_collect_lazy(bt):
         got[key] = good
     if not got["bug"]:
         warn("Tanpa bug: hanya metode yang tidak butuh bug yang dicoba.")
-    raw = ask(f"{C.YELLOW}Port (Enter = {','.join(map(str, bt.DEFAULT_LAZY_PORTS))}) ❯{C.RESET} ").strip()
-    ports = bt.parse_candidates("port", raw)[0] if raw else []
+    while True:
+        raw = ask(f"{C.YELLOW}Port (Enter = {','.join(map(str, bt.DEFAULT_LAZY_PORTS))}) ❯{C.RESET} ").strip()
+        ports, bad = bt.parse_candidates("port", raw) if raw else ([], [])
+        if raw and (bad or not ports):
+            err("Port tidak valid: " + truncate(", ".join(map(str, bad)) or raw, 40) + " (1-65535, pisah spasi/koma)."); continue
+        break
     return {"bugs": got["bug"], "ips": got["ip"], "ports": ports or list(bt.DEFAULT_LAZY_PORTS)}
 
 
@@ -1315,18 +1574,22 @@ def _bug_choose_modes(bt):
           f"{(v2flavor + ' ditemukan') if v2core else 'tidak ditemukan'}{C.RESET}")
     print(f"  {C.DIM}Boleh lebih dari satu (mis. 1,2): varian harus lolos semua mode, urut dari yang termurah.{C.RESET}")
     print(sep(50))
-    raw = ask(f"{C.YELLOW}Pilih mode (Enter = 2) ❯{C.RESET} ").strip() or "2"
-    try:
-        nums = sorted({int(x) for x in raw.replace(" ", "").split(",") if x})
-    except ValueError:
-        err("Input tidak valid."); return None
-    if not nums or any(n not in (1, 2, 3) for n in nums):
-        err("Pilihan tidak valid."); return None
+    while True:
+        raw = ask(f"{C.YELLOW}Pilih mode (Enter = 2, 0 = batal) ❯{C.RESET} ").strip() or "2"
+        if raw.lower() in ("0", "batal"):
+            return None
+        try:
+            nums = sorted({int(x) for x in raw.replace(" ", "").split(",") if x})
+        except ValueError:
+            err("Input tidak valid — pakai 1, 2, 3 (boleh dipisah koma)."); continue
+        if not nums or any(n not in (1, 2, 3) for n in nums):
+            err("Pilihan tidak valid — hanya 1, 2, 3."); continue
+        break
     modes = [bt.MODES[n - 1] for n in nums]
     opts = {}
     if "mihomo" in modes:
         if not mih:
-            if ask(f"  Core Mihomo belum ada. Unduh otomatis dari GitHub? (Y/n) ❯ ").strip().lower() == "n":
+            if not ask_yn(f"  Core Mihomo belum ada. Unduh otomatis dari GitHub? (Y/n) ❯ ", default=True):
                 return None
             mih = bt.download_mihomo()
             if not mih:
@@ -1338,8 +1601,13 @@ def _bug_choose_modes(bt):
                 "atau set HIKARI_XRAY=/path/ke/xray.")
             return None
         opts["v2ray_core"], opts["v2ray_flavor"] = v2core, v2flavor
-    raw = ask(f"{C.YELLOW}Timeout per tes, detik (Enter = 5, maks 30) ❯{C.RESET} ").strip()
-    opts["timeout"] = float(raw) if raw.replace(".", "", 1).isdigit() and float(raw) > 0 else 5.0
+    while True:
+        raw = ask(f"{C.YELLOW}Timeout per tes, detik (Enter = 5, maks 30) ❯{C.RESET} ").strip()
+        if not raw:
+            opts["timeout"] = 5.0; break
+        if raw.replace(".", "", 1).isdigit() and float(raw) > 0:
+            opts["timeout"] = float(raw); break
+        err(f"'{truncate(raw, 20)}' bukan angka detik yang valid.")
     if opts["timeout"] > 30:
         warn("Timeout dibatasi 30 detik: API Mihomo menolak nilai di atas 32 detik dengan error 'Body invalid'.")
         opts["timeout"] = 30.0
@@ -1452,7 +1720,7 @@ def feature_bugtest(nodes):
           f"{' + '.join(bt.MODE_LABEL[m] for m in modes)}")
     if n_var > 400:
         warn("Jumlah tes besar — bisa lama. Ctrl+C untuk menghentikan.")
-    if ask(f"{C.YELLOW}Mulai? (Y/n) ❯{C.RESET} ").strip().lower() == "n":
+    if not ask_yn(f"{C.YELLOW}Mulai? (Y/n) ❯{C.RESET} ", default=True):
         return None
 
     print()
@@ -1461,7 +1729,7 @@ def feature_bugtest(nodes):
         if bt.tcp_intercepted(variants):
             warn("Hampir semua TCP connect <3 ms: koneksi dijawab Box/Nikki/VPN lokal. Matikan dulu atau pakai mode Mihomo/V2Ray.")
         combos = [] if lazy else bt.make_combos(variants)
-        if combos and ask(f"\n{C.YELLOW}Uji juga gabungan terbaik tiap field ({len(combos)} node)? (Y/n) ❯{C.RESET} ").strip().lower() != "n":
+        if combos and ask_yn(f"\n{C.YELLOW}Uji juga gabungan terbaik tiap field ({len(combos)} node)? (Y/n) ❯{C.RESET} ", default=True):
             bt.test_variants(combos, modes, opts, progress=_bug_progress)
             variants += combos
     except RuntimeError as e:
@@ -1512,7 +1780,7 @@ def feature_bugtest(nodes):
     print(f"  {C.CYAN}[1]{C.RESET} Tambahkan {len(ok_v)} varian ke daftar node {C.DIM}(node asli tetap){C.RESET}")
     print(f"  {C.CYAN}[2]{C.RESET} Ganti node asli yang punya varian lolos dengan varian-nya")
     print(f"  {C.CYAN}[3]{C.RESET} Jangan dipakai {C.DIM}(cukup file hasil di atas){C.RESET}")
-    pick = ask(f"{C.YELLOW}Pilih (Enter = 1) ❯{C.RESET} ").strip() or "1"
+    pick = ask_choice(f"{C.YELLOW}Pilih (Enter = 1) ❯{C.RESET} ", ("1", "2", "3"), default="1")
     if pick not in ("1", "2"):
         return None
     drop = {picked[v["base"]] for v in ok_v} if pick == "2" else set()
@@ -1605,10 +1873,10 @@ def feature_convert_to_clash():
             return
         elif aksi == "t":
             print(); section("Tambah Node Lagi")
-            extra = _collect_lines(["Paste tautan baru (satu per baris).", "Enter kosong = selesai.",
-                                    "Ketik 'batalkan' untuk batal nambah."])
-            if extra:
-                lines += extra
+            more = _collect_lines(["Paste tautan baru (satu per baris).", "Enter kosong = selesai.",
+                                   "Ketik 'batalkan' untuk batal nambah."])
+            if more:
+                lines += more
         elif aksi == "h":
             raw = ask("  Nomor yang mau dihapus ❯ ").strip()
             try:
@@ -1629,8 +1897,43 @@ def feature_convert_to_clash():
     _generate_and_report(proxies, n_emoji)
 
 
-def _generate_and_report(proxies, n_emoji=0, default_plat=None, default_target=None, source_path=None, node_label="node baru"):
-    """Pilih output/target/mode → setup_full_config → laporan. Dipakai Convert (node baru) dan Regenerate (node tersimpan).
+def _ask_operator(default=None):
+    """Tanya operator/ISP. Return nama aman (mis. 'xl', 'byu'). Enter = `default` (operator terakhir) kalau ada.
+    Nomor atau nama; [8] / nama lain = ketik sendiri. Jawaban kosong tanpa default ditolak (ditanya ulang)."""
+    print(); section("Operator / ISP")
+    print(f"  {C.DIM}Menentukan nama file (<operator>.yaml) dan folder provider (proxy/<operator>/).{C.RESET}")
+    keys = list(OPERATORS)
+    for i, k in enumerate(keys, 1):
+        extra = f"  {C.DIM}(+DNS {', '.join(ISP_PROFILES['xl']['ips'])} di Nikki/OpenClash){C.RESET}" if k == "xl" else ""
+        print(f"  {C.CYAN}[{i}]{C.RESET} {OPERATORS[k]:<10}{C.DIM}→ {k}.yaml{C.RESET}{extra}")
+    print(f"  {C.CYAN}[{len(keys) + 1}]{C.RESET} Lainnya    {C.DIM}(ketik nama sendiri){C.RESET}")
+    print(sep(50))
+    hint = f"Enter = {default}" if default else "wajib diisi"
+    while True:
+        raw = ask(f"{C.YELLOW}Operator ({hint}) ❯{C.RESET} ").strip()
+        if not raw:
+            if default:
+                return default
+            err("Operator wajib diisi (nomor atau nama)."); continue
+        if raw.isdigit():
+            n = int(raw)
+            if 1 <= n <= len(keys):
+                return keys[n - 1]
+            if n == len(keys) + 1:
+                name = safe_name(ask("  Nama operator (huruf/angka) ❯ "))
+                if name:
+                    return name
+                err("Nama tidak valid."); continue
+            err("Nomor di luar daftar."); continue
+        name = safe_name(raw)
+        if name and name == raw.strip().lower().replace(" ", "-"):
+            return name
+        err(f"Nama '{truncate(raw, 20)}' tidak valid (hanya huruf, angka, . _ -).")
+
+
+def _generate_and_report(proxies, n_emoji=0, default_plat=None, default_target=None, source_path=None, node_label="node baru",
+                         default_operator=None):
+    """Pilih output/target/operator/mode → setup_full_config → laporan. Dipakai Convert (node baru) dan Regenerate (node tersimpan).
     default_*: nilai saat Enter. source_path: file provider asal node; kalau sama dengan target, tidak ditanya timpa/tambah."""
     print(); section("Pilih Output Config")
     print(f"  {C.CYAN}[B]{C.RESET} Config for Box (Android)")
@@ -1639,65 +1942,57 @@ def _generate_and_report(proxies, n_emoji=0, default_plat=None, default_target=N
     print(sep(50))
     platform = {"b": "box", "n": "nikki", "o": "openclash"}
     plat_hint = f", Enter={default_plat[0].upper()}" if default_plat else ""
-    while True:
-        raw = ask(f"{C.YELLOW}Pilih (B/N/O{plat_hint}) ❯{C.RESET} ").strip().lower()
-        plat = platform.get(raw) or (default_plat if not raw and default_plat else None)
-        if plat:
-            break
-        err("Pilihan tidak valid.")
+    raw = ask_choice(f"{C.YELLOW}Pilih (B/N/O{plat_hint}) ❯{C.RESET} ", platform,
+                     default=default_plat[0] if default_plat else None)
+    plat = platform[raw]
 
     print(); section("Pilih Target Provider")
     print(f"  {C.CYAN}[1]{C.RESET} active.yaml\n  {C.CYAN}[2]{C.RESET} trial.yaml")
     print(sep(50))
     tgt_hint = f", Enter={'1' if default_target == 'active.yaml' else '2'}" if default_target else ""
-    while True:
-        c = ask(f"{C.YELLOW}Pilih (1/2{tgt_hint}) ❯{C.RESET} ").strip()
-        if not c and default_target:
-            target_name = default_target; break
-        if c in ("1", "2"):
-            target_name = "active.yaml" if c == "1" else "trial.yaml"; break
-        err("Pilihan tidak valid.")
+    c = ask_choice(f"{C.YELLOW}Pilih (1/2{tgt_hint}) ❯{C.RESET} ", ("1", "2"),
+                   default=("1" if default_target == "active.yaml" else "2") if default_target else None)
+    target_name = "active.yaml" if c == "1" else "trial.yaml"
+
+    operator = _ask_operator(default_operator or load_settings()["operator"] or None)
+    try:
+        save_settings({"operator": operator})
+    except OSError:
+        pass
 
     P = PLATFORMS[plat]
-    target_path = os.path.join(BASE_DIR, P["out"], P["proxy_dir"], target_name)
+    target_path = os.path.join(BASE_DIR, P["out"], P["proxy_dir"], operator, target_name)
     same_as_source = bool(source_path) and os.path.abspath(source_path) == os.path.abspath(target_path)
     existing = [] if same_as_source else load_provider_nodes(target_path)
     write_mode = "replace"
     if existing:
         print()
-        warn(f"{target_name} sudah berisi {len(existing)} node.")
+        warn(f"{operator}/{target_name} sudah berisi {len(existing)} node.")
         print(f"  {C.CYAN}[1]{C.RESET} Ganti (timpa)   {C.CYAN}[2]{C.RESET} Tambahkan ke yang lama")
-        write_mode = "append" if ask(f"{C.YELLOW}Pilih (1/2) ❯{C.RESET} ").strip() == "2" else "replace"
+        write_mode = "append" if ask_choice(f"{C.YELLOW}Pilih (1/2) ❯{C.RESET} ", ("1", "2")) == "2" else "replace"
 
     print(); section("Mode Rule-Provider")
     print(f"  {C.CYAN}[1]{C.RESET} Ikuti template {C.DIM}(http: auto-update dari GitHub){C.RESET}")
     print(f"  {C.CYAN}[2]{C.RESET} Offline        {C.DIM}(file lokal saja, tanpa update){C.RESET}")
-    provider_mode = "offline" if ask(f"{C.YELLOW}Pilih (1/2, Enter=1) ❯{C.RESET} ").strip() == "2" else "template"
+    provider_mode = "offline" if ask_choice(f"{C.YELLOW}Pilih (1/2, Enter=1) ❯{C.RESET} ", ("1", "2"), default="1") == "2" else "template"
 
     print(); section("Secret Dashboard")
     tpl_secret = _template_secret()
     print(f"  {C.CYAN}[1]{C.RESET} Ikuti template {C.DIM}(sekarang: {tpl_secret or 'kosong'}){C.RESET}")
     print(f"  {C.CYAN}[2]{C.RESET} Acak           {C.DIM}(dibuat otomatis, ditampilkan setelah generate){C.RESET}")
-    secret_mode = "random" if ask(f"{C.YELLOW}Pilih (1/2, Enter=1) ❯{C.RESET} ").strip() == "2" else "template"
-
-    isp = None
-    if plat in ISP_PLATFORMS:
-        saved = load_settings()["isp"]
-        print(); section("Profil ISP")
-        print(f"  {C.CYAN}[1]{C.RESET} Umum {C.DIM}(tanpa DNS ISP){C.RESET}")
-        print(f"  {C.CYAN}[2]{C.RESET} XL Axiata {C.DIM}(wajib untuk tunneling di XL: +{', '.join(ISP_PROFILES['xl']['ips'])}){C.RESET}")
-        pick = ask(f"{C.YELLOW}Pilih (Enter = pengaturan tersimpan: {ISP_PROFILES[saved]['label']}) ❯{C.RESET} ").strip()
-        isp = {"1": "none", "2": "xl"}.get(pick)
+    secret_mode = "random" if ask_choice(f"{C.YELLOW}Pilih (1/2, Enter=1) ❯{C.RESET} ", ("1", "2"), default="1") == "2" else "template"
 
     print()
     spinner("Membangun & memvalidasi config", 0.5)
-    out_dir, notes, issues, error = setup_full_config(proxies, target_name, plat, provider_mode, write_mode, secret_mode, isp)
+    out_dir, notes, issues, error = setup_full_config(proxies, target_name, plat, provider_mode, write_mode, secret_mode,
+                                                      isp_for_operator(operator), operator)
     if error:
         err(f"Gagal: {error}\n"); pause(); return
 
+    cfg_name = config_filename(operator)
     ok(f"Config {P['label']} siap di:\n  {C.BOLD}{C.CYAN}{out_dir}/{C.RESET}")
-    print(f"  {C.DIM}├── config.yaml{C.RESET}")
-    print(f"  {C.DIM}├── {P['proxy_dir']}/{target_name} ({len(proxies)} {node_label}){C.RESET}")
+    print(f"  {C.DIM}├── {cfg_name}{C.RESET}")
+    print(f"  {C.DIM}├── {P['proxy_dir']}/{operator}/{target_name} ({len(proxies)} {node_label}){C.RESET}")
     print(f"  {C.DIM}└── {P['rule_dir']}/{C.RESET}\n")
     for n in notes:
         print(f"  {C.DIM}• {n}{C.RESET}")
@@ -1708,24 +2003,25 @@ def _generate_and_report(proxies, n_emoji=0, default_plat=None, default_target=N
         why = "fitur emoji OFF (Edit Configuration → Emoji Node)" if not ecfg["enabled"] else "semua nama node sudah diawali emoji"
         print(f"\n  {C.DIM}Emoji tidak ditambahkan: {why}.{C.RESET}")
     if n_emoji:
-        print(f"\n  {C.DIM}Nama node (emoji acak, ubah daftar di Edit Configuration → Emoji Node):{C.RESET}")
+        print(f"\n  {C.DIM}Nama node (emoji sesuai metode, ubah di Edit Configuration → Emoji Node):{C.RESET}")
         for p in proxies[:10]:
             print(f"    {p['name']}")
         if len(proxies) > 10:
             print(f"    {C.DIM}... +{len(proxies) - 10} lainnya{C.RESET}")
-    secret = yaml.safe_load(read_text(os.path.join(out_dir, "config.yaml"))).get("secret")
+    secret = yaml.safe_load(read_text(os.path.join(out_dir, cfg_name))).get("secret")
     print(f"\n  Dashboard secret : {C.BOLD}{secret if secret else '(kosong)'}{C.RESET}")
 
     print()
     if plat == "box":
         print(f"{C.YELLOW}💡 BOX ANDROID:{C.RESET} copy SEMUA isi folder di atas ke {C.BOLD}/data/adb/box/clash/{C.RESET}")
+        print(f"   {C.DIM}Kalau Box-mu membaca config.yaml, salin/ganti nama {cfg_name} jadi config.yaml.{C.RESET}")
     elif plat == "nikki":
         print(f"{C.YELLOW}💡 NIKKI:{C.RESET}")
-        print(f"   1. {C.BOLD}config.yaml{C.RESET} → {C.BOLD}/etc/nikki/profiles/{C.RESET}")
+        print(f"   1. {C.BOLD}{cfg_name}{C.RESET} → {C.BOLD}/etc/nikki/profiles/{C.RESET}")
         print(f"   2. folder {C.BOLD}proxy/{C.RESET} & {C.BOLD}ruleset/{C.RESET} → {C.BOLD}{NIKKI_RUN_DIR}/{C.RESET}")
     else:
         print(f"{C.YELLOW}💡 OPENCLASH:{C.RESET}")
-        print(f"   1. {C.BOLD}config.yaml{C.RESET} → {C.BOLD}/etc/openclash/config/{C.RESET}")
+        print(f"   1. {C.BOLD}{cfg_name}{C.RESET} → {C.BOLD}/etc/openclash/config/{C.RESET}")
         print(f"   2. folder {C.BOLD}proxy_provider/{C.RESET} & {C.BOLD}rule_provider/{C.RESET} → {C.BOLD}/etc/openclash/{C.RESET}")
     pause("Tekan Enter untuk kembali ke menu...")
 
@@ -1737,7 +2033,7 @@ def stored_node_sources():
     """Provider hasil generate yang berisi node → list[(label, path, pid, target_name, nodes)]."""
     out = []
     for label, fn in provider_files():
-        pid, name = label.split("/", 1)
+        pid, name = label.split("/", 1)[0], os.path.basename(label)
         if name not in USER_NODE_FILES:      # free.yaml / subs.yaml bukan hasil convert pengguna
             continue
         nodes = load_provider_nodes(fn)
@@ -1746,12 +2042,19 @@ def stored_node_sources():
     return out
 
 
+def source_operator(label):
+    """'nikki/xl/active.yaml' -> 'xl'; 'nikki/active.yaml' (lama, tanpa operator) -> None."""
+    parts = label.split("/")
+    return parts[1] if len(parts) == 3 else None
+
+
 def regenerate_all(sources):
     """Bangun ulang config tiap platform dari node tersimpan, dengan pilihan baku
     (rule-provider & secret ikut template, profil ISP dari settings.json). Return list[(label, notes, issues, error)]."""
     results = []
     for label, _, pid, name, nodes in sources:
-        _, notes, issues, error = setup_full_config(nodes, name, pid, "template", "replace", "template", None)
+        op = source_operator(label)
+        _, notes, issues, error = setup_full_config(nodes, name, pid, "template", "replace", "template", None, op)
         results.append((label, notes, issues, error))
     return results
 
@@ -1762,14 +2065,14 @@ def feature_regenerate():
     if not sources:
         warn("Belum ada node tersimpan di hasil/. Buat dulu lewat Convert → URI ➜ Clash.")
         pause(); return
-    print(f"  {C.DIM}Membangun ulang config.yaml + ruleset dari node yang sudah ada — tanpa paste URI lagi.")
+    print(f"  {C.DIM}Membangun ulang config (<operator>.yaml) + ruleset dari node yang sudah ada — tanpa paste URI lagi.")
     print(f"  Berguna setelah mengubah template, DNS, profil ISP, atau emoji/secret.{C.RESET}\n")
     for i, (label, fn, _, _, nodes) in enumerate(sources, 1):
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(fn)))
         print(f"  {C.CYAN}[{i}]{C.RESET} {label:<22} {len(nodes):>3} node  {C.DIM}(diubah {when}){C.RESET}")
-    print(f"  {C.CYAN}[A]{C.RESET} Semua di atas {C.DIM}(pilihan baku: rule-provider & secret ikut template, profil ISP tersimpan){C.RESET}")
+    print(f"  {C.CYAN}[A]{C.RESET} Semua di atas {C.DIM}(pilihan baku: rule-provider & secret ikut template, operator dari folder asal){C.RESET}")
     print(f"  {C.CYAN}[0]{C.RESET} Kembali\n{sep(50)}")
-    pick = ask(f"{C.YELLOW}Pilih ❯{C.RESET} ").strip().lower()
+    pick = ask_choice(f"{C.YELLOW}Pilih ❯{C.RESET} ", [str(i) for i in range(1, len(sources) + 1)] + ["a"], cancel=("0", ""))
     if pick in ("", "0"):
         return
     if pick == "a":
@@ -1784,8 +2087,6 @@ def feature_regenerate():
             print_issues(issues)
         pause("Tekan Enter untuk kembali ke menu...")
         return
-    if not (pick.isdigit() and 1 <= int(pick) <= len(sources)):
-        err("Pilihan tidak valid."); time.sleep(1.0); return
     label, fn, pid, name, nodes = sources[int(pick) - 1]
     work = [dict(n) for n in nodes]
     while True:
@@ -1793,8 +2094,8 @@ def feature_regenerate():
               f"pilih platform lain untuk menyalin node ke sana.{C.RESET}")
         print(f"  {C.CYAN}[U]{C.RESET} Uji bug / custom SNI · Host · Address dulu   "
               f"{C.GREEN}[L]{C.RESET} Lanjut   {C.RED}[B]{C.RESET} Batal")
-        aksi = ask(f"{C.YELLOW}Pilih (Enter = L) ❯{C.RESET} ").strip().lower()
-        if aksi in ("", "l"):
+        aksi = ask_choice(f"{C.YELLOW}Pilih (Enter = L) ❯{C.RESET} ", ("u", "l", "b"), default="l")
+        if aksi == "l":
             break
         if aksi == "b":
             return
@@ -1804,10 +2105,8 @@ def feature_regenerate():
                 work = [n for i, n in enumerate(work) if i not in res["drop"]] + res["nodes"]
                 clear_screen(); banner(); section("Regenerate dari Node Tersimpan")
                 ok(f"{len(res['nodes'])} varian ditambahkan" + (f", {len(res['drop'])} node asli diganti" if res["drop"] else ""))
-        else:
-            err("Aksi tidak dikenal."); time.sleep(0.8)
-    _generate_and_report(work, 0, default_plat=pid, default_target=name,
-                         source_path=fn, node_label="node dipakai ulang")
+    _generate_and_report(work, apply_emoji(work), default_plat=pid, default_target=name,
+                         source_path=fn, node_label="node dipakai ulang", default_operator=source_operator(label))
 
 
 # =====================================================================
@@ -1820,6 +2119,8 @@ def provider_files():
         d = os.path.join(BASE_DIR, P["out"], P["proxy_dir"])
         for fn in sorted(glob.glob(os.path.join(d, "*.y*ml"))):
             found.append((f"{pid}/{os.path.basename(fn)}", fn))
+        for fn in sorted(glob.glob(os.path.join(d, "*", "*.y*ml"))):       # proxy/<operator>/active.yaml
+            found.append((f"{pid}/{os.path.basename(os.path.dirname(fn))}/{os.path.basename(fn)}", fn))
     return found
 
 
@@ -1894,7 +2195,7 @@ def feature_convert_to_uri():
     if gagal:
         warn("Dilewati (tipe tidak didukung): " + ", ".join(truncate(g, 24) for g in gagal))
     print(sep(50))
-    if ask("  Simpan ke file? (y/n) ❯ ").strip().lower() == "y":
+    if ask_yn("  Simpan ke file? (y/N) ❯ "):
         os.makedirs(BASE_DIR, exist_ok=True)
         out_path = os.path.join(BASE_DIR, f"URI_{time.strftime('%d%m%Y_%H%M%S')}.txt")
         with open(out_path, "w", encoding="utf-8") as f:
@@ -1948,8 +2249,8 @@ def feature_check_status():
 
     print(f"\n  {C.DIM}Status Full Config:{C.RESET}")
     for pid, P in PLATFORMS.items():
-        cp = os.path.join(BASE_DIR, P["out"], "config.yaml")
-        (print(f"  {C.GREEN}✓{C.RESET} {P['label']:<24}: {C.GREEN}Siap{C.RESET}") if os.path.isfile(cp)
+        files = [os.path.basename(f) for f in generated_config_files(pid)]
+        (print(f"  {C.GREEN}✓{C.RESET} {P['label']:<24}: {C.GREEN}Siap{C.RESET} {C.DIM}({', '.join(files)}){C.RESET}") if files
          else print(f"  {C.GRAY}-{C.RESET} {P['label']:<24}: {C.DIM}Belum ada{C.RESET}"))
     print(f"\n  {C.DIM}Path Output:{C.RESET}\n  {C.CYAN}{BASE_DIR}{C.RESET}")
     pause("Tekan Enter untuk kembali ke menu...")
@@ -2240,7 +2541,7 @@ def _apply_dns_changes(path, content, dns, changes):
             print(f"    {C.GREEN}+ fallback-filter: geoip: false{C.RESET}")
     if blocking:
         err("Ada kesalahan di atas — perubahan dibatalkan."); pause(); return False
-    if ask(f"\n  Terapkan? (y/N) ❯ ").strip().lower() != "y":
+    if not ask_yn(f"\n  Terapkan? (y/N) ❯ "):
         return False
     new_text = content
     for field, new in changes.items():
@@ -2326,7 +2627,7 @@ def _dns_custom_flow(path, content, dns):
             warn(f"{field}: tidak ada entri, dilewati."); continue
         if dns.get(field):
             print(f"  {C.CYAN}[1]{C.RESET} Ganti semua   {C.CYAN}[2]{C.RESET} Tambahkan ke yang lama  {C.DIM}({len(dns[field])} entri sekarang){C.RESET}")
-            if ask(f"{C.YELLOW}{field} (Enter=1) ❯{C.RESET} ").strip() == "2":
+            if ask_choice(f"{C.YELLOW}{field} (Enter=1) ❯{C.RESET} ", ("1", "2"), default="1") == "2":
                 entries = list(dict.fromkeys([str(x) for x in dns[field]] + entries))
         changes[field] = entries
     if changes:
@@ -2400,7 +2701,7 @@ def _dns_antiblokir_flow(path, content, dns):
     print(f"\n  {C.CYAN}[1]{C.RESET} Semua DoH {C.DIM}(disarankan){C.RESET}")
     print(f"  {C.CYAN}[2]{C.RESET} Semua DoH, kecuali proxy-server-nameserver tetap apa adanya {C.DIM}(pilih ini kalau node timeout){C.RESET}")
     print(f"  {C.CYAN}[0]{C.RESET} Batal\n{sep(50)}")
-    k = ask(f"{C.YELLOW}Pilih (Enter=1) ❯{C.RESET} ").strip() or "1"
+    k = ask_choice(f"{C.YELLOW}Pilih (Enter=1) ❯{C.RESET} ", ("1", "2"), default="1", cancel=("0",))
     if k not in ("1", "2"):
         return
     changes = antiblokir_changes(dns, keep_proxy_server_plain=(k == "2"))
@@ -2470,49 +2771,35 @@ def _is_emoji_token(tok):
 
 def feature_edit_emoji():
     cfg = load_emoji_cfg()
+    keys = list(DEFAULT_EMOJI_MAP)
     while True:
         clear_screen(); banner(); section("Emoji Node")
         state = f"{C.GREEN}ON{C.RESET}" if cfg["enabled"] else f"{C.RED}OFF{C.RESET}"
-        print(f"  Status : {state}   {C.DIM}(nama 'Singapore' → '{cfg['emojis'][0] if cfg['emojis'] else '🦊'} Singapore'){C.RESET}")
-        print(f"  Daftar : {len(cfg['emojis'])} emoji\n")
-        for i in range(0, len(cfg["emojis"]), 6):
-            row = cfg["emojis"][i:i + 6]
-            print("  " + "   ".join(f"{C.DIM}{i + j + 1:>2}.{C.RESET} {e}" for j, e in enumerate(row)))
+        print(f"  Status : {state}   {C.DIM}(emoji mengikuti metode node, bukan acak){C.RESET}\n")
+        for i, k in enumerate(keys, 1):
+            print(f"  {C.CYAN}[{i:>2}]{C.RESET} {cfg['methods'][k]:<3} {k:<13} {C.DIM}{EMOJI_METHOD_LABEL[k]}{C.RESET}")
         print(); print(sep(50))
-        print(f"  {C.CYAN}[A]{C.RESET} Tambah emoji   {C.DIM}(pisahkan dengan spasi/koma){C.RESET}")
-        print(f"  {C.CYAN}[H]{C.RESET} Hapus emoji    {C.DIM}(nomor, mis: 1,4,7){C.RESET}")
+        print(f"  {C.CYAN}[E]{C.RESET} Ubah emoji satu metode   {C.DIM}(nomor, lalu emoji baru){C.RESET}")
         print(f"  {C.CYAN}[T]{C.RESET} Nyala / Matikan fitur emoji")
-        print(f"  {C.CYAN}[R]{C.RESET} Reset ke daftar bawaan")
+        print(f"  {C.CYAN}[R]{C.RESET} Reset ke bawaan")
         print(f"  {C.CYAN}[0]{C.RESET} Kembali\n{sep(50)}")
-        pilih = ask(f"{C.YELLOW}Pilih ❯{C.RESET} ").strip().lower()
+        pilih = ask_choice(f"{C.YELLOW}Pilih ❯{C.RESET} ", ("e", "t", "r", "0"))
         changed = True
         if pilih == "0":
             return
-        elif pilih == "a":
-            raw = ask("  Emoji baru ❯ ").replace(",", " ").split()
-            good = [t for t in raw if _is_emoji_token(t) and t not in cfg["emojis"]]
-            bad = [t for t in raw if not _is_emoji_token(t)]
-            cfg["emojis"] = list(dict.fromkeys(cfg["emojis"] + good))
-            if bad:
-                warn("Dilewati (bukan emoji): " + " ".join(bad))
-            if not good:
-                changed = False; time.sleep(1.2)
-        elif pilih == "h":
-            raw = ask("  Nomor yang dihapus ❯ ").replace(",", " ").split()
-            try:
-                gone = {int(x) - 1 for x in raw}
-            except ValueError:
-                err("Input tidak valid."); time.sleep(1.2); continue
-            left = [e for i, e in enumerate(cfg["emojis"]) if i not in gone]
-            if not left:
-                warn("Daftar tidak boleh kosong (matikan saja lewat [T])."); time.sleep(1.5); continue
-            cfg["emojis"] = left
+        elif pilih == "e":
+            num = ask(f"  Nomor metode (1-{len(keys)}) ❯ ").strip()
+            if not (num.isdigit() and 1 <= int(num) <= len(keys)):
+                err("Nomor di luar daftar."); time.sleep(1.2); continue
+            k = keys[int(num) - 1]
+            new = ask(f"  Emoji baru untuk {k} ❯ ").strip()
+            if not _is_emoji_token(new):
+                err("Itu bukan emoji."); time.sleep(1.2); continue
+            cfg["methods"][k] = new
         elif pilih == "t":
             cfg["enabled"] = not cfg["enabled"]
         elif pilih == "r":
-            cfg = {"enabled": cfg["enabled"], "emojis": list(DEFAULT_EMOJIS)}
-        else:
-            changed = False
+            cfg = {"enabled": cfg["enabled"], "methods": dict(DEFAULT_EMOJI_MAP)}
         if changed:
             try:
                 save_emoji_cfg(cfg)
@@ -2621,7 +2908,7 @@ def _unique_dst(path):
     """Jangan menimpa diam-diam: kalau sudah ada, tanya timpa atau pakai nama baru."""
     if not os.path.exists(path):
         return path
-    if ask(f"  {os.path.basename(path)} sudah ada. Timpa? (y/N) ❯ ").strip().lower() == "y":
+    if ask_yn(f"  {os.path.basename(path)} sudah ada. Timpa? (y/N) ❯ "):
         return path
     stem, ext = os.path.splitext(path)
     i = 2
@@ -2678,7 +2965,7 @@ def _convert_one_rule(mrs):
     try:
         if src.lower().endswith(".mrs"):
             print(f"  {C.CYAN}[1]{C.RESET} YAML (payload:)   {C.CYAN}[2]{C.RESET} TXT (satu entri per baris)")
-            as_text = ask(f"{C.YELLOW}Format keluaran (1/2, Enter=1) ❯{C.RESET} ").strip() == "2"
+            as_text = ask_choice(f"{C.YELLOW}Format keluaran (1/2, Enter=1) ❯{C.RESET} ", ("1", "2"), default="1") == "2"
             dst = _unique_dst(os.path.join(RULES_OUT_DIR, stem + (".txt" if as_text else ".yaml")))
             res = mrs.convert_file(src, dst, text_out=as_text)
         else:
@@ -2764,13 +3051,13 @@ def feature_misc_rules():
 
 
 # ---------- Config tester ----------
+def generated_config_files(pid):
+    """Semua config hasil generate satu platform (hasil/full_config_*/<operator>.yaml atau config.yaml)."""
+    return sorted(glob.glob(os.path.join(BASE_DIR, PLATFORMS[pid]["out"], "*.y*ml")))
+
+
 def _generated_configs():
-    out = []
-    for pid, P in PLATFORMS.items():
-        cp = os.path.join(BASE_DIR, P["out"], "config.yaml")
-        if os.path.isfile(cp):
-            out.append((pid, cp))
-    return out
+    return [(pid, cp) for pid in PLATFORMS for cp in generated_config_files(pid)]
 
 
 def _run_core_test(core, out_dir, cfg_path):
@@ -2892,7 +3179,7 @@ def _node_test_offline(nt):
     print(f"\n  {C.GREEN}{s['ok']} hidup{C.RESET} · {C.RED}{s['fail']} gagal{C.RESET} · {C.YELLOW}{s['skipped']} dilewati{C.RESET} · total {s['total']}")
     print(f"  {C.DIM}Ini tes jangkauan server dari jaringan ini (DNS/TCP/TLS), bukan jaminan proxy-nya tembus ke internet.{C.RESET}")
     good = [nodes[i] for i in range(len(nodes)) if results[i]["ok"]]
-    if good and ask(f"\n  Simpan {len(good)} node yang hidup ke file provider? (y/N) ❯ ").strip().lower() == "y":
+    if good and ask_yn(f"\n  Simpan {len(good)} node yang hidup ke file provider? (y/N) ❯ "):
         os.makedirs(BASE_DIR, exist_ok=True)
         path = os.path.join(BASE_DIR, f"nodes_ok_{time.strftime('%d%m%Y_%H%M%S')}.yaml")
         save_proxy_yaml(good, path)
@@ -2953,9 +3240,7 @@ def feature_misc_route():
     if not tpl:
         err("Template tidak ditemukan."); pause(); return
     print(f"  {C.CYAN}[B]{C.RESET} Box   {C.CYAN}[N]{C.RESET} Nikki   {C.CYAN}[O]{C.RESET} OpenClash   {C.DIM}(rule beda: WIFI hanya ada di Box){C.RESET}")
-    plat = {"b": "box", "n": "nikki", "o": "openclash"}.get(ask(f"{C.YELLOW}Platform (Enter=B) ❯{C.RESET} ").strip().lower() or "b")
-    if not plat:
-        err("Pilihan tidak valid."); time.sleep(1); return
+    plat = {"b": "box", "n": "nikki", "o": "openclash"}[ask_choice(f"{C.YELLOW}Platform (Enter=B) ❯{C.RESET} ", ("b", "n", "o"), default="b")]
     try:
         cfg, _ = build_config(read_text(tpl), plat)
     except Exception as e:
@@ -3131,14 +3416,19 @@ def build_sniffer_config(platform, with_asn=False, secret_mode="template", templ
     return cfg, notes
 
 
+def sniffer_config_filename(name=None):
+    name = safe_name(name)
+    return f"sniffer-{name}.yaml" if name else "config.yaml"
+
+
 def write_sniffer_config(platform, with_asn=False, secret_mode="template", out_root=None, operator_dns=None,
-                         operator_scope="provider", catcher=None):
-    """Tulis hasil/sniffer/<platform>/config.yaml. Return (path, issues, notes)."""
+                         operator_scope="provider", catcher=None, name=None):
+    """Tulis hasil/sniffer/<platform>/sniffer-<name>.yaml (tanpa name: config.yaml). Return (path, issues, notes)."""
     cfg, notes = build_sniffer_config(platform, with_asn, secret_mode, operator_dns=operator_dns,
                                       operator_scope=operator_scope, catcher=catcher)
     out_dir = os.path.join(out_root or SNIFFER_OUT_DIR, platform)
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, "config.yaml")
+    path = os.path.join(out_dir, sniffer_config_filename(name))
     issues = validate_config(cfg, platform, out_dir)
     if os.path.exists(path):
         backup_file(path)
@@ -3148,16 +3438,31 @@ def write_sniffer_config(platform, with_asn=False, secret_mode="template", out_r
 
 
 SNIFFER_INSTALL_HINT = {
-    "box": "salin config.yaml ke /data/adb/box/clash/  (cadangkan config lama dulu)",
-    "nikki": "salin config.yaml ke /etc/nikki/profiles/  (tanpa folder proxy/ruleset)",
-    "openclash": "salin config.yaml ke /etc/openclash/config/  (tanpa folder provider)",
+    "box": "salin {f} ke /data/adb/box/clash/  (cadangkan config lama dulu; kalau Box membaca config.yaml, ganti namanya)",
+    "nikki": "salin {f} ke /etc/nikki/profiles/  (tanpa folder proxy/ruleset)",
+    "openclash": "salin {f} ke /etc/openclash/config/  (tanpa folder provider)",
 }
+
+
+def _ask_name(prompt, default_hint):
+    """Minta nama (untuk nama file). Enter = kosong (pakai bawaan). Nama diubah ke bentuk aman; yang tak menyisakan
+    karakter valid ditolak dan ditanya ulang."""
+    while True:
+        raw = ask(prompt).strip()
+        if not raw:
+            return ""
+        name = safe_name(raw)
+        if name:
+            if name != raw:
+                print(f"  {C.DIM}dipakai: {name}{C.RESET}")
+            return name
+        err(f"Nama '{truncate(raw, 20)}' tidak valid (pakai huruf/angka). Enter = {default_hint}.")
 
 
 def _pick_platform(default="b"):
     print(f"  {C.CYAN}[B]{C.RESET} Box   {C.CYAN}[N]{C.RESET} Nikki   {C.CYAN}[O]{C.RESET} OpenClash")
-    key = ask(f"{C.YELLOW}Platform (Enter={default.upper()}) ❯{C.RESET} ").strip().lower() or default
-    return {"b": "box", "n": "nikki", "o": "openclash"}.get(key)
+    key = ask_choice(f"{C.YELLOW}Platform (Enter={default.upper()}) ❯{C.RESET} ", ("b", "n", "o"), default=default)
+    return {"b": "box", "n": "nikki", "o": "openclash"}[key]
 
 
 def _pick_operator_dns(context="sniffer"):
@@ -3214,46 +3519,67 @@ def _sniffer_generate():
         err(f"Template tidak ditemukan: {os.path.relpath(SNIFFER_TEMPLATE, SCRIPT_DIR)}"); pause(); return
     print(f"  {C.DIM}Tanpa node, semua trafik DIRECT lewat kuota reguler. Hanya mengintip koneksi.{C.RESET}\n")
     plat = _pick_platform()
-    if not plat:
-        err("Pilihan tidak valid."); time.sleep(1); return
+    print(f"\n  {C.DIM}Nama file: 'three' → sniffer-three.yaml. Kosong = config.yaml (bisa menimpa config sniffer lama).{C.RESET}")
+    sname = _ask_name(f"{C.YELLOW}Nama config (Enter = config.yaml) ❯{C.RESET} ", "config.yaml")
     print(f"\n  {C.DIM}ASN = nama pemilik IP (mis. AS13335 Cloudflare). Butuh GeoLite2-ASN.mmdb yang diunduh core saat start.{C.RESET}")
-    with_asn = ask(f"{C.YELLOW}Aktifkan ASN? (y/N) ❯{C.RESET} ").strip().lower() == "y"
-    rnd = ask(f"{C.YELLOW}Secret acak? (y/N, N = 'hikari') ❯{C.RESET} ").strip().lower() == "y"
+    with_asn = ask_yn(f"{C.YELLOW}Aktifkan ASN? (y/N) ❯{C.RESET} ")
+    rnd = ask_yn(f"{C.YELLOW}Secret acak? (y/N, N = 'hikari') ❯{C.RESET} ")
     op_ips = _pick_operator_dns()
     scope = "provider"
     if op_ips:
         print(f"\n  {C.DIM}Cakupan DNS operator: [1] hanya domain provider   [2] SEMUA domain, tanpa DoH{C.RESET}")
         print(f"  {C.DIM}[2] dibutuhkan untuk paket aplikasi (Spotify, Instagram, dsb): CDN-nya hanya dijawab DNS operator.{C.RESET}")
         print(f"  {C.DIM}Risiko [2]: kalau DNS itu tidak terjangkau (pindah jaringan), semua koneksi gagal resolve.{C.RESET}")
-        scope = "provider" if ask(f"{C.YELLOW}Cakupan (1/2, Enter = 2) ❯{C.RESET} ").strip() == "1" else "all"
+        scope = "provider" if ask_choice(f"{C.YELLOW}Cakupan (1/2, Enter = 2) ❯{C.RESET} ", ("1", "2"), default="2") == "1" else "all"
     catcher = None
     print(f"\n  {C.DIM}Penangkap path: proxy lokal (httpcatch.py) yang mencatat URL PATH, redirect (Location) dan status")
     print(f"  untuk HTTP polos (port 80/8080/...). Path HTTPS tidak terlihat. Berjalan di perangkat yang sama dengan Box.{C.RESET}")
-    if ask(f"{C.YELLOW}Aktifkan penangkap path? (y/N) ❯{C.RESET} ").strip().lower() == "y":
+    if ask_yn(f"{C.YELLOW}Aktifkan penangkap path? (y/N) ❯{C.RESET} "):
         chost = ask(f"  Alamat penangkap (Enter = 127.0.0.1) ❯ ").strip() or "127.0.0.1"
         craw = ask(f"  Port penangkap   (Enter = {CATCHER_PORT}) ❯ ").strip()
         catcher = (chost, int(craw) if craw.isdigit() and 1 <= int(craw) <= 65535 else CATCHER_PORT)
     spinner("Membangun config", 0.4)
     try:
         path, issues, notes = write_sniffer_config(plat, with_asn, "random" if rnd else "template",
-                                                   operator_dns=op_ips or None, operator_scope=scope, catcher=catcher)
+                                                   operator_dns=op_ips or None, operator_scope=scope, catcher=catcher, name=sname)
     except Exception as e:
         err(f"Gagal membuat config: {type(e).__name__}: {e}"); pause(); return
     ok(f"Config {PLATFORMS[plat]['label']} → {os.path.relpath(path, SCRIPT_DIR)}")
     for n in notes:
         print(f"  {C.DIM}· {n}{C.RESET}")
     print_issues(issues)
-    print(f"\n  {C.BOLD}Pasang:{C.RESET} {SNIFFER_INSTALL_HINT[plat]}")
+    print(f"\n  {C.BOLD}Pasang:{C.RESET} {SNIFFER_INSTALL_HINT[plat].format(f=os.path.basename(path))}")
     print(f"  {C.DIM}Lalu jalankan core, buka aplikasi yang mau diintip, dan pakai menu [2] Inspector.{C.RESET}")
     print(f"  {C.DIM}Nikki/OpenClash menimpa port/dns/controller dari LuCI; GeoIP butuh mode mmdb (bukan geoip.dat).{C.RESET}")
     pause()
 
 
+def sniffer_result_path(name, stamp, ext, kind="koneksi"):
+    """hasil/sniffer/<nama>_<tanggal>_<jam>.<ext>. kind='path' (log penangkap path): <nama>_path_<tanggal>_<jam>.<ext>.
+    Tanpa nama: 'koneksi' / 'path'."""
+    name = safe_name(name)
+    base = (f"{name}_path" if name else "path") if kind == "path" else (name or "koneksi")
+    return os.path.join(SNIFFER_OUT_DIR, f"{base}_{stamp}.{ext}")
+
+
+def _sniffer_rename_pathlog(stamp, name):
+    """Log penangkap path ditulis langsung selama sesi (path_<stamp>.jsonl); ganti ke nama pilihan pengguna."""
+    old = os.path.join(SNIFFER_OUT_DIR, f"path_{stamp}.jsonl")
+    new = sniffer_result_path(name, stamp, "jsonl", "path")
+    if os.path.isfile(old) and old != new:
+        try:
+            os.replace(old, new)
+            return new
+        except OSError:
+            return old
+    return new if os.path.isfile(new) else old
+
+
 def _sniffer_controller_defaults():
     """Alamat & secret dari config sniffer yang pernah digenerate; kalau tidak ada, default template."""
     for pid in PLATFORMS:
-        cp = os.path.join(SNIFFER_OUT_DIR, pid, "config.yaml")
-        if os.path.isfile(cp):
+        found = sorted(glob.glob(os.path.join(SNIFFER_OUT_DIR, pid, "*.yaml")), key=os.path.getmtime, reverse=True)
+        for cp in found[:1]:
             try:
                 cfg = yaml.safe_load(read_text(cp)) or {}
                 return str(cfg.get("external-controller") or "127.0.0.1:9090"), str(cfg.get("secret") or "")
@@ -3289,11 +3615,11 @@ def _sniffer_inspect():
     print(f"  {C.DIM}Membaca /connections dari core yang SEDANG jalan dengan config sniffer.{C.RESET}\n")
     a = ask(f"  Controller (Enter = {addr}) ❯ ").strip() or addr
     sec = ask(f"  Secret     (Enter = {secret or 'kosong'}) ❯ ").strip() or secret
-    detail = ask(f"  Tampilan   [1] ringkas  [2] detail (Enter=2) ❯ ").strip() != "1"
+    detail = ask_choice(f"  Tampilan   [1] ringkas  [2] detail (Enter=2) ❯ ", ("1", "2"), default="2") != "1"
     stamp = time.strftime("%Y%m%d_%H%M%S")
     catch = None
     hc = _import_tool("httpcatch")
-    if hc and ask(f"  Tangkap URL path HTTP juga? (y/N) ❯ ").strip().lower() == "y":
+    if hc and ask_yn(f"  Tangkap URL path HTTP juga? (y/N) ❯ "):
         print(f"  {C.DIM}Config sniffer harus dibuat dengan 'penangkap path' aktif (Generate Config) agar trafik lewat sini.{C.RESET}")
         catch = _catcher_start(hc, stamp)
     base = sn.controller_url(a)
@@ -3341,12 +3667,17 @@ def _sniffer_inspect():
             print(f"    {C.GREEN}•{C.RESET} {c}  {C.DIM}(kandidat bug berpath){C.RESET}")
     if not rows and not path_events:
         pause(); return
-    if ask(f"\n{C.YELLOW}Simpan ke hasil/sniffer/? (y/N) ❯{C.RESET} ").strip().lower() == "y":
+    if ask_yn(f"\n{C.YELLOW}Simpan ke hasil/sniffer/? (y/N) ❯{C.RESET} "):
+        print(f"  {C.DIM}Nama hasil: 'instagram' → instagram_{stamp}.csv/.json/.md. Kosong = koneksi.{C.RESET}")
+        rname = _ask_name(f"{C.YELLOW}Nama hasil (Enter = koneksi) ❯{C.RESET} ", "koneksi")
         try:
-            p1 = sn.export_csv(rows, os.path.join(SNIFFER_OUT_DIR, f"koneksi_{stamp}.csv"))
-            p2 = sn.export_json(rows, os.path.join(SNIFFER_OUT_DIR, f"koneksi_{stamp}.json"))
-            p3 = sn.export_markdown(rows, os.path.join(SNIFFER_OUT_DIR, f"koneksi_{stamp}.md"), source=f"sesi {stamp}",
+            p1 = sn.export_csv(rows, sniffer_result_path(rname, stamp, "csv"))
+            p2 = sn.export_json(rows, sniffer_result_path(rname, stamp, "json"))
+            p3 = sn.export_markdown(rows, sniffer_result_path(rname, stamp, "md"), source=f"sesi {stamp}",
                                     path_events=path_events)
+            if path_events:
+                pl = _sniffer_rename_pathlog(stamp, rname)
+                ok(f"{os.path.relpath(pl, SCRIPT_DIR)}")
             ok(f"{os.path.relpath(p1, SCRIPT_DIR)}"); ok(f"{os.path.relpath(p2, SCRIPT_DIR)}")
             ok(f"{os.path.relpath(p3, SCRIPT_DIR)}  {C.DIM}(hanya yang menerima data, digabung){C.RESET}")
         except OSError as e:
@@ -3361,7 +3692,7 @@ def _sniffer_update_cidr():
     clear_screen(); banner("MISC"); section("Sniffer Only — Update CIDR CDN")
     print(f"  {C.DIM}Mengunduh daftar resmi Cloudflare (cloudflare.com/ips-v4, ips-v6) dan CloudFront (AWS ip-ranges.json).")
     print(f"  Memakai kuota reguler: ip-ranges.json berukuran beberapa MB. Hasil di-cache di hasil/sniffer/.{C.RESET}\n")
-    if ask(f"{C.YELLOW}Lanjut? (y/N) ❯{C.RESET} ").strip().lower() != "y":
+    if not ask_yn(f"{C.YELLOW}Lanjut? (y/N) ❯{C.RESET} "):
         return
     spinner("Mengunduh", 0.4)
     for name, n, e in sn.update_cdn_ranges(SNIFFER_OUT_DIR):
@@ -3393,11 +3724,14 @@ def _sniffer_catcher():
     for c in hc.bug_candidates(events)[:10]:
         print(f"    {C.GREEN}•{C.RESET} {c}  {C.DIM}(kandidat bug berpath){C.RESET}")
     if events:
+        print(f"  {C.DIM}Nama hasil: 'instagram' → instagram_path_{stamp}.md/.jsonl. Kosong = path.{C.RESET}")
+        rname = _ask_name(f"{C.YELLOW}Nama hasil (Enter = path) ❯{C.RESET} ", "path")
         try:
-            mdp = os.path.join(SNIFFER_OUT_DIR, f"path_{stamp}.md")
+            mdp = sniffer_result_path(rname, stamp, "md", "path")
             with open(mdp, "w", encoding="utf-8") as f:
                 f.write(hc.render_markdown(events, f"sesi {stamp}"))
-            ok(f"{os.path.relpath(mdp, SCRIPT_DIR)}  {C.DIM}(+ path_{stamp}.jsonl){C.RESET}")
+            pl = _sniffer_rename_pathlog(stamp, rname)
+            ok(f"{os.path.relpath(mdp, SCRIPT_DIR)}  {C.DIM}(+ {os.path.basename(pl)}){C.RESET}")
         except OSError as e:
             err(f"Gagal menyimpan: {e}")
     pause()
@@ -3638,7 +3972,7 @@ def feature_import_free_nodes():
     if os.path.isfile(SUB2YAML_SCRIPT):
         print(f"  {C.CYAN}[1]{C.RESET} Jalankan sub2yaml.py sekarang {C.DIM}(ambil node dari src/*.txt, tes, simpan ke hasil/proxy/free.yaml){C.RESET}")
         print(f"  {C.CYAN}[2]{C.RESET} Pilih / ketik path file YAML {C.DIM}(mis. hasil/proxy/free.yaml dari proses sebelumnya){C.RESET}")
-        if ask(f"{C.YELLOW}Pilih (1/2) ❯{C.RESET} ").strip() == "1":
+        if ask_choice(f"{C.YELLOW}Pilih (1/2) ❯{C.RESET} ", ("1", "2")) == "1":
             good, msg = run_sub2yaml()
             print()
             if not good:
@@ -3653,11 +3987,9 @@ def feature_import_free_nodes():
         if not src:
             return
     print(f"\n  {C.CYAN}[B]{C.RESET} Box  {C.CYAN}[N]{C.RESET} Nikki  {C.CYAN}[O]{C.RESET} OpenClash  {C.CYAN}[A]{C.RESET} Semua")
-    pl = ask(f"{C.YELLOW}Platform (B/N/O/A, Enter=A) ❯{C.RESET} ").strip().lower() or "a"
-    plats = {"b": ["box"], "n": ["nikki"], "o": ["openclash"], "a": list(PLATFORMS)}.get(pl)
-    if not plats:
-        err("Pilihan tidak valid."); time.sleep(1.0); return
-    mode = ask(f"{C.YELLOW}Mode: [1] Ganti isi free.yaml  [2] Tambahkan (Enter=1) ❯{C.RESET} ").strip()
+    pl = ask_choice(f"{C.YELLOW}Platform (B/N/O/A, Enter=A) ❯{C.RESET} ", ("b", "n", "o", "a"), default="a")
+    plats = {"b": ["box"], "n": ["nikki"], "o": ["openclash"], "a": list(PLATFORMS)}[pl]
+    mode = ask_choice(f"{C.YELLOW}Mode: [1] Ganti isi free.yaml  [2] Tambahkan (Enter=1) ❯{C.RESET} ", ("1", "2"), default="1")
     for plat, n, notes, error in import_free_nodes(src, plats, "append" if mode == "2" else "replace"):
         if error:
             err(f"{plat or 'sumber'}: {error}"); continue

@@ -17,6 +17,29 @@ Uji **banyak domain/IP sekaligus** pada node yang kamu paste: SNI, Host, Address
 
 Aksi yang sama ada di **Regenerate** (`1 → 3`, pilih satu sumber): `[U]` uji dulu, `[L]` lanjut, `[B]` batal — jadi node yang sudah tersimpan di `active.yaml`/`trial.yaml` juga bisa diuji tanpa paste ulang.
 
+## Kandidat dari hasil sniffer
+
+Di tiap prompt kandidat (SNI, Host, Address, Port, Path, Phantom, dan **Bug / IP edge** di Mode Lazy) script menampilkan daftar **file hasil sniffer** dari `hasil/sniffer/` (terbaru dulu, 15 teratas; `L` = semua):
+
+```text
+Hasil sniffer (hasil/sniffer/) — pilih sebagai kandidat bug:
+[1] instagram_20261126_132543.json   26-11 13:29  41.2 KiB
+[2] path_20261126_132600.jsonl       26-11 13:26  1.98 KiB
+File (nomor, pisah koma, L = semua (56); Enter = lewati) ❯
+```
+
+Boleh pilih beberapa (`1,2`) lalu tetap menempel kandidat manual di bawahnya; keduanya digabung. Yang diambil hanya koneksi yang **menerima data** (download > 0 B):
+
+| Prompt | Diambil dari file |
+|---|---|
+| Bug (Lazy), SNI, Host, Phantom | domain/host hasil sniff (+ bug berpath `host/path` dari log `.jsonl`) |
+| Address | domain + IP |
+| IP edge (Lazy) | IP |
+| Port | port tujuan |
+| Path | segmen path dari log `.jsonl` |
+
+Nomor di luar daftar atau input asal ditolak dan ditanya ulang. Kalau `hasil/sniffer/` kosong, daftar tidak ditampilkan. Kandidat dari sniffer bukan jaminan bisa dipakai — tetap diuji seperti kandidat lain.
+
 ## Mode tes
 
 | Mode | Cara kerja | Catatan |
@@ -32,7 +55,7 @@ Penting: matikan Box/Nikki/VPN saat menguji. Kalau hampir semua TCP connect ≤ 
 - **Address** mengganti `server`. Kalau node belum punya SNI / Host eksplisit, nilai lama dikunci dulu (supaya SNI & Host tidak ikut berubah ke Address baru) — ini pola umum node di belakang CDN.
 - SNI/Address custom otomatis diberi `skip-cert-verify: true` (sertifikat server hampir pasti tidak cocok).
 - Field yang tidak berlaku untuk suatu node dilewati dengan alasan (mis. Host di node tcp/grpc, SNI di node tanpa TLS). Kandidat yang sama dengan nilai asli tidak diuji ulang.
-- Nama varian: `Nama [sni:cdn.example.com]`, `Nama [addr:104.16.1.1]`, `Nama [combo]`.
+- Nama varian: `Nama [sni:cdn.example.com]`, `Nama [addr:104.16.1.1]`, `Nama [combo]`. Saat dipakai di Convert/Regenerate, tag ini menentukan emoji node (lihat [usage.md](usage.md#edit-configuration)).
 
 ## Mode Lazy (otomatis coba semua metode)
 
@@ -77,7 +100,7 @@ Metode biasa tetap dicoba memakai domain bug-nya (`www.line.me`), jadi bug berpa
 - Tidak ada langkah "gabungan terbaik" di mode ini (tiap varian sudah kombinasi penuh), dan Phantom tidak termasuk (pakai field **Phantom** untuk itu).
 - Ukuran tes: 1 bug + 2 IP edge + port `443,80` ≈ **26 varian per node**; tiap bug tambahan menambah ≈ 15. Mulai dari mode TCP/TLS untuk menyaring, lalu konfirmasi pemenangnya di Mihomo.
 
-Hasil: per node tampil kombinasi lolos tercepat (address / host / SNI + port) dan tabel **per metode**; `report.txt` memuat bagian *Ringkasan metode Lazy*; varian lolos ada di `custom-lazy.yaml`, `bug-ok.yaml` dan `bug-ok-uri.txt`.
+Hasil: per node tampil kombinasi lolos tercepat (address / host / SNI + port) dan tabel **per metode**; `report.json` memuat bagian `ringkasan_lazy`; varian lolos ada di `custom-lazy.yaml`, `bug-ok.yaml` dan `bug-ok-uri.txt`.
 
 ## Phantom (PhantomNG)
 
@@ -107,7 +130,7 @@ Field **Phantom** menguji kandidat **domain bug** untuk klien PhantomNG (patch P
 | `custom-lazy.yaml` | Varian mode Lazy yang lolos (kombinasi address + port + host + SNI) |
 | `custom-phantom.yaml` | Varian Phantom yang lolos (SNI = bug, Host = domain server) |
 | `bug-ok-phantom-uri.txt` | Varian Phantom sebagai link `sni=phantom:<server>:<bug>:rand` untuk **PhantomNG** (hanya dibuat bila ada varian Phantom yang lolos) |
-| `report.txt` | Semua varian: ✓/✗ + alasan, status config asli, field yang dilewati |
+| `report.json` | Laporan JSON yang terbaca manusia (indent, kunci berbahasa Indonesia): `ringkasan`, per node `config_asli` · `dilewati` · `hasil` (per field: `lolos`/`diuji` + tiap varian `status`/`detail`/`ms`/`alasan`), dan `ringkasan_lazy`. Menggantikan `report.txt` |
 
 ## Timeout dan DNS operator
 
