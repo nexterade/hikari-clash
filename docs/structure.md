@@ -50,7 +50,8 @@ hikari-clash/
 └── hasil/                       # (otomatis) hasil generate
     ├── full_config_<platform>/  # box / nikki / openclash: <operator>.yaml (xl.yaml, byu.yaml, …), proxy/<operator>/active.yaml + trial.yaml, proxy/free.yaml + subs.yaml, ruleset/
     ├── sniffer/                 # config sniffer: <platform>/sniffer-<nama>.yaml (atau config.yaml); hasil: <nama>_<tanggal>_<jam>.csv/.json/.md, <nama>_path_….jsonl/.md
-    ├── bugtest/<tanggal_jam>/   # hasil Uji Bug: custom-*.yaml (termasuk custom-lazy / custom-phantom), bug-ok.yaml, bug-ok-uri.txt, bug-ok-phantom-uri.txt, report.json
+    ├── bugprofile/<operator>.json   # riwayat bug yang pernah lolos per operator (Uji Bug)
+    ├── bugtest/<tanggal_jam>/   # hasil Uji Bug: custom-*.yaml (termasuk custom-lazy / custom-phantom), bug-ok.yaml, bug-ok-uri.txt, bug-ok-phantom-uri.txt, bug-best.yaml, report.md
     └── rules/                   # hasil Rule-Provider Converter (menu 5)
 ```
 

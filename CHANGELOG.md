@@ -3,6 +3,17 @@
 Versi aplikasi mengikuti [Semantic Versioning](https://semver.org/lang/id/); aturan bump ada di [CLAUDE.md](CLAUDE.md).
 Penomoran template (`config_v*.yaml`) terpisah — lihat [docs/template-changelog.md](docs/template-changelog.md).
 
+## [0.12.0] - 2026-11-27
+
+### Ditambahkan
+- **Rekomendasi otomatis** di Uji Bug: satu varian terbaik per node (paling stabil di riwayat, lalu paling cepat). Tampil di layar, di `report.md`, dan disimpan di `bug-best.yaml`. Menu "Pakai varian yang lolos" punya opsi **[R]** untuk memakai rekomendasi saja.
+- **Profil bug per operator** (`hasil/bugprofile/<operator>.json`): Uji Bug menanyakan operator (Enter = operator terakhir) dan mencatat bug yang pernah lolos. Bug yang status terakhirnya lolos ditawarkan sebagai kandidat di uji berikutnya.
+- **Penanda "dulu lolos, sekarang gagal"** di layar dan laporan, serta daftar "baru lolos" di laporan.
+
+### Diubah
+- **`report.json` diganti `report.md`**: tabel ringkasan, rekomendasi, perubahan dari riwayat, tabel metode Lazy, dan rincian per node; varian gagal dikelompokkan per alasan supaya laporan tetap ringkas.
+- Uji Bug kini menanyakan operator sebelum memilih apa yang diuji (satu prompt tambahan).
+
 ## [0.11.4] - 2026-11-27
 
 ### Diubah

@@ -1486,7 +1486,7 @@ def summarize(variants):
 #  Keluaran
 # =====================================================================
 def report_data(variants, modes, skipped=(), meta=None):
-    """Laporan Uji Bug sebagai dict yang enak dibaca manusia (ditulis ke report.json dengan indent)."""
+    """Data laporan Uji Bug sebagai dict (dasar laporan; keluaran ke file memakai report_markdown)."""
     meta = meta or {}
     rep = {"aplikasi": "HIKARI /.CLASH — Bug Test",
            "waktu": meta.get("when", time.strftime("%Y-%m-%d %H:%M:%S")),
@@ -1537,13 +1537,271 @@ def report_data(variants, modes, skipped=(), meta=None):
     return rep
 
 
-def report_json(variants, modes, skipped=(), meta=None):
-    return json.dumps(report_data(variants, modes, skipped, meta), ensure_ascii=False, indent=2) + "\n"
+# =====================================================================
+#  Profil bug per operator (riwayat), rekomendasi, dan laporan Markdown
+# =====================================================================
+PROFILE_DIR_NAME = "bugprofile"
 
 
-def write_outputs(variants, modes, out_dir, dump, skipped=(), meta=None):
-    """Tulis hasil ke out_dir: custom-<field>.yaml (hanya yang punya varian lolos), custom-combined.yaml,
-    bug-ok.yaml (semua yang lolos) dan report.json (JSON yang terbaca manusia). dump(list_node) -> teks YAML. Return [(nama_file, jumlah_node)]."""
+def profile_path(base_dir, operator):
+    """hasil/bugprofile/<operator>.json"""
+    return os.path.join(base_dir, PROFILE_DIR_NAME, f"{operator}.json")
+
+
+def load_profile(path, operator=""):
+    """Profil bug operator. File hilang / rusak -> profil kosong (tidak pernah raise)."""
+    empty = {"operator": operator, "diperbarui": "", "keterangan": PROFILE_NOTE, "entri": {}}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return empty
+    if not isinstance(data, dict) or not isinstance(data.get("entri"), dict):
+        return empty
+    data["entri"] = {k: e for k, e in data["entri"].items() if isinstance(e, dict)}
+    data.setdefault("operator", operator)
+    return data
+
+
+PROFILE_NOTE = ("Riwayat bug yang pernah lolos di operator ini (dibuat HIKARI /.CLASH). "
+                "Yang tidak pernah lolos tidak disimpan. Boleh diedit atau dihapus.")
+
+
+def save_profile(path, profile):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(profile, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
+def variant_key(v):
+    """Kunci stabil sebuah varian lintas pengujian: server asli + jenis + detail (bukan id/nama yang berubah-ubah)."""
+    server = str((v.get("base_node") or {}).get("server") or "")
+    return f"{server}|{v['kind']}|{describe_fields(v)}"
+
+
+def _variant_values(v):
+    if v["kind"] == "lazy":
+        lz = v["fields"]["lazy"]
+        return {"bug": lz.get("bug") or "", "ip": lz.get("ip") or "", "metode": lz.get("method") or ""}
+    return {k: v["fields"][k] for k in FIELDS if k in v["fields"]}
+
+
+def _hist_ratio(profile, v):
+    e = (profile or {}).get("entri", {}).get(variant_key(v))
+    return (e["lolos"] / e["uji"]) if e and e.get("uji") else 0.0
+
+
+def profile_changes(profile, variants):
+    """Bandingkan hasil sekarang dengan riwayat. {'regresi': [...], 'baru': [...]}.
+    regresi = dulu lolos (status terakhir lolos), sekarang gagal. baru = lolos dan belum ada di riwayat."""
+    entri = (profile or {}).get("entri", {})
+    reg, new = [], []
+    for v in variants:
+        if v["kind"] == "base":
+            continue
+        e = entri.get(variant_key(v))
+        row = {"node": v["base_name"], "detail": describe_fields(v), "jenis": FIELD_LABEL.get(v["kind"], "Gabungan")}
+        if e and e.get("status") == "lolos" and not v["ok"]:
+            reg.append(dict(row, terakhir_lolos=e.get("terakhir_lolos", ""), alasan=v["reason"]))
+        elif v["ok"] and not e:
+            new.append(dict(row, ms=v["ms"]))
+    return {"regresi": reg, "baru": new, "ada_riwayat": bool(entri)}
+
+
+def update_profile(profile, variants, when):
+    """Perbarui riwayat in-place. Hanya varian yang pernah lolos yang disimpan (yang selalu gagal tidak menumpuk)."""
+    entri = profile.setdefault("entri", {})
+    for v in variants:
+        if v["kind"] == "base":
+            continue
+        key = variant_key(v)
+        e = entri.get(key)
+        if e is None:
+            if not v["ok"]:
+                continue
+            e = entri[key] = {"node": v["base_name"], "server": str((v.get("base_node") or {}).get("server") or ""),
+                              "jenis": FIELD_LABEL.get(v["kind"], "Gabungan"), "kind": v["kind"],
+                              "detail": describe_fields(v), "nilai": _variant_values(v),
+                              "uji": 0, "lolos": 0, "pertama_lolos": when}
+        e["uji"] += 1
+        e["terakhir_uji"] = when
+        e["status"] = "lolos" if v["ok"] else "gagal"
+        if v["ok"]:
+            e["lolos"] += 1
+            e["terakhir_lolos"] = when
+            e["ms"] = v["ms"]
+    profile["diperbarui"] = when
+    return profile
+
+
+def profile_candidates(profile, field):
+    """Token kandidat dari riwayat (hanya yang status terakhirnya lolos), tercepat dulu.
+    field: 'bug' / 'ip' (mode Lazy) atau nama field Uji Bug (sni, host, server, port, path, alpn, fp, phantom)."""
+    rows = []
+    for e in (profile or {}).get("entri", {}).values():
+        if e.get("status") != "lolos":
+            continue
+        nilai = e.get("nilai") or {}
+        if field in ("bug", "ip"):
+            val = nilai.get(field) if e.get("kind") == "lazy" else None
+        else:
+            val = nilai.get(field) if e.get("kind") == field else None
+        vals = val if isinstance(val, list) else [val]
+        for x in vals:
+            if x not in (None, ""):
+                rows.append((e.get("ms") or 10 ** 9, str(x)))
+    rows.sort(key=lambda r: r[0])
+    return list(dict.fromkeys(x for _, x in rows))
+
+
+def recommend(variants, profile=None):
+    """Satu varian terbaik per node asli: yang paling stabil di riwayat dulu, lalu paling cepat.
+    Return [{'base', 'variant', 'riwayat'}] urut index node."""
+    best = {}
+    for v in passing(variants):
+        score = (-round(_hist_ratio(profile, v), 3), v["ms"] or 10 ** 9, v["id"])
+        if v["base"] not in best or score < best[v["base"]][0]:
+            best[v["base"]] = (score, v)
+    out = []
+    for bi in sorted(best):
+        v = best[bi][1]
+        e = (profile or {}).get("entri", {}).get(variant_key(v))
+        out.append({"base": bi, "variant": v,
+                    "riwayat": f"{e['lolos']}/{e['uji']} uji lolos" if e and e.get("uji") else "baru"})
+    return out
+
+
+def _md(s):
+    return str(s).replace("|", "\\|").replace("\n", " ")
+
+
+def _table(head, rows):
+    out = ["| " + " | ".join(head) + " |", "|" + "|".join("---" for _ in head) + "|"]
+    out += ["| " + " | ".join(_md(c) for c in r) + " |" for r in rows]
+    return out
+
+
+MD_ROW_LIMIT = 40
+
+
+def report_markdown(variants, modes, skipped=(), meta=None, recs=None, changes=None, operator=None):
+    """Laporan Uji Bug dalam Markdown: tabel ringkasan, rekomendasi, perubahan dari riwayat, rincian per node."""
+    meta = meta or {}
+    L = ["# HIKARI /.CLASH — Laporan Uji Bug", ""]
+    L.append(f"- **Waktu:** {meta.get('when', time.strftime('%Y-%m-%d %H:%M:%S'))}")
+    if operator:
+        L.append(f"- **Operator:** {operator}")
+    L.append(f"- **Mode:** {' + '.join(MODE_LABEL[m] for m in MODES if m in modes)}")
+    if meta.get("test_url") and any(m in modes for m in ("mihomo", "v2ray")):
+        L.append(f"- **URL tes:** {meta['test_url']}")
+    names = {}
+    for v in variants:
+        names.setdefault(v["base"], v["base_name"])
+    tested = [v for v in variants if v["kind"] != "base"]
+    n_ok = sum(1 for v in tested if v["ok"])
+    L += [f"- **Hasil:** {n_ok} dari {len(tested)} varian lolos ({len(names)} node)", ""]
+
+    L += ["## Ringkasan per node", ""]
+    rows = []
+    for bi in sorted(names):
+        base = next((v for v in variants if v["base"] == bi and v["kind"] == "base"), None)
+        mine = [v for v in tested if v["base"] == bi]
+        good = [v for v in mine if v["ok"]]
+        if not base:
+            asli = "—"
+        elif base["ok"]:
+            asli = "✅ OK" + (" %s ms" % base["ms"] if base["ms"] else "")
+        else:
+            asli = "❌ gagal"
+        fastest = min((v["ms"] for v in good if v["ms"]), default=None)
+        rows.append([names[bi], asli, f"{len(good)}/{len(mine)}", f"{fastest} ms" if fastest else "—"])
+    L += _table(["Node", "Config asli", "Varian lolos", "Tercepat"], rows) + [""]
+
+    if recs:
+        L += ["## ⭐ Rekomendasi", "",
+              "Satu varian terbaik per node: yang paling stabil di riwayat operator ini, lalu yang paling cepat. "
+              "Semuanya ada di `bug-best.yaml`.", ""]
+        L += _table(["Node", "Varian", "Latensi", "Riwayat"],
+                    [[names[r["base"]], describe_fields(r["variant"]),
+                      f"{r['variant']['ms']} ms" if r["variant"]["ms"] else "—", r["riwayat"]] for r in recs]) + [""]
+    elif n_ok == 0:
+        L += ["## ⭐ Rekomendasi", "", "Belum ada varian yang lolos.", ""]
+
+    reg = (changes or {}).get("regresi") or []
+    if reg:
+        L += ["## ⚠️ Dulu lolos, sekarang gagal", ""]
+        if any(v["kind"] == "base" and not v["ok"] for v in variants):
+            L += ["> Config asli juga gagal pada uji ini: server/UUID mungkin mati atau jaringan sedang memblokirnya, "
+                  "jadi sebagian kegagalan di bawah bisa bukan salah bug-nya.", ""]
+        L += _table(["Node", "Varian", "Terakhir lolos", "Alasan gagal"],
+                    [[r["node"], r["detail"], r["terakhir_lolos"], r["alasan"]] for r in reg[:MD_ROW_LIMIT]])
+        if len(reg) > MD_ROW_LIMIT:
+            L.append(f"\n_… dan {len(reg) - MD_ROW_LIMIT} lainnya (lihat profil bug)._")
+        L.append("")
+    new = (changes or {}).get("baru") or []
+    if new and (changes or {}).get("ada_riwayat"):
+        L += [f"## ✨ Baru lolos ({len(new)})", "",
+              "Belum ada di riwayat operator ini sebelumnya.", ""]
+        L += _table(["Node", "Varian", "Latensi"],
+                    [[r["node"], r["detail"], f"{r['ms']} ms" if r["ms"] else "—"] for r in new[:MD_ROW_LIMIT]])
+        if len(new) > MD_ROW_LIMIT:
+            L.append(f"\n_… dan {len(new) - MD_ROW_LIMIT} lainnya._")
+        L.append("")
+
+    sm = lazy_summary(variants)
+    if sm:
+        L += ["## Ringkasan metode Lazy", "", "`S`=domain server · `B`=bug · `IP`=IP edge · `W`=`<bug>.<server>`", ""]
+        L += _table(["Metode", "Pola", "Lolos/Diuji", "Terbaik"],
+                    [[r["method"], r["pattern"], f"{r['ok']}/{r['tested']}",
+                      f"{r['best']} ms" if r["best"] else "—"] for r in sm]) + [""]
+
+    L += ["## Rincian per node", ""]
+    for bi in sorted(names):
+        L += [f"### {names[bi]}", ""]
+        base = next((v for v in variants if v["base"] == bi and v["kind"] == "base"), None)
+        if base:
+            if base["ok"]:
+                L.append("- **Config asli:** ✅ OK" + (" (%s ms)" % base["ms"] if base["ms"] else ""))
+            else:
+                L.append("- **Config asli:** ❌ gagal — " + str(base["reason"]))
+        for s in skipped:
+            if s[0] == bi:
+                L.append(f"- **Dilewati ({FIELD_LABEL[s[2]]}):** {s[3]}")
+        L.append("")
+        for kind in RESULT_KINDS:
+            rows_k = [v for v in variants if v["base"] == bi and v["kind"] == kind]
+            if not rows_k:
+                continue
+            good = sorted((v for v in rows_k if v["ok"]), key=lambda v: (v["ms"] or 10 ** 9, v["id"]))
+            bad = [v for v in rows_k if not v["ok"]]
+            L += [f"#### {FIELD_LABEL.get(kind, 'Gabungan')} — {len(good)}/{len(rows_k)} lolos", ""]
+            if good:
+                L += _table(["Varian", "Latensi"],
+                            [[describe_fields(v), f"{v['ms']} ms" if v["ms"] else "—"] for v in good[:MD_ROW_LIMIT]])
+                if len(good) > MD_ROW_LIMIT:
+                    L.append(f"\n_… dan {len(good) - MD_ROW_LIMIT} lolos lainnya (lihat `bug-ok.yaml`)._")
+                L.append("")
+            if bad:
+                reasons = {}
+                for v in bad:
+                    reasons[v["reason"] or "tidak dites"] = reasons.get(v["reason"] or "tidak dites", 0) + 1
+                top = sorted(reasons.items(), key=lambda kv: -kv[1])[:6]
+                L.append(f"Gagal ({len(bad)}), alasan terbanyak:")
+                L += [f"- {n}× {r}" for r, n in top]
+                L.append("")
+    if any(v["node"].get(PH) for v in variants):
+        L += ["## Catatan", "",
+              "- **Phantom:** mode TCP/TLS dan V2Ray/Xray memverifikasi sertifikat terhadap domain server; mode Mihomo tidak "
+              "bisa (hanya skip-cert-verify), jadi lolos di Mihomo bukan bukti sertifikat cocok.", ""]
+    L += ["---", "_Lolos TCP/TLS bukan bukti internet tembus; konfirmasi pemenang di Mihomo._", ""]
+    return "\n".join(L)
+
+
+def write_outputs(variants, modes, out_dir, dump, skipped=(), meta=None, recs=None, changes=None, operator=None):
+    """Tulis hasil ke out_dir: custom-<field>.yaml (hanya yang punya varian lolos), bug-ok.yaml (semua yang lolos),
+    bug-best.yaml (satu terbaik per node, bila `recs` diberikan) dan report.md. dump(list_node) -> teks YAML.
+    Return [(nama_file, jumlah_node)] dengan report.md paling akhir."""
     os.makedirs(out_dir, exist_ok=True)
     written = []
 
@@ -1559,7 +1817,9 @@ def write_outputs(variants, modes, out_dir, dump, skipped=(), meta=None):
             put(FIELD_FILE[kind], nodes)
     if ok:
         put("bug-ok.yaml", [clean_node(v["node"]) for v in ok])
-    with open(os.path.join(out_dir, "report.json"), "w", encoding="utf-8") as f:
-        f.write(report_json(variants, modes, skipped, meta))
-    written.append(("report.json", 0))
+    if recs:
+        put("bug-best.yaml", [clean_node(r["variant"]["node"]) for r in recs])
+    with open(os.path.join(out_dir, "report.md"), "w", encoding="utf-8") as f:
+        f.write(report_markdown(variants, modes, skipped, meta, recs, changes, operator))
+    written.append(("report.md", 0))
     return written

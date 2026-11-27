@@ -100,7 +100,7 @@ Metode biasa tetap dicoba memakai domain bug-nya (`www.line.me`), jadi bug berpa
 - Tidak ada langkah "gabungan terbaik" di mode ini (tiap varian sudah kombinasi penuh), dan Phantom tidak termasuk (pakai field **Phantom** untuk itu).
 - Ukuran tes: 1 bug + 2 IP edge + port `443,80` ≈ **26 varian per node**; tiap bug tambahan menambah ≈ 15. Mulai dari mode TCP/TLS untuk menyaring, lalu konfirmasi pemenangnya di Mihomo.
 
-Hasil: per node tampil kombinasi lolos tercepat (address / host / SNI + port) dan tabel **per metode**; `report.json` memuat bagian `ringkasan_lazy`; varian lolos ada di `custom-lazy.yaml`, `bug-ok.yaml` dan `bug-ok-uri.txt`.
+Hasil: per node tampil kombinasi lolos tercepat (address / host / SNI + port) dan tabel **per metode**; `report.md` memuat tabel **Ringkasan metode Lazy**; varian lolos ada di `custom-lazy.yaml`, `bug-ok.yaml` dan `bug-ok-uri.txt`.
 
 ## Phantom (PhantomNG)
 
@@ -130,7 +130,18 @@ Field **Phantom** menguji kandidat **domain bug** untuk klien PhantomNG (patch P
 | `custom-lazy.yaml` | Varian mode Lazy yang lolos (kombinasi address + port + host + SNI) |
 | `custom-phantom.yaml` | Varian Phantom yang lolos (SNI = bug, Host = domain server) |
 | `bug-ok-phantom-uri.txt` | Varian Phantom sebagai link `sni=phantom:<server>:<bug>:rand` untuk **PhantomNG** (hanya dibuat bila ada varian Phantom yang lolos) |
-| `report.json` | Laporan JSON yang terbaca manusia (indent, kunci berbahasa Indonesia): `ringkasan`, per node `config_asli` · `dilewati` · `hasil` (per field: `lolos`/`diuji` + tiap varian `status`/`detail`/`ms`/`alasan`), dan `ringkasan_lazy`. Menggantikan `report.txt` |
+| `bug-best.yaml` | **Rekomendasi**: satu varian terbaik per node (hanya dibuat bila ada yang lolos) |
+| `report.md` | Laporan Markdown: tabel ringkasan per node, ⭐ rekomendasi, ⚠️ dulu lolos sekarang gagal, ✨ baru lolos, tabel metode Lazy, dan rincian per node (varian lolos dalam tabel; yang gagal dikelompokkan per alasan). Menggantikan `report.json` dan `report.txt` |
+
+## Profil bug per operator dan rekomendasi
+
+Tiap kali Uji Bug dijalankan, kamu ditanya **operator** (Enter = operator terakhir). Hasilnya dicatat di `hasil/bugprofile/<operator>.json` (JSON beraturan, boleh diedit atau dihapus):
+
+- **Yang disimpan:** hanya varian yang pernah lolos, berikut jumlah uji, jumlah lolos, waktu lolos terakhir, status terakhir, dan latensi. Varian yang selalu gagal tidak disimpan, jadi file tidak membengkak.
+- **Dipakai ulang sebagai kandidat:** saat memilih kandidat (SNI, Host, Address, … atau bug/IP edge di mode Lazy) muncul tawaran "Ikutkan sebagai kandidat?" berisi bug yang status terakhirnya lolos di operator itu, tercepat dulu. Enter = ikutkan, `n` = lewati.
+- **Dulu lolos, sekarang gagal:** varian yang status terakhirnya lolos tapi kali ini gagal ditandai di layar dan di `report.md`. Kalau config asli ikut gagal, ada catatan bahwa penyebabnya bisa server atau jaringan, bukan bug-nya.
+- **Rekomendasi:** satu varian per node. Urutan: yang paling stabil di riwayat (rasio lolos/uji tertinggi), lalu paling cepat; varian tanpa riwayat dihitung belum stabil. Ada di layar, di `report.md`, dan di `bug-best.yaml`. Di menu "Pakai varian yang lolos", **[R]** memakai rekomendasi saja dan mengganti node asli.
+- Profil terpisah per operator karena bug yang jalan di XL belum tentu jalan di Telkomsel.
 
 ## Timeout dan DNS operator
 

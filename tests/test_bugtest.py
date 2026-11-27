@@ -713,7 +713,7 @@ class MenuFlow(unittest.TestCase):
         return os.path.join(h.BUGTEST_DIR, d[0])
 
     # paste URI -> [U] -> host+address -> TCP -> tambahkan -> [L] -> generate Box
-    FLOW_PREFIX = ["u", "2,3", "cdn1.example cdn2.example, bad.example", "", "localhost 127.0.0.2", "",
+    FLOW_PREFIX = ["u", "xl", "2,3", "cdn1.example cdn2.example, bad.example", "", "localhost 127.0.0.2", "",
                    "1", "", "", ""]                               # mode TCP, timeout default, DNS operator (lewati), mulai
 
     def test_convert_flow_adds_variants_and_writes_outputs(self):
@@ -727,9 +727,10 @@ class MenuFlow(unittest.TestCase):
         self.assertTrue(any("[host:cdn1.example]" in n for n in names))
         self.assertFalse(any("bad.example" in n for n in names))
         d = self.bug_dir()
-        for f in ("custom-host.yaml", "custom-address.yaml", "custom-combined.yaml", "bug-ok.yaml", "bug-ok-uri.txt", "report.json"):
+        for f in ("custom-host.yaml", "custom-address.yaml", "custom-combined.yaml", "bug-ok.yaml", "bug-ok-uri.txt", "bug-best.yaml", "report.md"):
             self.assertTrue(os.path.isfile(os.path.join(d, f)), f)
-        self.assertFalse(os.path.exists(os.path.join(d, "report.txt")))      # laporan kini JSON
+        self.assertFalse(os.path.exists(os.path.join(d, "report.txt")))      # laporan kini Markdown
+        self.assertFalse(os.path.exists(os.path.join(d, "report.json")))
         uris = open(os.path.join(d, "bug-ok-uri.txt"), encoding="utf-8").read().split()
         self.assertEqual(len(uris), 4)
         self.assertTrue(all(u.startswith("vless://") for u in uris))
@@ -749,16 +750,71 @@ class MenuFlow(unittest.TestCase):
         inputs = [self.uri, ""] + self.FLOW_PREFIX + ["", "3", "l", "b", "1", "xl", "", "", ""]
         self.run_flow(h.feature_convert_to_clash, inputs)
         self.assertEqual(len(self.active_names()), 1)
-        self.assertTrue(os.path.isfile(os.path.join(self.bug_dir(), "report.json")))    # file hasil tetap ada
+        self.assertTrue(os.path.isfile(os.path.join(self.bug_dir(), "report.md")))    # file hasil tetap ada
+
+    def test_profile_written_after_run_and_report_is_markdown(self):
+        inputs = [self.uri, ""] + self.FLOW_PREFIX + ["", "1", "l", "b", "1", "xl", "", "", ""]
+        out = self.run_flow(h.feature_convert_to_clash, inputs)
+        self.assertIn("Rekomendasi", out)
+        self.assertIn("Profil xl diperbarui", out)
+        pf = b.profile_path(h.BASE_DIR, "xl")
+        self.assertTrue(os.path.isfile(pf))
+        prof = b.load_profile(pf, "xl")
+        self.assertTrue(prof["entri"])
+        self.assertTrue(all(e["status"] == "lolos" for e in prof["entri"].values()))       # yang gagal tidak disimpan
+        with open(os.path.join(self.bug_dir(), "report.md"), encoding="utf-8") as fh:
+            self.assertIn("## ⭐ Rekomendasi", fh.read())
+        self.assertEqual(h.load_settings()["operator"], "xl")
+
+    def seed_profile(self):
+        p = b.load_profile("", "xl")
+        for host in ("cdn2.example", "bad.example"):
+            p["entri"][f"127.0.0.1|host|host={host}"] = {
+                "node": "HIKARI WS", "server": "127.0.0.1", "jenis": "Host", "kind": "host", "detail": f"host={host}",
+                "nilai": {"host": host}, "uji": 1, "lolos": 1, "pertama_lolos": "2026-11-26 09:00:00",
+                "terakhir_uji": "2026-11-26 09:00:00", "terakhir_lolos": "2026-11-26 09:00:00", "status": "lolos", "ms": 40}
+        b.save_profile(b.profile_path(h.BASE_DIR, "xl"), p)
+
+    def test_profile_candidates_reused_and_regression_shown(self):
+        self.seed_profile()
+        # prompt profil Host muncul (Enter = ikutkan), lalu kandidat ketik cdn1; Address tanpa profil
+        inputs = [self.uri, "", "u", "xl", "2,3", "", "cdn1.example", "", "localhost 127.0.0.2", "",
+                  "1", "", "", "", "", "1", "l", "b", "1", "xl", "", "", ""]
+        out = self.run_flow(h.feature_convert_to_clash, inputs)
+        self.assertIn("2 Host yang pernah lolos", out)
+        self.assertIn("Dulu lolos, sekarang gagal", out)
+        self.assertIn("host=bad.example", out)
+        self.assertTrue(any("[host:cdn2.example]" in n for n in self.active_names()))        # dari profil, bukan diketik
+        with open(os.path.join(self.bug_dir(), "report.md"), encoding="utf-8") as fh:
+            md = fh.read()
+        self.assertIn("## ⚠️ Dulu lolos, sekarang gagal", md)
+        prof = b.load_profile(b.profile_path(h.BASE_DIR, "xl"), "xl")
+        self.assertEqual(prof["entri"]["127.0.0.1|host|host=bad.example"]["status"], "gagal")
+        self.assertEqual(prof["entri"]["127.0.0.1|host|host=cdn2.example"]["uji"], 2)
+
+    def test_profile_declined_is_not_used(self):
+        self.seed_profile()
+        inputs = [self.uri, "", "u", "xl", "2,3", "n", "cdn1.example", "", "localhost 127.0.0.2", "",
+                  "1", "", "", "", "", "1", "l", "b", "1", "xl", "", "", ""]
+        self.run_flow(h.feature_convert_to_clash, inputs)
+        self.assertFalse(any("cdn2.example" in n for n in self.active_names()))
+
+    def test_use_recommendation_only_replaces_original(self):
+        inputs = [self.uri, ""] + self.FLOW_PREFIX + ["", "r", "l", "b", "1", "xl", "", "", ""]
+        out = self.run_flow(h.feature_convert_to_clash, inputs)
+        self.assertIn("[R] Pakai rekomendasi saja", out)
+        names = self.active_names()
+        self.assertEqual(len(names), 1)                                  # 1 terbaik per node, node asli diganti
+        self.assertIn("[", names[0])
 
     def test_cancel_candidates_returns_to_preview(self):
-        inputs = [self.uri, "", "u", "2", "batal", "b"]
+        inputs = [self.uri, "", "u", "xl", "2", "batal", "b"]
         out = self.run_flow(h.feature_convert_to_clash, inputs)
         self.assertNotIn("Hasil Uji", out)
         self.assertFalse(os.path.isdir(h.BUGTEST_DIR))
 
     def test_no_valid_candidates_is_reported(self):
-        inputs = [self.uri, "", "u", "1", "kata !!!", "", "b"]       # SNI: semua token tidak valid; node tanpa TLS
+        inputs = [self.uri, "", "u", "xl", "1", "kata !!!", "", "b"]       # SNI: semua token tidak valid; node tanpa TLS
         out = self.run_flow(h.feature_convert_to_clash, inputs)
         self.assertIn("Tidak ada kandidat yang valid", out)
 
@@ -777,7 +833,7 @@ class MenuFlow(unittest.TestCase):
             setattr(b, name, val)
         uri = (f"vless://11111111-2222-3333-4444-555555555555@127.0.0.1:{srv.port}"
                f"?security=none&type=ws&host=localhost&path=%2Fws#LAZY")
-        inputs = [uri, "", "u", "l", "bug.example", "", "", str(srv.port), "1", "", "", "", "3", "b"]
+        inputs = [uri, "", "u", "xl", "l", "bug.example", "", "", str(srv.port), "1", "", "", "", "3", "b"]
         out = self.run_flow(h.feature_convert_to_clash, inputs)
         self.assertIn("Lazy", out)
         self.assertIn("2/6 lolos", out)                                  # http-direct + http-bug-addr
@@ -786,11 +842,12 @@ class MenuFlow(unittest.TestCase):
         self.assertIn("✗ http-host-ip", out)
         self.assertNotIn("gabungan terbaik", out)                        # Lazy tidak punya langkah gabungan
         d = self.bug_dir()
-        for f in ("custom-lazy.yaml", "bug-ok.yaml", "bug-ok-uri.txt", "report.json"):
+        for f in ("custom-lazy.yaml", "bug-ok.yaml", "bug-ok-uri.txt", "report.md"):
             self.assertTrue(os.path.isfile(os.path.join(d, f)), f)
-        with open(os.path.join(d, "report.json"), encoding="utf-8") as f:
-            rep = json.load(f)
-        self.assertIn("metode", rep["ringkasan_lazy"])
+        with open(os.path.join(d, "report.md"), encoding="utf-8") as f:
+            md = f.read()
+        self.assertIn("## Ringkasan metode Lazy", md)
+        self.assertIn("| http-direct |", md)
         with open(os.path.join(d, "bug-ok-uri.txt"), encoding="utf-8") as f:
             uris = f.read().split()
         self.assertEqual(len(uris), 2)
@@ -811,7 +868,7 @@ class MenuFlow(unittest.TestCase):
         _, _, _, error = h.setup_full_config([h.convert_line(self.uri)], "active.yaml", "box")
         self.assertIsNone(error)
         # pilih sumber 1 -> [U] -> Host saja -> TCP -> tambahkan -> [L] -> platform/target Enter -> sisanya default
-        inputs = ["1", "u", "2", "cdn1.example cdn2.example bad.example", "", "1", "", "", "", "1", "l", "", "", "xl", "", "", ""]
+        inputs = ["1", "u", "xl", "2", "cdn1.example cdn2.example bad.example", "", "1", "", "", "", "1", "l", "", "", "xl", "", "", ""]
         out = self.run_flow(h.feature_regenerate, inputs)
         self.assertIn("2 varian ditambahkan", out)
         self.assertEqual(len(self.active_names()), 3)
@@ -844,14 +901,120 @@ class Outputs(unittest.TestCase):
             self.assertEqual(nodes[0]["name"], "T [sni:a.com]")
             self.assertFalse(any(k.startswith("_") for k in nodes[0]))
             self.assertFalse(os.path.exists(os.path.join(d, "report.txt")))
-            rep = json.load(open(os.path.join(d, "report.json"), encoding="utf-8"))
-            first = rep["node"][0]
-            self.assertEqual(first["config_asli"]["status"], "OK")
-            self.assertEqual((first["hasil"]["SNI"]["lolos"], first["hasil"]["SNI"]["diuji"]), (1, 2))
-            self.assertTrue(any(x["detail"] == "sni=b.com" and x["status"] == "gagal" for x in first["hasil"]["SNI"]["varian"]))
-            self.assertEqual(rep["node"][1]["dilewati"][0]["bagian"], "SNI")
-            self.assertIn("node tanpa TLS", rep["node"][1]["dilewati"][0]["alasan"])
-            self.assertIn("\n  ", open(os.path.join(d, "report.json"), encoding="utf-8").read())   # indent: terbaca manusia
+            self.assertFalse(os.path.exists(os.path.join(d, "report.json")))
+            with open(os.path.join(d, "report.md"), encoding="utf-8") as fh:
+                md = fh.read()
+            self.assertIn("# HIKARI /.CLASH — Laporan Uji Bug", md)
+            self.assertIn("| Node | Config asli | Varian lolos | Tercepat |", md)
+            self.assertIn("#### SNI — 1/2 lolos", md)
+            self.assertIn("| sni=a.com | 50 ms |", md)
+            self.assertIn("1× Mihomo: urltest: timeout", md)                        # alasan gagal dikelompokkan
+            self.assertIn("**Dilewati (SNI):**", md)
+            self.assertIn("node tanpa TLS", md)
+
+
+# ---------------------------------------------------------------- profil, rekomendasi, riwayat
+class Profile(unittest.TestCase):
+    def variants(self, ok_hosts, ms=None):
+        vs, _ = b.build_variants([tcp_node(server="srv.example")], {"sni": ["a.com", "b.com", "c.com"]})
+        for v in vs:
+            good = v["kind"] == "base" or v["fields"].get("sni") in ok_hosts
+            v["res"]["mihomo"] = {"ok": good, "ms": (ms or {}).get(v["fields"].get("sni"), 80), "detail": "" if good else "timeout"}
+            b.finalize(v, ["mihomo"])
+        return vs
+
+    def test_update_profile_keeps_only_variants_that_ever_passed(self):
+        p = b.load_profile("/nonexistent/x.json", "xl")
+        self.assertEqual(p["entri"], {})
+        b.update_profile(p, self.variants({"a.com"}), "2026-11-26 10:00:00")
+        self.assertEqual(len(p["entri"]), 1)                    # b.com / c.com tidak pernah lolos: tidak disimpan
+        e = next(iter(p["entri"].values()))
+        self.assertEqual((e["status"], e["uji"], e["lolos"], e["nilai"]), ("lolos", 1, 1, {"sni": "a.com"}))
+
+    def test_regression_and_new_detection(self):
+        p = b.load_profile("/nonexistent/x.json", "xl")
+        b.update_profile(p, self.variants({"a.com"}), "2026-11-26 10:00:00")
+        today = self.variants({"b.com"})                        # a.com kemarin lolos, sekarang gagal; b.com baru lolos
+        ch = b.profile_changes(p, today)
+        self.assertEqual([r["detail"] for r in ch["regresi"]], ["sni=a.com"])
+        self.assertEqual(ch["regresi"][0]["terakhir_lolos"], "2026-11-26 10:00:00")
+        self.assertEqual([r["detail"] for r in ch["baru"]], ["sni=b.com"])
+        self.assertTrue(ch["ada_riwayat"])
+        b.update_profile(p, today, "2026-11-27 10:00:00")
+        e = p["entri"]["srv.example|sni|sni=a.com"]
+        self.assertEqual((e["status"], e["uji"], e["lolos"]), ("gagal", 2, 1))
+
+    def test_no_regression_reported_without_history(self):
+        ch = b.profile_changes(b.load_profile("/nonexistent/x.json", "xl"), self.variants({"a.com"}))
+        self.assertEqual(ch["regresi"], [])
+        self.assertFalse(ch["ada_riwayat"])
+
+    def test_recommend_prefers_stable_then_fast(self):
+        p = b.load_profile("/nonexistent/x.json", "xl")
+        b.update_profile(p, self.variants({"a.com"}, {"a.com": 300}), "2026-11-25 10:00:00")
+        b.update_profile(p, self.variants({"a.com"}, {"a.com": 300}), "2026-11-26 10:00:00")
+        vs = self.variants({"a.com", "b.com"}, {"a.com": 300, "b.com": 90})
+        self.assertEqual(b.recommend(vs)[0]["variant"]["fields"]["sni"], "b.com")                 # tanpa riwayat: tercepat
+        rec = b.recommend(vs, p)
+        self.assertEqual(len(rec), 1)
+        self.assertEqual(rec[0]["variant"]["fields"]["sni"], "a.com")                             # riwayat 2/2 mengalahkan kecepatan
+        self.assertEqual(rec[0]["riwayat"], "2/2 uji lolos")
+
+    def test_recommend_empty_when_nothing_passes(self):
+        self.assertEqual(b.recommend(self.variants(set())), [])
+
+    def test_profile_candidates_only_last_passing_fastest_first(self):
+        p = b.load_profile("/nonexistent/x.json", "xl")
+        b.update_profile(p, self.variants({"a.com", "b.com"}, {"a.com": 200, "b.com": 70}), "2026-11-26 10:00:00")
+        self.assertEqual(b.profile_candidates(p, "sni"), ["b.com", "a.com"])
+        b.update_profile(p, self.variants({"b.com"}), "2026-11-27 10:00:00")                       # a.com sekarang gagal
+        self.assertEqual(b.profile_candidates(p, "sni"), ["b.com"])
+        self.assertEqual(b.profile_candidates(p, "host"), [])
+
+    def test_lazy_profile_gives_bug_and_ip(self):
+        vs, _ = b.build_lazy_variants([LZ_NODE], ["x.example"])
+        for v in vs:
+            v["ok"] = v["kind"] == "base" or v["fields"]["lazy"]["method"] == "bug-sni"
+            v["ms"] = 90
+            v["reason"] = "" if v["ok"] else "x"
+        p = b.load_profile("/nonexistent/x.json", "xl")
+        b.update_profile(p, vs, "2026-11-27 10:00:00")
+        self.assertEqual(b.profile_candidates(p, "bug"), ["x.example"])
+
+    def test_save_load_roundtrip_and_corrupt_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = b.profile_path(d, "xl")
+            self.assertTrue(path.endswith(os.path.join("bugprofile", "xl.json")))
+            p = b.load_profile(path, "xl")
+            b.update_profile(p, self.variants({"a.com"}), "2026-11-27 10:00:00")
+            b.save_profile(path, p)
+            self.assertEqual(b.load_profile(path, "xl")["entri"], p["entri"])
+            with open(path, encoding="utf-8") as fh:
+                self.assertIn("\n  ", fh.read())                              # indent: bisa diedit manual
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("{rusak")
+            self.assertEqual(b.load_profile(path, "xl")["entri"], {})        # rusak -> kosong, tidak crash
+
+    def test_markdown_has_reco_and_regression_sections(self):
+        p = b.load_profile("/nonexistent/x.json", "xl")
+        b.update_profile(p, self.variants({"a.com"}), "2026-11-26 10:00:00")
+        vs = self.variants({"b.com"})
+        ch, rec = b.profile_changes(p, vs), b.recommend(vs, p)
+        with tempfile.TemporaryDirectory() as d:
+            files = dict(b.write_outputs(vs, ["mihomo"], d, lambda ns: json.dumps(ns), (), {"when": "2026-11-27 10:00:00"},
+                                         recs=rec, changes=ch, operator="xl"))
+            self.assertEqual(files["bug-best.yaml"], 1)
+            with open(os.path.join(d, "report.md"), encoding="utf-8") as fh:
+                md = fh.read()
+        self.assertIn("- **Operator:** xl", md)
+        self.assertIn("## ⭐ Rekomendasi", md)
+        self.assertIn("| T | sni=b.com | 80 ms | baru |", md)
+        self.assertIn("## ⚠️ Dulu lolos, sekarang gagal", md)
+        self.assertIn("| T | sni=a.com | 2026-11-26 10:00:00 |", md)
+        self.assertIn("## ✨ Baru lolos (1)", md)
+
+    def test_markdown_escapes_pipes(self):
+        self.assertEqual(b._table(["a"], [["x|y"]])[2], "| x\\|y |")
 
 
 if __name__ == "__main__":
@@ -1235,11 +1398,10 @@ class PhantomTcpVerify(unittest.TestCase):
             body = f.read()
         self.assertNotIn("_phantom", body)
         self.assertIn("bug.example", body)
-        with open(os.path.join(out, "report.json"), encoding="utf-8") as f:
-            rep = json.load(f)
-        self.assertTrue(any("Phantom" in x for x in rep["catatan"]))
-        ph = rep["node"][0]["hasil"]["Phantom"]
-        self.assertEqual((ph["lolos"], ph["diuji"]), (1, 2))
+        with open(os.path.join(out, "report.md"), encoding="utf-8") as f:
+            md = f.read()
+        self.assertIn("**Phantom:**", md)
+        self.assertIn("#### Phantom — 1/2 lolos", md)
 
 
 

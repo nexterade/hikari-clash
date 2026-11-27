@@ -46,7 +46,7 @@ TEMPLATE_DIR = os.path.join(SCRIPT_DIR, "template")
 TEMPLATE_PATH = os.path.join(TEMPLATE_DIR, "template.yaml")  # working copy (boleh diedit lewat menu)
 TEMPLATE_GLOB = "config_v*.yaml"                             # master di template/; dipakai kalau template.yaml belum ada
 SNIFFER_TEMPLATE = os.path.join(TEMPLATE_DIR, "sniffer_only.yaml")   # config pengintai: tanpa node, semua DIRECT (menu Misc > Sniffer Only)
-BUGTEST_DIR = os.path.join(BASE_DIR, "bugtest")                     # hasil Uji Bug: hasil/bugtest/<tanggal_jam>/custom-*.yaml + report.txt
+BUGTEST_DIR = os.path.join(BASE_DIR, "bugtest")                     # hasil Uji Bug: hasil/bugtest/<tanggal_jam>/custom-*.yaml + report.md; riwayat per operator di hasil/bugprofile/
 SNIFFER_OUT_DIR = os.path.join(BASE_DIR, "sniffer")                 # hasil/sniffer/<platform>/config.yaml + cache CIDR CDN
 SNIFFER_ASN_URL = "https://github.com/xishang0128/geoip/releases/download/latest/GeoLite2-ASN.mmdb"
 
@@ -1495,14 +1495,26 @@ def _pick_sniffer_tokens(field, label):
         return list(dict.fromkeys(tokens))
 
 
-def _bug_collect_candidates(bt, fields):
+def _pick_profile_tokens(bt, profile, field, label):
+    """Tawarkan bug yang pernah lolos di operator ini (profil). Return list token (kosong = tidak dipakai / tidak ada)."""
+    tokens = bt.profile_candidates(profile, field) if profile else []
+    if not tokens:
+        return []
+    print(f"\n  {C.BOLD}Profil {profile.get('operator') or '-'}{C.RESET} {C.DIM}— {len(tokens)} {label} yang pernah lolos: "
+          f"{truncate(', '.join(tokens[:4]), 44)}{' ...' if len(tokens) > 4 else ''}{C.RESET}")
+    if ask_yn(f"{C.YELLOW}Ikutkan sebagai kandidat {label}? (Y/n) ❯{C.RESET} ", default=True):
+        return tokens
+    return []
+
+
+def _bug_collect_candidates(bt, fields, profile=None):
     """Minta kandidat per field. Return {field: [nilai]} atau None kalau dibatalkan / kosong semua."""
     cands = {}
     labels = {f: (l, h) for f, l, h in BUG_FIELD_MENU}
     for f in fields:
         label, hint = labels[f]
         print(); section(f"Kandidat {label}")
-        from_sniffer = _pick_sniffer_tokens(f, label)
+        from_sniffer = _pick_profile_tokens(bt, profile, f, label) + _pick_sniffer_tokens(f, label)
         lines = _collect_lines([f"Paste daftar {label}, banyak sekaligus.",
                                 hint,
                                 "Pisah baris/spasi/koma. '@file.txt' = dari file.",
@@ -1526,7 +1538,7 @@ def _bug_collect_candidates(bt, fields):
     return cands
 
 
-def _bug_collect_lazy(bt):
+def _bug_collect_lazy(bt, profile=None):
     """Mode Lazy: minta bug, IP edge tambahan (opsional) dan port. Return {"bugs", "ips", "ports"} atau None (batal)."""
     got = {}
     for key, title, label, intro in (
@@ -1538,7 +1550,7 @@ def _bug_collect_lazy(bt):
                                                               "IP node & hasil resolve domain server ikut dicoba otomatis.",
                                                               "Enter kosong = lewati."])):
         print(); section(title)
-        from_sniffer = _pick_sniffer_tokens(key, label)
+        from_sniffer = _pick_profile_tokens(bt, profile, key, label) + _pick_sniffer_tokens(key, label)
         lines = _collect_lines(intro)
         if lines is None:
             return None
@@ -1675,6 +1687,26 @@ def _bug_show_results(bt, variants, modes, limit=12):
               f"varian ikut gagal karena itu.{C.RESET}")
 
 
+def _bug_show_changes(bt, changes, recs, variants, limit=6):
+    """Rekomendasi + varian yang dulu lolos tapi sekarang gagal (dari profil operator)."""
+    if recs:
+        print(); section("Rekomendasi")
+        for r in recs:
+            v = r["variant"]
+            ms = f"{v['ms']}ms" if v["ms"] else ""
+            print(f"  {C.GREEN}★{C.RESET} {truncate(v['base_name'], 20):<20} {truncate(bt.describe_fields(v), 30):<30} "
+                  f"{C.DIM}{ms:>7} · {r['riwayat']}{C.RESET}")
+    reg = changes["regresi"]
+    if reg:
+        print(); section("Dulu lolos, sekarang gagal")
+        if any(v["kind"] == "base" and not v["ok"] for v in variants):
+            print(f"  {C.DIM}Config asli juga gagal — bisa jadi server/jaringan, bukan bug-nya.{C.RESET}")
+        for r in reg[:limit]:
+            print(f"  {C.YELLOW}!{C.RESET} {truncate(r['detail'], 36):<36} {C.DIM}lolos terakhir {r['terakhir_lolos'][:10]}{C.RESET}")
+        if len(reg) > limit:
+            print(f"  {C.DIM}... +{len(reg) - limit} lainnya (lihat report.md){C.RESET}")
+
+
 def feature_bugtest(nodes):
     """Uji kandidat SNI/Host/Address/... untuk `nodes` (list dict node Clash).
     Return None (batal / tidak ada yang dipakai) atau {"nodes": [varian lolos], "drop": {index node asli yang diganti}, "desc": [str]}."""
@@ -1688,17 +1720,23 @@ def feature_bugtest(nodes):
     if picked is None:
         time.sleep(1.2); return None
     tested = [nodes[i] for i in picked]
+    operator = _ask_operator(load_settings()["operator"] or None)
+    save_settings({"operator": operator})
+    profile_file = bt.profile_path(BASE_DIR, operator)
+    profile = bt.load_profile(profile_file, operator)
+    if profile["entri"]:
+        print(f"  {C.DIM}Profil {operator}: {len(profile['entri'])} bug tersimpan dari uji sebelumnya.{C.RESET}")
     fields = _bug_pick_fields()
     if fields is None:
         time.sleep(1.2); return None
     lazy = fields == ["lazy"]
     lz = cands = None
     if lazy:
-        lz = _bug_collect_lazy(bt)
+        lz = _bug_collect_lazy(bt, profile)
         if lz is None:
             time.sleep(1.2); return None
     else:
-        cands = _bug_collect_candidates(bt, fields)
+        cands = _bug_collect_candidates(bt, fields, profile)
         if cands is None:
             time.sleep(1.2); return None
     chosen = _bug_choose_modes(bt)
@@ -1739,10 +1777,15 @@ def feature_bugtest(nodes):
 
     _bug_show_results(bt, variants, modes)
     ok_v = bt.passing(variants)
+    when = time.strftime("%Y-%m-%d %H:%M:%S")
+    changes = bt.profile_changes(profile, variants)
+    recs = bt.recommend(variants, profile)
+    _bug_show_changes(bt, changes, recs, variants)
     out_dir = os.path.join(BUGTEST_DIR, time.strftime("%d%m%Y_%H%M%S"))
     try:
         files = bt.write_outputs(variants, modes, out_dir, lambda ns: dump_yaml({"proxies": ns}), skipped,
-                                 {"when": time.strftime("%Y-%m-%d %H:%M:%S"), "test_url": bt.DEFAULT_TEST_URL})
+                                 {"when": when, "test_url": bt.DEFAULT_TEST_URL}, recs=recs, changes=changes,
+                                 operator=operator)
         uris = []                                   # link vless/vmess/trojan untuk klien v2ray (v2rayNG, NekoBox, dst.)
         for v in ok_v:
             try:
@@ -1773,14 +1816,26 @@ def feature_bugtest(nodes):
             print(f"    {C.DIM}├── {fn}{f'  ({n} node)' if n else ''}{C.RESET}")
     except OSError as e:
         warn(f"File hasil tidak bisa ditulis ({e.strerror or e}) — varian tetap bisa dipakai di bawah.")
+    try:
+        bt.update_profile(profile, variants, when)
+        bt.save_profile(profile_file, profile)
+        print(f"  {C.DIM}Profil {operator} diperbarui → {os.path.relpath(profile_file, SCRIPT_DIR)}{C.RESET}")
+    except OSError as e:
+        warn(f"Profil bug tidak bisa disimpan ({e.strerror or e}).")
 
     if not ok_v:
         pause(); return None
     print(); section("Pakai varian yang lolos")
     print(f"  {C.CYAN}[1]{C.RESET} Tambahkan {len(ok_v)} varian ke daftar node {C.DIM}(node asli tetap){C.RESET}")
     print(f"  {C.CYAN}[2]{C.RESET} Ganti node asli yang punya varian lolos dengan varian-nya")
+    if recs:
+        print(f"  {C.CYAN}[R]{C.RESET} Pakai rekomendasi saja {C.DIM}({len(recs)} terbaik, 1 per node; node asli diganti){C.RESET}")
     print(f"  {C.CYAN}[3]{C.RESET} Jangan dipakai {C.DIM}(cukup file hasil di atas){C.RESET}")
-    pick = ask_choice(f"{C.YELLOW}Pilih (Enter = 1) ❯{C.RESET} ", ("1", "2", "3"), default="1")
+    pick = ask_choice(f"{C.YELLOW}Pilih (Enter = 1) ❯{C.RESET} ", ("1", "2", "r", "3") if recs else ("1", "2", "3"), default="1")
+    if pick == "r":
+        use = [r["variant"] for r in recs]
+        return {"nodes": [bt.clean_node(v["node"]) for v in use], "drop": {picked[v["base"]] for v in use},
+                "desc": [bt.describe_fields(v) for v in use]}
     if pick not in ("1", "2"):
         return None
     drop = {picked[v["base"]] for v in ok_v} if pick == "2" else set()
