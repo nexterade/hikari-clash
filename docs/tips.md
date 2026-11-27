@@ -7,7 +7,7 @@
 ```bash
 cat > "$PREFIX/bin/hikari-clash" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/sh
-cd /storage/emulated/0/Documents/hikari-clash && exec python hikari_converter.py "$@"
+cd /storage/emulated/0/Project/hikari-clash && exec python3 hikari_converter.py "$@"
 EOF
 chmod +x "$PREFIX/bin/hikari-clash"
 ```

@@ -136,12 +136,23 @@ pip install pyyaml            # butuh Python 3.8+
 
 **Ambil project:**
 
+Termux (langsung clone ke penyimpanan internal, tanpa pindah manual; folder `Project` boleh diganti sesuka hati):
+
 ```bash
-git clone https://github.com/nexterade/hikari-clash.git hikari-clash
-cd hikari-clash
+git clone https://github.com/nexterade/hikari-clash.git /storage/emulated/0/Project/hikari-clash
+cd /storage/emulated/0/Project/hikari-clash
+python3 hikari_converter.py
 ```
 
-> Di Termux, taruh foldernya di `/storage/emulated/0/Documents/hikari-clash` — **jangan** di `~` biar tidak kena `PermissionError` dan gampang diakses file manager.
+Linux / OpenWrt / PC:
+
+```bash
+git clone https://github.com/nexterade/hikari-clash.git
+cd hikari-clash
+python3 hikari_converter.py
+```
+
+> Di Termux, clone ke `/storage/emulated/0/...` (butuh `termux-setup-storage` dulu), **jangan** di `~` biar tidak kena `PermissionError` dan gampang diakses file manager. Perhatikan `cd` memakai `/` di depan (`/storage/...`); tanpa itu path-nya dianggap relatif dan gagal. Kalau git mengeluh *dubious ownership*, jalankan `git config --global --add safe.directory '*'`.
 
 ---
 
@@ -170,8 +181,8 @@ Pohon lengkap beserta penjelasan tiap file ada di [docs/structure.md](docs/struc
 ## 🚀 Cara Pakai
 
 ```bash
-cd /storage/emulated/0/Documents/hikari-clash
-python hikari_converter.py
+cd /storage/emulated/0/Project/hikari-clash
+python3 hikari_converter.py
 ```
 
 ```text

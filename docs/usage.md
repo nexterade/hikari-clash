@@ -3,8 +3,8 @@
 > [← Kembali ke README](../README.md) · [Dokumentasi lainnya](../README.md#-dokumentasi)
 
 ```bash
-cd /storage/emulated/0/Documents/hikari-clash
-python hikari_converter.py
+cd /storage/emulated/0/Project/hikari-clash
+python3 hikari_converter.py
 ```
 
 ## Menu utama

@@ -3,6 +3,11 @@
 Versi aplikasi mengikuti [Semantic Versioning](https://semver.org/lang/id/); aturan bump ada di [CLAUDE.md](CLAUDE.md).
 Penomoran template (`config_v*.yaml`) terpisah — lihat [docs/template-changelog.md](docs/template-changelog.md).
 
+## [0.11.2] - 2026-11-27
+
+### Diubah
+- Panduan instalasi: di Termux, `git clone` langsung ke `/storage/emulated/0/Project/hikari-clash` (tanpa memindah manual dari `Documents`), plus catatan `cd` harus memakai `/` di depan dan solusi *dubious ownership*. Path contoh di `docs/usage.md` dan shortcut di `docs/tips.md` ikut disesuaikan.
+
 ## [0.11.1] - 2026-11-27
 
 ### Diubah
