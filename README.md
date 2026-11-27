@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌸 HIKARI /.CLASH
+<img src="docs/img/banner.png" alt="HIKARI /.CLASH — Offline Mihomo Config Toolkit" width="100%">
 
 **Toolkit CLI offline untuk convert & generate config Mihomo (Clash Meta)**
 satu template → siap pakai di **Box for Root**, **Nikki**, dan **OpenClash**
@@ -67,6 +67,11 @@ Ngatur config Mihomo di tiga platform itu ribet: port beda, path beda, fitur And
 
 ## 📸 Tampilan
 
+<details>
+<summary><b>Klik untuk membuka tangkapan layar</b></summary>
+
+<br>
+
 Tangkapan layar dari perangkat penulis (Termux + Nikki di OpenWrt, jaringan XL Axiata). IP server node disensor.
 
 <table>
@@ -86,6 +91,8 @@ Tangkapan layar dari perangkat penulis (Termux + Nikki di OpenWrt, jaringan XL A
 </div>
 
 > Ini hasil di satu perangkat dan satu jaringan, bukan jaminan untuk setiap setup.
+
+</details>
 
 ---
 

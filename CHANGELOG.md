@@ -3,6 +3,12 @@
 Versi aplikasi mengikuti [Semantic Versioning](https://semver.org/lang/id/); aturan bump ada di [CLAUDE.md](CLAUDE.md).
 Penomoran template (`config_v*.yaml`) terpisah — lihat [docs/template-changelog.md](docs/template-changelog.md).
 
+## [0.11.1] - 2026-11-27
+
+### Diubah
+- README: banner `docs/img/banner.png` dipasang di bagian atas (menggantikan judul teks).
+- README: bagian "📸 Tampilan" kini bisa dilipat (collapse), tertutup secara default.
+
 ## [0.11.0] - 2026-11-27
 
 ### Ditambahkan

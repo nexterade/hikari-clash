@@ -45,7 +45,7 @@ hikari-clash/
 │   ├── src/                     #   kode Go + ui/index.html + tes
 │   ├── install.sh  stats-ctl.sh  stats.conf.example  build.sh
 ├── docs/                        # Dokumentasi lengkap (usage, faq, tips, …)
-│   └── img/                     #   Screenshot untuk README
+│   └── img/                     #   Banner + screenshot untuk README
 ├── AUDIT.md                     # Perbandingan template, temuan audit, saran
 └── hasil/                       # (otomatis) hasil generate
     ├── full_config_<platform>/  # box / nikki / openclash: <operator>.yaml (xl.yaml, byu.yaml, …), proxy/<operator>/active.yaml + trial.yaml, proxy/free.yaml + subs.yaml, ruleset/
