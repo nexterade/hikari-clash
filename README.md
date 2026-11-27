@@ -57,6 +57,7 @@ Ngatur config Mihomo di tiga platform itu ribet: port beda, path beda, fitur And
 | ♻️ **Regenerate** | Ubah template/DNS/profil ISP lalu bangun ulang config dari node yang sudah tersimpan — **tanpa paste URI lagi** (`1 → 3`) |
 | ➕ **Replace / Append** | Timpa atau tambah node ke provider yang sudah ada |
 | 🌐 **Menu DNS** | Preset (Cloudflare+Google, Quad9, NextDNS, AdGuard, [BebasDNS](https://github.com/bebasid/bebasdns)) dengan pilihan **DoH / DoT / DoQ**, atau **custom manual** (IP, DoH, DoH3, DoT, DoQ, UDP/TCP, `system`, `dhcp://`, akhiran `#proxy`) per field — divalidasi, ada preview diff, format & komentar template dijaga |
+| 📦 **Box Utilities** | Android berroot + Box for Root: start / stop / restart, pasang hasil generate ke `/data/adb/box/clash/` (dengan persetujuan), ganti config aktif lewat `settings.ini`, lihat config, dashboard, log, update — lihat [docs/box.md](docs/box.md) |
 | 🧪 **Miscellaneous** | Converter rule-provider `.mrs` ⇄ `.yaml`/`.txt`, tester config (+ `mihomo -t`), tester node (offline / via core), tester route, **sniffer only** (config pengintai koneksi + inspector) — lihat [menu 5](docs/misc-tools.md) |
 | 🪪 **Info pengguna** | Di bawah banner: IP (lokal + publik), lokasi, jaringan **WiFi/Data**, **status core** (`Box Aktif` / `Nikki Aktif`), usage, versi core, ping. Ada sensor IP untuk screenshot — lihat [usage](docs/usage.md#info-di-bawah-banner) |
 | 📊 **NetStat** | Collector statistik trafik **standalone**: harian/mingguan/bulanan, WiFi vs Data, top app, kuota paket — lihat [NetStat](#-hikari-netstat) |
@@ -172,6 +173,7 @@ python hikari_converter.py
 [3] Check Status            ← template, provider, config yang sudah jadi
 [4] Validasi / Audit Config ← cek template untuk ketiga platform
 [5] Miscellaneous           ← converter .mrs, tester config / node / route, sniffer only
+[6] Box Utilities           ← (root) start/stop/restart Box, pasang & ganti config, dashboard, log
 ────────────────────────────
 [Q] Exit
 ```
@@ -217,6 +219,7 @@ Lalu buka `http://127.0.0.1:9099/` di browser HP. Konfigurasi, cara kerja klasif
 | [docs/sub2yaml.md](docs/sub2yaml.md) | Free node: impor ke ☘️ FREE NODE dan `sub2yaml.py` |
 | [docs/misc-tools.md](docs/misc-tools.md) | Menu 5: converter `.mrs`, tester config / node / route |
 | [docs/sniffer.md](docs/sniffer.md) | Sniffer Only: config pengintai koneksi + inspector + penangkap path HTTP (bug catcher) |
+| [docs/box.md](docs/box.md) | Box Utilities (menu 6, root): start/stop/restart, pasang & ganti config, dashboard, log |
 | [docs/platforms.md](docs/platforms.md) | Memasang hasil ke Box / Nikki / OpenClash, beda output per platform |
 | [docs/template.md](docs/template.md) | Isi template, urutan rule, group node, ruleset |
 | [docs/template-changelog.md](docs/template-changelog.md) | Beda antar versi template (v0.3 → v1.3) |

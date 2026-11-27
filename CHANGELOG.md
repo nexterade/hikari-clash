@@ -3,6 +3,28 @@
 Versi aplikasi mengikuti [Semantic Versioning](https://semver.org/lang/id/); aturan bump ada di [CLAUDE.md](CLAUDE.md).
 Penomoran template (`config_v*.yaml`) terpisah — lihat [docs/template-changelog.md](docs/template-changelog.md).
 
+## [0.11.0] - 2026-11-27
+
+### Ditambahkan
+- **Menu 6: Box Utilities** (Android berroot + Box for Root, lewat `su`): Start, Stop, Restart, Status rinci, Pasang config hasil generate,
+  Ganti config aktif, Lihat/daftar config, Buka dashboard, Log, dan Update (`box.tool geox` / `subs` / `upkernel` / `upxui`).
+  Setiap perubahan menampilkan perintah root-nya dan meminta persetujuan (default tidak). Dokumentasi: `docs/box.md`.
+- **Pasang ke Box langsung dari hasil generate**: salin `<operator>.yaml`, `proxy/<operator>/`, dan `ruleset/` ke `/data/adb/box/clash/`
+  (cadangan `.bak`; `free.yaml`/`subs.yaml` perangkat tidak ditimpa), lalu opsional jadikan aktif dan restart. Ditawarkan otomatis di akhir
+  Convert/Regenerate untuk platform Box (hanya di Android dengan `su`).
+- **Nama config bebas di Box**: config aktif dipilih lewat `name_clash_config` di `/data/adb/box/settings.ini` (diubah dengan cadangan
+  `settings.ini.hikari.bak` dan diverifikasi ulang), jadi `xl.yaml` tidak perlu diganti jadi `config.yaml`.
+- Peringatan bila `tproxy-port`/`redir-port` config beda dengan `settings.ini`.
+- File baru: `boxutil.py`, `tests/test_box.py` (31 tes dengan "perangkat" tiruan), `tests/fixtures/box_settings.ini`.
+
+### Diubah
+- Petunjuk pasang Box di akhir generate dan `docs/platforms.md` mengarah ke Box Utilities (tidak lagi menyuruh mengganti nama jadi `config.yaml`).
+
+### Batasan
+- Belum diuji di perangkat/Box asli. Belum terbukti: format keluaran `box.service status`, arti `box.pid` untuk deteksi "berjalan",
+  akses `su` ke `/data/media/0` (path `/storage/emulated/0` dipetakan ke sana), dan perilaku `termux-open-url`/`am start`.
+- Folder tujuan memakai `/data/adb/box/clash/` (sesuai `clash_config` di settings.ini), bukan `/data/adb/clash/`.
+
 ## [0.10.0] - 2026-11-27
 
 ### Ditambahkan

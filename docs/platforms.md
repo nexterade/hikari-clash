@@ -14,7 +14,7 @@ Salin **semua isi folder** ke:
 /data/adb/box/clash/
 ```
 
-Config bernama sesuai operator (`xl.yaml`, `byu.yaml`, …). Kalau Box-mu membaca `config.yaml`, salin/ganti nama file operator yang mau dipakai jadi `config.yaml` (dugaan: sesuaikan dengan `settings.ini` Box-mu).
+Config bernama sesuai operator (`xl.yaml`, `byu.yaml`, …). Box memilih file lewat `name_clash_config` di `/data/adb/box/settings.ini`. Cara termudah: menu **6 → Box Utilities** (root) memasang file ke `/data/adb/box/clash/` dan mengubah `name_clash_config` dengan persetujuanmu — lihat [box.md](box.md). Manual: salin semua isi folder, lalu ubah `name_clash_config="xl.yaml"`.
 
 ### 🐧 Nikki → `hasil/full_config_nikki/`
 

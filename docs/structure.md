@@ -17,6 +17,7 @@ hikari-clash/
 ├── bugtest.py                   # Uji Bug / Custom: tes banyak SNI·Host·Address, Phantom, mode Lazy (TCP/Mihomo/V2Ray)   (menu 1 → [U])
 ├── nodetest.py                  # Tester node proxy                  (menu 5)
 ├── routetest.py                 # Tester route domain/IP             (menu 5)
+├── boxutil.py                   # Logika Box Utilities: service, pasang/ganti config, dashboard lewat su   (menu 6)
 ├── sniffer.py                   # Inspector koneksi (Sniffer Only)   (menu 5)
 ├── httpcatch.py                 # Penangkap path HTTP ("bug catcher"): proxy lokal, catat path/redirect/status   (menu 5 → 5 → 4)
 ├── template/

@@ -15,6 +15,7 @@ python hikari_converter.py
 [3] Check Status            ← template, provider, config yang sudah jadi
 [4] Validasi / Audit Config ← cek template untuk ketiga platform
 [5] Miscellaneous           ← converter .mrs, tester config / node / route, sniffer only, info banner
+[6] Box Utilities           ← (root) start/stop/restart Box, pasang & ganti config, dashboard, log
 ────────────────────────────
 [Q] Exit
 ```
@@ -82,6 +83,10 @@ Menu `1 → 3`. Kamu mengubah template, DNS, profil ISP, emoji, atau secret dan 
 - **`[A]`** — bangun ulang semua sumber sekaligus dengan pilihan baku: rule-provider & secret ikut template, operator dari folder asal masing-masing.
 - Nama node dipakai apa adanya; hanya node yang **belum** berawalan emoji (mis. varian baru dari Uji Bug) yang diberi emoji sesuai metodenya. Node di provider lain tidak disentuh.
 - Setelah memilih satu sumber ada aksi **`[U]` Uji bug / custom** (SNI · Host · Address) sebelum `[L]` Lanjut — varian yang lolos ditambahkan (atau mengganti node asli) lalu ikut ditulis ke provider. Lihat [bugtest.md](bugtest.md).
+
+## Box Utilities
+
+Menu utama `6` (Android berroot + Box for Root): start/stop/restart, pasang hasil generate ke `/data/adb/box/clash/`, ganti config aktif, lihat/daftar config, dashboard, log, update. Setiap perubahan meminta persetujuan. Rinci: [box.md](box.md).
 
 ## Free node (☘️ FREE NODE)
 

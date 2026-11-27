@@ -2023,6 +2023,11 @@ def _generate_and_report(proxies, n_emoji=0, default_plat=None, default_target=N
         print(f"{C.YELLOW}💡 OPENCLASH:{C.RESET}")
         print(f"   1. {C.BOLD}{cfg_name}{C.RESET} → {C.BOLD}/etc/openclash/config/{C.RESET}")
         print(f"   2. folder {C.BOLD}proxy_provider/{C.RESET} & {C.BOLD}rule_provider/{C.RESET} → {C.BOLD}/etc/openclash/{C.RESET}")
+    if plat == "box":
+        bx = _import_tool("boxutil")
+        if bx and bx.can_use_root() and ask_yn(f"\n{C.YELLOW}Pasang ke Box sekarang (root)? (y/N) ❯{C.RESET} "):
+            box_install_flow(out_dir, operator)
+            return
     pause("Tekan Enter untuk kembali ke menu...")
 
 
@@ -4026,6 +4031,281 @@ def ensure_emoji_file():
             pass
 
 
+# =====================================================================
+#  Box Utilities (root: start/stop/restart, pasang & ganti config, dashboard) — logika di boxutil.py
+# =====================================================================
+def _box_ctx():
+    """(boxutil, info) atau (None, None) bila tidak bisa dipakai (bukan Android/root, settings.ini tak terbaca)."""
+    bx = _import_tool("boxutil")
+    if not bx:
+        return None, None
+    if not bx.can_use_root():
+        err("Box Utilities butuh Android yang sudah root (Termux + su) dengan Box for Root terpasang.")
+        pause(); return None, None
+    info = bx.box_info()
+    if info.get("error"):
+        err(info["error"])
+        print(f"  {C.DIM}Pastikan Box for Root terpasang dan akses root diizinkan untuk Termux.{C.RESET}")
+        pause(); return None, None
+    return bx, info
+
+
+def _box_run(bx, title, cmds, timeout=90, confirm=True):
+    """Tampilkan perintah root, minta persetujuan (default tidak), jalankan berurutan. Return True bila semua sukses."""
+    print(f"\n  {C.BOLD}{title}{C.RESET} {C.DIM}(dijalankan sebagai root){C.RESET}")
+    for c in cmds:
+        print(f"    {C.DIM}# su -c{C.RESET} {truncate(c, 110)}")
+    if confirm and not ask_yn(f"{C.YELLOW}Setuju? (y/N) ❯{C.RESET} "):
+        warn("Dibatalkan."); return False
+    good, log = bx.run_steps(cmds, timeout)
+    for c, rc, out in log:
+        if rc != 0:
+            err(f"Gagal (rc={rc}): {truncate(c, 70)}")
+            if out:
+                print(f"    {C.DIM}{truncate(out, 300)}{C.RESET}")
+    if good:
+        ok("Selesai.")
+    return good
+
+
+def _box_restart(bx, info):
+    return _box_run(bx, "Restart Box", bx.stop_cmds(info) + bx.start_cmds(info), 120)
+
+
+def _box_status_line(bx, info):
+    running, pid = bx.is_running(info)
+    state = f"{C.GREEN}Berjalan (pid {pid}){C.RESET}" if running else f"{C.RED}Berhenti{C.RESET}"
+    print(f"  Status : {state}")
+    print(f"  Core   : {info['bin_name']}{('/' + info['xclash']) if info['bin_name'] == 'clash' and info['xclash'] else ''}"
+          f"   Mode: {info['network_mode'] or '-'}   tproxy {info['tproxy_port'] or '-'} · redir {info['redir_port'] or '-'}")
+    print(f"  Config : {C.BOLD}{info['config_name']}{C.RESET}  {C.DIM}({info['clash_dir']}){C.RESET}")
+    if info["bin_name"] != "clash":
+        warn("bin_name bukan clash — pasang/ganti config di sini hanya untuk core Clash/Mihomo.")
+    return running
+
+
+def _box_pick_config(bx, info, title, only_other=False):
+    cfgs = bx.list_configs(info)
+    if only_other:
+        cfgs = [c for c in cfgs if not c["active"]]
+    if not cfgs:
+        warn(f"Tidak ada file .yaml di {info['clash_dir']}."); return None
+    print(f"\n  {C.BOLD}{title}{C.RESET}")
+    for i, c in enumerate(cfgs, 1):
+        mark = f"{C.GREEN}● aktif{C.RESET}" if c["active"] else "       "
+        print(f"  {C.CYAN}[{i}]{C.RESET} {c['name']:<28} {C.DIM}{_human_size(c['size']):>10}{C.RESET}  {mark}")
+    pick = ask_choice(f"{C.YELLOW}Pilih (0 = batal) ❯{C.RESET} ", [str(i) for i in range(1, len(cfgs) + 1)], cancel=("0",))
+    return None if pick == "0" else cfgs[int(pick) - 1]["name"]
+
+
+def box_activate(bx, info, name, restart_hint=True):
+    """Ganti name_clash_config di settings.ini (dengan cadangan + verifikasi). Tawarkan restart bila Box berjalan."""
+    try:
+        cmds = bx.plan_activate(name, info)
+    except ValueError as e:
+        err(str(e)); return False
+    if not _box_run(bx, f"Aktifkan {name} (ubah name_clash_config di settings.ini)", cmds):
+        return False
+    if not bx.verify_active(name, info):
+        err("settings.ini tidak berubah seperti yang diharapkan — cek manual (cadangan: settings.ini.hikari.bak).")
+        return False
+    ok(f"name_clash_config = {name}")
+    info["config_name"] = name
+    if restart_hint and bx.is_running(info)[0] and ask_yn(f"{C.YELLOW}Box sedang berjalan. Restart agar config baru dipakai? (y/N) ❯{C.RESET} "):
+        _box_restart(bx, info)
+    return True
+
+
+def box_install_flow(src_dir=None, operator=None, bx=None, info=None):
+    """Pasang hasil generate Box ke perangkat (dengan persetujuan), opsional aktifkan + restart."""
+    if bx is None:
+        bx, info = _box_ctx()
+        if not bx:
+            return
+    src_dir = src_dir or os.path.join(BASE_DIR, PLATFORMS["box"]["out"])
+    if operator is None:
+        files = [os.path.basename(f) for f in generated_config_files("box")]
+        if not files:
+            warn("Belum ada config Box hasil generate (menu 1 → Convert → Box)."); pause(); return
+        print(f"\n  {C.BOLD}Config Box hasil generate{C.RESET} {C.DIM}({src_dir}){C.RESET}")
+        for i, f in enumerate(files, 1):
+            print(f"  {C.CYAN}[{i}]{C.RESET} {f}")
+        pick = ask_choice(f"{C.YELLOW}Pilih (0 = batal) ❯{C.RESET} ", [str(i) for i in range(1, len(files) + 1)], cancel=("0",))
+        if pick == "0":
+            return
+        operator = os.path.splitext(files[int(pick) - 1])[0]
+    cfg_local = os.path.join(src_dir, f"{operator}.yaml")
+    if not os.path.isfile(cfg_local) or not os.path.isdir(os.path.join(src_dir, PLATFORMS["box"]["proxy_dir"], operator)):
+        err(f"Hasil '{operator}' tidak lengkap (butuh {operator}.yaml dan proxy/{operator}/). Generate ulang dengan operator.")
+        pause(); return
+    try:
+        warns = bx.port_warnings(bx.config_summary(read_text(cfg_local)), info)
+    except (ValueError, OSError, yaml.YAMLError) as e:
+        err(f"Config lokal tidak terbaca: {e}"); pause(); return
+    for w in warns:
+        warn(w)
+    # pasang sebagai bukan-aktif dulu; nama operator dijadikan nama file di perangkat
+    running = bx.is_running(info)[0]
+    if running:
+        warn("Box sedang berjalan. Dokumentasi BFR menyarankan mengubah config saat Box berhenti.")
+    plan = bx.plan_install(src_dir, operator, info)
+    print(f"\n  Tujuan: {C.BOLD}{info['clash_dir']}/{operator}.yaml{C.RESET}, {info['provide_path']}/{operator}/, {info['clash_dir']}/ruleset/")
+    if not _box_run(bx, f"Pasang '{operator}' ke Box", plan):
+        pause(); return
+    activated = False
+    if info["config_name"] != f"{operator}.yaml":
+        if ask_yn(f"\n{C.YELLOW}Jadikan {operator}.yaml config aktif Box (ubah settings.ini)? (Y/n) ❯{C.RESET} ", default=True):
+            activated = box_activate(bx, info, f"{operator}.yaml", restart_hint=False)
+    else:
+        activated = True
+    if running:
+        if ask_yn(f"{C.YELLOW}Restart Box agar perubahan dipakai? (Y/n) ❯{C.RESET} ", default=True):
+            _box_restart(bx, info)
+    elif activated and ask_yn(f"{C.YELLOW}Start Box sekarang? (y/N) ❯{C.RESET} "):
+        _box_run(bx, "Start Box", bx.start_cmds(info), 120, confirm=False)
+    pause()
+
+
+def _box_view_config(bx, info):
+    name = _box_pick_config(bx, info, "Lihat config")
+    if not name:
+        return
+    path = f"{info['clash_dir']}/{name}"
+    text = bx.read_remote(path)
+    if text is None:
+        err("Tidak terbaca."); pause(); return
+    try:
+        s = bx.config_summary(text)
+    except (ValueError, yaml.YAMLError) as e:
+        err(f"Bukan config Clash yang valid: {e}"); s = None
+    if s:
+        print(f"\n  {C.BOLD}{name}{C.RESET}  {C.DIM}{len(text.splitlines())} baris{C.RESET}")
+        for k in ("mixed-port", "redir-port", "tproxy-port", "external-controller", "secret", "external-ui", "dns", "mode"):
+            print(f"  {k:<20}: {s[k] if s[k] not in (None, '') else '-'}")
+        print(f"  {'proxy-groups / rules':<20}: {s['groups']} / {s['rules']}")
+        for k, v in s["providers"].items():
+            print(f"  {C.DIM}provider {k:<14} → {v}{C.RESET}")
+    if ask_yn(f"\n{C.YELLOW}Tampilkan teks penuh? (y/N) ❯{C.RESET} "):
+        lines = text.splitlines()
+        for i in range(0, len(lines), 40):
+            print("\n".join(lines[i:i + 40]))
+            if i + 40 < len(lines) and not ask_yn(f"{C.DIM}-- lanjut? ({min(i + 40, len(lines))}/{len(lines)}) (Y/n) --{C.RESET} ", default=True):
+                break
+    pause()
+
+
+def _box_dashboard(bx, info):
+    text = bx.read_remote(info["config_path"])
+    if text is None:
+        err(f"Config aktif tidak terbaca: {info['config_path']}"); pause(); return
+    try:
+        s = bx.config_summary(text)
+    except (ValueError, yaml.YAMLError) as e:
+        err(f"Config aktif tidak valid: {e}"); pause(); return
+    url = bx.dashboard_url(s)
+    ui = s.get("external-ui")
+    print(f"\n  URL     : {C.BOLD}{C.CYAN}{url}{C.RESET}")
+    print(f"  Secret  : {C.BOLD}{s['secret'] if s['secret'] else '(kosong)'}{C.RESET}")
+    if ui:
+        ui_path = ui if str(ui).startswith("/") else f"{info['clash_dir']}/{str(ui).lstrip('./')}"
+        rc, _ = bx.run_root(f"[ -d {bx.q(ui_path)} ] && [ -n \"$(ls -A {bx.q(ui_path)} 2>/dev/null)\" ]", 15)
+        if rc != 0:
+            warn(f"Folder dashboard {ui_path} kosong/tidak ada.")
+            if ask_yn(f"{C.YELLOW}Pasang dashboard UI lewat box.tool upxui? (y/N) ❯{C.RESET} "):
+                _box_run(bx, "Pasang dashboard UI", [f"{info['box_dir']}/scripts/box.tool upxui"], 300, confirm=False)
+    if not bx.is_running(info)[0]:
+        warn("Box tidak berjalan — dashboard baru bisa dibuka setelah Start.")
+    cmd = bx.open_url_cmd(url)
+    if cmd and ask_yn(f"{C.YELLOW}Buka di browser? (Y/n) ❯{C.RESET} ", default=True):
+        try:
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            ok("Perintah buka dikirim (belum diuji di semua perangkat).")
+        except OSError as e:
+            err(f"Gagal membuka: {e}")
+    elif not cmd:
+        print(f"  {C.DIM}Buka URL di atas di browser (tidak ada termux-open-url / am).{C.RESET}")
+    pause()
+
+
+def _box_logs(bx, info):
+    print(f"\n  {C.CYAN}[1]{C.RESET} Log layanan  {C.DIM}({info['log']}){C.RESET}\n  {C.CYAN}[2]{C.RESET} Log core     {C.DIM}({info['bin_log']}){C.RESET}")
+    pick = ask_choice(f"{C.YELLOW}Pilih (0 = batal) ❯{C.RESET} ", ("1", "2"), cancel=("0",))
+    if pick == "0":
+        return
+    rc, out = bx.run_root(bx.tail_cmd(info["log"] if pick == "1" else info["bin_log"]), 20)
+    print(f"\n{out if out else '(kosong / tidak terbaca)'}")
+    pause()
+
+
+def _box_tools(bx, info):
+    keys = list(bx.TOOL_CMDS)
+    print()
+    for i, k in enumerate(keys, 1):
+        print(f"  {C.CYAN}[{i}]{C.RESET} {bx.TOOL_CMDS[k]}")
+    pick = ask_choice(f"{C.YELLOW}Pilih (0 = batal) ❯{C.RESET} ", [str(i) for i in range(1, len(keys) + 1)], cancel=("0",))
+    if pick == "0":
+        return
+    k = keys[int(pick) - 1]
+    _box_run(bx, bx.TOOL_CMDS[k], [f"{info['box_dir']}/scripts/box.tool {k}"], 600)
+    pause()
+
+
+def feature_box_menu():
+    clear_screen(); banner("BOX"); section("Box Utilities")
+    print(f"  {C.DIM}Memakai akses root (su) untuk mengendalikan Box for Root. Tiap perubahan menampilkan perintahnya\n"
+          f"  dan meminta persetujuanmu dulu. Popup izin root dari Magisk/KernelSU/APatch bisa muncul.{C.RESET}")
+    bx, info = _box_ctx()
+    if not bx:
+        return
+    while True:
+        clear_screen(); banner("BOX"); section("Box Utilities")
+        info = bx.box_info()
+        if info.get("error"):
+            err(info["error"]); pause(); return
+        running = _box_status_line(bx, info)
+        print(sep(50))
+        print(f"  {C.CYAN}[1]{C.RESET} Start   {C.CYAN}[2]{C.RESET} Stop   {C.CYAN}[3]{C.RESET} Restart   {C.CYAN}[4]{C.RESET} Status rinci")
+        print(f"  {C.CYAN}[5]{C.RESET} Pasang config hasil generate  {C.DIM}(→ {info['clash_dir']}/){C.RESET}")
+        print(f"  {C.CYAN}[6]{C.RESET} Ganti config aktif")
+        print(f"  {C.CYAN}[7]{C.RESET} Lihat / daftar config")
+        print(f"  {C.CYAN}[8]{C.RESET} Buka dashboard")
+        print(f"  {C.CYAN}[9]{C.RESET} Log")
+        print(f"  {C.CYAN}[A]{C.RESET} Update  {C.DIM}(geox · subs · kernel · dashboard UI){C.RESET}")
+        print(f"  {C.CYAN}[0]{C.RESET} Kembali\n{sep(50)}")
+        pilih = ask_choice(f"{C.YELLOW}Pilih menu ❯{C.RESET} ", ("1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "0"))
+        if pilih == "0":
+            return
+        elif pilih == "1":
+            if running:
+                warn("Box sudah berjalan."); pause()
+            else:
+                _box_run(bx, "Start Box", bx.start_cmds(info), 120); pause()
+        elif pilih == "2":
+            if not running:
+                warn("Box sudah berhenti."); pause()
+            else:
+                _box_run(bx, "Stop Box", bx.stop_cmds(info), 120); pause()
+        elif pilih == "3":
+            _box_restart(bx, info); pause()
+        elif pilih == "4":
+            rc, out = bx.service_status_text(info)
+            print(f"\n{out if out else '(tanpa keluaran)'}\n  {C.DIM}rc={rc}{C.RESET}"); pause()
+        elif pilih == "5":
+            box_install_flow(bx=bx, info=info)
+        elif pilih == "6":
+            name = _box_pick_config(bx, info, "Ganti config aktif", only_other=True)
+            if name:
+                box_activate(bx, info, name); pause()
+        elif pilih == "7":
+            _box_view_config(bx, info)
+        elif pilih == "8":
+            _box_dashboard(bx, info)
+        elif pilih == "9":
+            _box_logs(bx, info)
+        elif pilih == "a":
+            _box_tools(bx, info)
+
+
 def main():
     ensure_emoji_file()
     startup_notes = migrate_legacy_layout()
@@ -4047,6 +4327,7 @@ def main():
         print(f"  {C.CYAN}[3]{C.RESET} Check Status")
         print(f"  {C.CYAN}[4]{C.RESET} Validasi / Audit Config")
         print(f"  {C.CYAN}[5]{C.RESET} Miscellaneous")
+        print(f"  {C.CYAN}[6]{C.RESET} Box Utilities {C.DIM}(root: start/stop, pasang config, dashboard){C.RESET}")
         print(sep(50))
         print(f"  {C.RED}[Q]{C.RESET} Exit")
         print(sep(50))
@@ -4056,6 +4337,7 @@ def main():
         elif pilihan == "3": feature_check_status()
         elif pilihan == "4": feature_validate()
         elif pilihan == "5": feature_misc_menu()
+        elif pilihan == "6": feature_box_menu()
         elif pilihan == "q":
             clear_screen(); print(f"\n  {C.GREEN}Terima kasih sudah pakai Hikari /.CLASH!{C.RESET}\n"); sys.exit(0)
         else:
