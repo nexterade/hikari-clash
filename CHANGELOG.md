@@ -3,6 +3,11 @@
 Versi aplikasi mengikuti [Semantic Versioning](https://semver.org/lang/id/); aturan bump ada di [CLAUDE.md](CLAUDE.md).
 Penomoran template (`config_v*.yaml`) terpisah — lihat [docs/template-changelog.md](docs/template-changelog.md).
 
+## [0.11.4] - 2026-11-27
+
+### Diubah
+- README: instalasi Termux jadi dua langkah (izin penyimpanan, lalu satu blok install yang sekaligus membuat shortcut `hikari-clash` dan membuka aplikasi). Izin dipisah karena popup `termux-setup-storage` tidak ditunggu perintah berikutnya.
+
 ## [0.11.3] - 2026-11-27
 
 ### Diubah

@@ -120,21 +120,25 @@ Pipeline: `template → parse YAML → patch per platform → validasi → tulis
 
 **Termux (Android):**
 
+1. Izinkan akses penyimpanan (tekan Izinkan di popup):
+
+```bash
+termux-setup-storage
+```
+
+2. Install, lalu HIKARI /.CLASH langsung terbuka:
+
 ```bash
 pkg update && pkg install python git -y
-termux-setup-storage
 git clone https://github.com/nexterade/hikari-clash.git /storage/emulated/0/Project/hikari-clash
 cd /storage/emulated/0/Project/hikari-clash
 pip install -r requirements.txt
-python3 hikari_converter.py
-```
-
-Shortcut, setelah itu cukup ketik `hikari-clash`:
-
-```bash
 printf '#!/bin/sh\ncd /storage/emulated/0/Project/hikari-clash && exec python3 hikari_converter.py "$@"\n' > "$PREFIX/bin/hikari-clash"
 chmod +x "$PREFIX/bin/hikari-clash"
+hikari-clash
 ```
+
+Untuk membuka lagi, ketik `hikari-clash` dari folder mana saja. Update: `git pull` di folder project.
 
 **Linux / OpenWrt / PC:**
 

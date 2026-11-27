@@ -2,13 +2,10 @@
 
 > [← Kembali ke README](../README.md) · [Dokumentasi lainnya](../README.md#-dokumentasi)
 
-**🔖 Shortcut `hikari-clash` (Termux)** — cukup ketik `hikari-clash`, tanpa mengubah `.bashrc`/`.zshrc`. Caranya membuat launcher kecil di `$PREFIX/bin` (sudah ada di PATH Termux):
+**🔖 Shortcut `hikari-clash` (Termux)** — sudah dibuat oleh langkah instalasi di [README](../README.md#-instalasi); ketik `hikari-clash` dari folder mana saja. Kalau perlu membuat ulang (mis. folder dipindah), jalankan dua baris ini dengan path folder yang baru:
 
 ```bash
-cat > "$PREFIX/bin/hikari-clash" <<'EOF'
-#!/data/data/com.termux/files/usr/bin/sh
-cd /storage/emulated/0/Project/hikari-clash && exec python3 hikari_converter.py "$@"
-EOF
+printf '#!/bin/sh\ncd /storage/emulated/0/Project/hikari-clash && exec python3 hikari_converter.py "$@"\n' > "$PREFIX/bin/hikari-clash"
 chmod +x "$PREFIX/bin/hikari-clash"
 ```
 
